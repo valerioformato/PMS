@@ -27,6 +27,8 @@ if(DEFINED ASAN)
   add_link_options(-fsanitize=address -fsanitize=leak)
 endif()
 
+add_compile_options(-Wall -Wextra)
+
 # cmake_policy doesn't work, any call to cmake_minimum_required resets policies
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 

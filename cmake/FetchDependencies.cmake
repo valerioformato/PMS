@@ -14,8 +14,8 @@ if(NOT fmt_POPULATED)
 endif()
 
 # === spdlog ===
-# Force spdlog to use downloaded fmt library
-set(SPDLOG_FMT_EXTERNAL
+# Force spdlog to use downloaded fmt library, using the header-only target
+set(SPDLOG_FMT_EXTERNAL_HO
     ON
     CACHE INTERNAL "") # Forces the value
 FetchContent_Declare(
