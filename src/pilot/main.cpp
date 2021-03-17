@@ -1,9 +1,20 @@
+// c++ headers
 #include <functional>
 #include <iostream>
 
+// external dependencies
 #include <spdlog/spdlog.h>
-
 #include <docopt.h>
+#include <nlohmann/json.hpp>
+// shitload of mongodb driver headers
+#include <bsoncxx/json.hpp>
+#include <mongocxx/client.hpp>
+#include <mongocxx/stdx.hpp>
+#include <mongocxx/uri.hpp>
+#include <mongocxx/instance.hpp>
+#include <bsoncxx/builder/stream/helpers.hpp>
+#include <bsoncxx/builder/stream/document.hpp>
+#include <bsoncxx/builder/stream/array.hpp>
 
 static constexpr auto USAGE =
   R"(PMS Pilot fish executable.
