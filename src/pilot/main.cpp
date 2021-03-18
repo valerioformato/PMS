@@ -10,6 +10,7 @@
 // our headers
 #include "db/DBHandle.h"
 #include "pilot/PilotConfig.h"
+#include "pilot/Worker.h"
 
 static constexpr auto USAGE =
     R"(PMS Pilot fish executable.
@@ -36,7 +37,7 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Pilot::Config config{configFileName};
 
-  spdlog::info("Connecting to DB: {}@{}", config.dbuser, config.dbhost);
+  spdlog::info("Connecting to DB: {}@{}/", config.dbuser, config.dbhost, config.dbname);
   std::shared_ptr<PMS::DB::DBHandle> dbHandle;
   switch (config.dbcredtype) {
   case Pilot::CredType::PWD:
@@ -49,6 +50,10 @@ int main(int argc, const char **argv) {
   default:
     break;
   }
+
+
+  Pilot::Worker worker{dbHandle};
+  worker.Start(config.user, config.task);
 
   return 0;
 }

@@ -16,13 +16,15 @@ namespace PMS {
 namespace DB {
 class DBHandle {
 public:
-  DBHandle(const std::string& dbhost, const std::string& dbname, const std::string& dbuser, const std::string& dbpwd);
+  DBHandle(const std::string &dbhost, const std::string &dbname, const std::string &dbuser, const std::string &dbpwd);
 
+  mongocxx::database &DB() { return m_mongo_db; }
   mongocxx::instance &Instance() { return m_mongo_instance; }
 
 private:
   static mongocxx::instance m_mongo_instance;
   mongocxx::client m_mongo_client;
+  mongocxx::database m_mongo_db;
 };
 } // namespace DB
 } // namespace PMS
