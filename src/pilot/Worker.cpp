@@ -2,6 +2,7 @@
 #include <thread>
 
 // external headers
+#include <boost/process.hpp>
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -38,6 +39,8 @@ void Worker::Start(const std::string &user, const std::string &task) {
 
       // break for now
       break;
+      // but we should prepare and  start the process here
+
     } else {
       spdlog::trace("Worker: no jobs, sleep for 1s");
       std::this_thread::sleep_for(std::chrono::seconds(1));

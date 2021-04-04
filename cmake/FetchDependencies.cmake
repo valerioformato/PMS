@@ -29,6 +29,9 @@ if(NOT spdlog_POPULATED)
   add_subdirectory(${spdlog_SOURCE_DIR} ${spdlog_BINARY_DIR})
 endif()
 
+# === boost ===
+find_package(Boost REQUIRED COMPONENTS filesystem)
+
 # === nlohmannjson ===
 FetchContent_Declare(json
   # GIT_REPOSITORY https://github.com/nlohmann/json.git
