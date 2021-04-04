@@ -8,11 +8,13 @@
 // our headers
 #include "pilot/PilotConfig.h"
 
+using json = nlohmann::json;
+
 namespace PMS {
 namespace Pilot {
 Config::Config(std::string fileName) {
   std::ifstream infile(fileName);
-  nlohmann::json configJson;
+  json configJson;
   infile >> configJson;
 
   user = configJson["user"];

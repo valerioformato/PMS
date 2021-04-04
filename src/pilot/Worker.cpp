@@ -3,10 +3,13 @@
 
 // external headers
 #include <fmt/format.h>
+#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 // our headers
 #include "pilot/Worker.h"
+
+using json = nlohmann::json;
 
 namespace PMS {
 namespace Pilot {
@@ -28,8 +31,15 @@ void Worker::Start(const std::string &user, const std::string &task) {
     auto query_result = m_dbhandle->DB()["jobs"].find_one(filter.view());
     if (query_result) {
       spdlog::info("Worker: got a new job");
+
+      json job = json::parse(bsoncxx::to_json(query_result.value()));
+
+      spdlog::trace("Job: {}", job.dump(2));
+
+      // break for now
+      break;
     } else {
-      spdlog::debug("Worker: no jobs, sleep for 1s");
+      spdlog::trace("Worker: no jobs, sleep for 1s");
       std::this_thread::sleep_for(std::chrono::seconds(1));
       continue;
     }
