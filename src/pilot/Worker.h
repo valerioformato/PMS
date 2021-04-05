@@ -6,19 +6,19 @@
 #include <thread>
 
 // our headers
-#include "db/DBHandle.h"
+#include "db/PoolHandle.h"
 
 namespace PMS {
 namespace Pilot {
 class Worker {
 public:
-  Worker(std::shared_ptr<DB::DBHandle> handle) : m_dbhandle{handle} {}
+  Worker(std::shared_ptr<DB::PoolHandle> handle) : m_poolHandle{handle} {}
 
   void Start(const std::string &user, const std::string &task = "");
 
 private:
   std::thread m_thread;
-  std::shared_ptr<DB::DBHandle> m_dbhandle;
+  std::shared_ptr<DB::PoolHandle> m_poolHandle;
 };
 } // namespace Pilot
 } // namespace PMS

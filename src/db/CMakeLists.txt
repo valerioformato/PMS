@@ -1,7 +1,7 @@
-set(DBHandle_src 
-    DBHandle.cpp
+set(MongoDBUtils_src 
+    PoolHandle.cpp
   )
 
-add_library(DBHandle SHARED ${DBHandle_src})
-target_include_directories(DBHandle PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(DBHandle PUBLIC spdlog::spdlog mongo::mongocxx_shared mongo::bsoncxx_shared  nlohmann_json::nlohmann_json)
+add_library(MongoDBUtils SHARED ${MongoDBUtils_src})
+target_include_directories(MongoDBUtils PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(MongoDBUtils PUBLIC spdlog::spdlog mongo::mongocxx_shared mongo::bsoncxx_shared nlohmann_json::nlohmann_json)

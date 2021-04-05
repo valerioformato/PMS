@@ -3,13 +3,15 @@
 
 // external headers
 #include <boost/process.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid.hpp>
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 // our headers
-#include "pilot/Worker.h"
 #include "pilot/HeartBeat.h"
+#include "pilot/Worker.h"
 
 using json = nlohmann::json;
 
@@ -19,7 +21,10 @@ void Worker::Start(const std::string &user, const std::string &task) {
 
   bool work_done = false;
 
-  HeartBeat hb{m_dbhandle};
+  // generate a pilot uuid
+  boost::uuids::uuid uuid = boost::uuids::random_generator()();
+
+  HeartBeat hb{uuid, m_poolHandle};
 
   // main loop
   // TODO: run in a thread
@@ -32,7 +37,9 @@ void Worker::Start(const std::string &user, const std::string &task) {
       filter << "task" << task;
     }
 
-    auto query_result = m_dbhandle->DB()["jobs"].find_one(filter.view());
+    DB::DBHandle dbHandle = m_poolHandle->DBHandle();
+
+    auto query_result = dbHandle.DB()["jobs"].find_one(filter.view());
     if (query_result) {
       spdlog::info("Worker: got a new job");
 
@@ -41,6 +48,7 @@ void Worker::Start(const std::string &user, const std::string &task) {
       spdlog::trace("Job: {}", job.dump(2));
 
       // break for now
+      std::this_thread::sleep_for(std::chrono::seconds(10));
       break;
       // but we should prepare and  start the process here
 

@@ -9,6 +9,7 @@
 #include <bsoncxx/json.hpp>
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>
+#include <mongocxx/pool.hpp>
 #include <mongocxx/stdx.hpp>
 #include <mongocxx/uri.hpp>
 
@@ -16,16 +17,15 @@ namespace PMS {
 namespace DB {
 class DBHandle {
 public:
-  DBHandle(const std::string &dbhost, const std::string &dbname, const std::string &dbuser, const std::string &dbpwd);
+  DBHandle(mongocxx::pool &pool, std::string dbname) : m_poolEntry{pool.acquire()}, m_dbname{std::move(dbname)} {}
 
-  mongocxx::database &DB() { return m_mongo_db; }
-  mongocxx::instance &Instance() { return m_mongo_instance; }
+  mongocxx::database DB() { return (*m_poolEntry)[m_dbname]; };
 
 private:
-  static mongocxx::instance m_mongo_instance;
-  mongocxx::client m_mongo_client;
-  mongocxx::database m_mongo_db;
+  mongocxx::pool::entry m_poolEntry;
+  std::string m_dbname;
 };
 } // namespace DB
 } // namespace PMS
+
 #endif

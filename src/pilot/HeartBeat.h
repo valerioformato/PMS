@@ -6,19 +6,25 @@
 #include <memory>
 #include <thread>
 
+// external headers
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid.hpp>
+
 // our headers
-#include "db/DBHandle.h"
+#include "db/PoolHandle.h"
 
 namespace PMS {
 namespace Pilot {
 class HeartBeat {
 public:
-  HeartBeat(std::shared_ptr<DB::DBHandle> handle)
-      : m_dbhandle{handle}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this, m_exitSignal.get_future()} {}
+  HeartBeat(boost::uuids::uuid uuid, std::shared_ptr<DB::PoolHandle> handle)
+      : m_uuid{uuid}, m_poolHandle{handle}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this,
+                                                                     m_exitSignal.get_future()} {}
   ~HeartBeat();
 
 private:
-  std::shared_ptr<DB::DBHandle> m_dbhandle;
+  boost::uuids::uuid m_uuid;
+  std::shared_ptr<DB::PoolHandle> m_poolHandle;
   std::promise<void> m_exitSignal;
   std::thread m_thread;
 

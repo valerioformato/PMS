@@ -4,11 +4,10 @@
 
 // external dependencies
 #include <docopt.h>
-// #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 // our headers
-#include "db/DBHandle.h"
+#include "db/PoolHandle.h"
 #include "pilot/PilotConfig.h"
 #include "pilot/Worker.h"
 
@@ -47,11 +46,12 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Pilot::Config config{configFileName};
 
-  spdlog::info("Connecting to DB: {}@{}/", config.dbuser, config.dbhost, config.dbname);
-  std::shared_ptr<PMS::DB::DBHandle> dbHandle;
+  spdlog::info("Connecting to DB: {}@{}/{}", config.dbuser, config.dbhost, config.dbname);
+  std::shared_ptr<PMS::DB::PoolHandle> poolHandle;
   switch (config.dbcredtype) {
   case Pilot::CredType::PWD:
-    dbHandle = std::make_shared<PMS::DB::DBHandle>(config.dbhost, config.dbname, config.dbuser, config.dbcredentials);
+    poolHandle =
+        std::make_shared<PMS::DB::PoolHandle>(config.dbhost, config.dbname, config.dbuser, config.dbcredentials);
     break;
   case Pilot::CredType::X509:
     // TODO: Figure out how X509 credentials propagate
@@ -61,7 +61,7 @@ int main(int argc, const char **argv) {
     break;
   }
 
-  Pilot::Worker worker{dbHandle};
+  Pilot::Worker worker{poolHandle};
   worker.Start(config.user, config.task);
 
   return 0;
