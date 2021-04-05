@@ -9,6 +9,7 @@
 
 // our headers
 #include "pilot/Worker.h"
+#include "pilot/HeartBeat.h"
 
 using json = nlohmann::json;
 
@@ -17,6 +18,8 @@ namespace Pilot {
 void Worker::Start(const std::string &user, const std::string &task) {
 
   bool work_done = false;
+
+  HeartBeat hb{m_dbhandle};
 
   // main loop
   // TODO: run in a thread

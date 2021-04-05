@@ -1,5 +1,6 @@
 set(PMSPilot_src 
     main.cpp 
+    HeartBeat.cpp
     PilotConfig.cpp
     Worker.cpp
   )

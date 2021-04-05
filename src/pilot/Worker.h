@@ -3,6 +3,7 @@
 
 // c++ headers
 #include <memory>
+#include <thread>
 
 // our headers
 #include "db/DBHandle.h"
@@ -16,6 +17,7 @@ public:
   void Start(const std::string &user, const std::string &task = "");
 
 private:
+  std::thread m_thread;
   std::shared_ptr<DB::DBHandle> m_dbhandle;
 };
 } // namespace Pilot
