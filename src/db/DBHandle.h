@@ -19,7 +19,7 @@ class DBHandle {
 public:
   DBHandle(mongocxx::pool &pool, std::string dbname) : m_poolEntry{pool.acquire()}, m_dbname{std::move(dbname)} {}
 
-  mongocxx::database DB() { return (*m_poolEntry)[m_dbname]; };
+  mongocxx::collection operator[](bsoncxx::string::view_or_value name) const { return (*m_poolEntry)[m_dbname][name]; };
 
 private:
   mongocxx::pool::entry m_poolEntry;

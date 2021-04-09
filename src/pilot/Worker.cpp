@@ -39,7 +39,7 @@ void Worker::Start(const std::string &user, const std::string &task) {
 
     DB::DBHandle dbHandle = m_poolHandle->DBHandle();
 
-    auto query_result = dbHandle.DB()["jobs"].find_one(filter.view());
+    auto query_result = dbHandle["jobs"].find_one(filter.view());
     if (query_result) {
       spdlog::info("Worker: got a new job");
 
