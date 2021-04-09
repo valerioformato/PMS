@@ -35,9 +35,12 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
   while (exitSignal.wait_for(std::chrono::milliseconds(1)) == std::future_status::timeout) {
     spdlog::trace("Updating HeartBeat");
     auto result = dbHandle.DB()["pilots"].update_one(bsoncxx::from_json(updateFilter.dump()),
-                                                      bsoncxx::from_json(updateAction.dump()), updateOpt);
+                                                     bsoncxx::from_json(updateAction.dump()), updateOpt);
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
+
+  spdlog::trace("Removing pilot from DB");
+  dbHandle.DB()["pilots"].delete_one(bsoncxx::from_json(updateFilter.dump()));
 }
 
 } // namespace Pilot
