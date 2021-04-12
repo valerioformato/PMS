@@ -50,11 +50,6 @@ void Worker::Start(const std::string &user, const std::string &task) {
 
       spdlog::trace("Job: {}", job.dump(2));
 
-      // break for now
-      // std::this_thread::sleep_for(std::chrono::seconds(10));
-      // break;
-      // but we should prepare and  start the process here
-
       std::string executable;
       std::string arguments;
       try {
@@ -64,22 +59,35 @@ void Worker::Start(const std::string &user, const std::string &task) {
             exeArgs.begin(), exeArgs.end(), std::string{},
             [](std::string &acc, const std::string &value) { return fmt::format("{} {}", acc, value); });
       } catch (...) {
-        spdlog::error("Error fetching the executable and its arguments");
+        spdlog::error("Worker: Error fetching the executable and its arguments");
         break;
+      }
+
+      std::string jobStdout = "/dev/null", jobStderr = "/dev/null", jobStdin = "/dev/null";
+      try {
+        if (job["stdout"] != "")
+          jobStdout = job["stdout"];
+        if (job["stderr"] != "")
+          jobStderr = job["stderr"];
+        if (job["stdin"] != "")
+          jobStdin = job["stdin"];
+      } catch (...) {
+        spdlog::error("Worker: Job stdin/stdout/stderr not defined");
       }
 
       json jobFilter;
       try {
         jobFilter["hash"] = job["hash"];
       } catch (...) {
-        spdlog::error("Job has no hash, THIS SHOULD NEVER HAPPEN!");
+        spdlog::error("Worker: Job has no hash, THIS SHOULD NEVER HAPPEN!");
         break;
       }
 
-      spdlog::info("Spawning process");
-      spdlog::info(" - {} {}", executable, arguments);
+      spdlog::info("Worker: Spawning process");
+      spdlog::info("Worker:  - {} {}", executable, arguments);
       std::error_code procError;
-      bp::child proc{bp::search_path(executable), arguments, procError};
+      bp::child proc(bp::search_path(executable), arguments, bp::std_out > jobStdout, bp::std_err > jobStderr,
+                     bp::std_in < jobStdin, procError);
 
       // set status to "Running"
       json jobUpdateRunningAction;
@@ -92,13 +100,13 @@ void Worker::Start(const std::string &user, const std::string &task) {
       // TODO: encapsulate status updating in DBHandle class?
       // Maybe using magic_enum this could get more elegant and typesafe
       if (procError) {
-        spdlog::error("Job exited with an error: {}", procError.message());
+        spdlog::error("Worker: Job exited with an error: {}", procError.message());
         json jobUpdateErrorAction;
         jobUpdateErrorAction["$set"]["status"] = "Error";
         dbHandle["jobs"].update_one(bsoncxx::from_json(jobFilter.dump()),
                                     bsoncxx::from_json(jobUpdateRunningAction.dump()));
       } else {
-        spdlog::info("Job done");
+        spdlog::info("Worker: Job done");
         json jobUpdateDoneAction;
         jobUpdateDoneAction["$set"]["status"] = "Done";
         dbHandle["jobs"].update_one(bsoncxx::from_json(jobFilter.dump()),
