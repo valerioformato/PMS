@@ -1,5 +1,6 @@
 // c++ headers
 #include <thread>
+#include <iostream>
 
 // external headers
 #include <boost/process.hpp>
@@ -52,13 +53,11 @@ void Worker::Start(const std::string &user, const std::string &task) {
       spdlog::trace("Job: {}", job.dump(2));
 
       std::string executable;
-      std::string arguments;
+      std::vector<std::string> arguments;
       try {
         executable = job["executable"].get<std::string>();
         auto exeArgs = job["exe_args"];
-        arguments = std::accumulate(
-            exeArgs.begin(), exeArgs.end(), std::string{},
-            [](std::string &acc, const std::string &value) { return fmt::format("{} {}", acc, value); });
+        std::copy(exeArgs.begin(), exeArgs.end(), std::back_inserter(arguments));
       } catch (...) {
         spdlog::error("Worker: Error fetching the executable and its arguments");
         break;
@@ -66,7 +65,7 @@ void Worker::Start(const std::string &user, const std::string &task) {
 
       // let's check if executable is a shell script
       if (executable.substr(executable.length() - 3, 3) == ".sh") {
-        arguments = executable + " " + arguments;
+        arguments.insert(begin(arguments), executable);
         executable = "sh";
       }
 
@@ -91,11 +90,11 @@ void Worker::Start(const std::string &user, const std::string &task) {
       }
 
       spdlog::info("Worker: Spawning process");
-      spdlog::info("Worker:  - {} {}", executable, arguments);
+      spdlog::info("Worker:  - {} {}", executable, fmt::join(arguments, " "));
       spdlog::trace("{}", bp::search_path(executable));
       std::error_code procError;
       bp::child proc(bp::search_path(executable), arguments, bp::std_out > jobStdout, bp::std_err > jobStderr,
-                     bp::std_in < jobStdin, procError);
+                     bp::std_in < jobStdin, bp::shell, procError);
 
       // set status to "Running"
       json jobUpdateRunningAction;
