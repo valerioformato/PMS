@@ -6,6 +6,7 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -63,6 +64,12 @@ void Worker::Start(const std::string &user, const std::string &task) {
         break;
       }
 
+      // let's check if executable is a shell script
+      if (executable.substr(executable.length() - 3, 3) == ".sh") {
+        arguments = executable + " " + arguments;
+        executable = "sh";
+      }
+
       std::string jobStdout = "/dev/null", jobStderr = "/dev/null", jobStdin = "/dev/null";
       try {
         if (job["stdout"] != "")
@@ -85,6 +92,7 @@ void Worker::Start(const std::string &user, const std::string &task) {
 
       spdlog::info("Worker: Spawning process");
       spdlog::info("Worker:  - {} {}", executable, arguments);
+      spdlog::trace("{}", bp::search_path(executable));
       std::error_code procError;
       bp::child proc(bp::search_path(executable), arguments, bp::std_out > jobStdout, bp::std_err > jobStderr,
                      bp::std_in < jobStdin, procError);
@@ -96,6 +104,7 @@ void Worker::Start(const std::string &user, const std::string &task) {
                                   bsoncxx::from_json(jobUpdateRunningAction.dump()));
 
       proc.wait();
+      spdlog::trace("procerr: {} ({})", procError.message(), procError.value());
 
       // TODO: encapsulate status updating in DBHandle class?
       // Maybe using magic_enum this could get more elegant and typesafe
