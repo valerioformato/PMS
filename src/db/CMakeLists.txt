@@ -1,4 +1,5 @@
 set(MongoDBUtils_src 
+    DBHandle.cpp
     PoolHandle.cpp
   )
 

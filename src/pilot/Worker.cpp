@@ -1,6 +1,6 @@
 // c++ headers
-#include <thread>
 #include <iostream>
+#include <thread>
 
 // external headers
 #include <boost/process.hpp>
@@ -33,7 +33,6 @@ void Worker::Start(const std::string &user, const std::string &task) {
   HeartBeat hb{uuid, m_poolHandle};
 
   // main loop
-  // TODO: run in a thread
   while (true) {
     json filter;
     if (user != "")
@@ -97,28 +96,17 @@ void Worker::Start(const std::string &user, const std::string &task) {
                      bp::std_in < jobStdin, bp::shell, procError);
 
       // set status to "Running"
-      json jobUpdateRunningAction;
-      jobUpdateRunningAction["$set"]["status"] = "Running";
-      dbHandle["jobs"].update_one(bsoncxx::from_json(jobFilter.dump()),
-                                  bsoncxx::from_json(jobUpdateRunningAction.dump()));
+      dbHandle.UpdateJobStatus(job["hash"], JobStatus::Running);
 
       proc.wait();
       spdlog::trace("procerr: {} ({})", procError.message(), procError.value());
 
-      // TODO: encapsulate status updating in DBHandle class?
-      // Maybe using magic_enum this could get more elegant and typesafe
       if (procError) {
         spdlog::error("Worker: Job exited with an error: {}", procError.message());
-        json jobUpdateErrorAction;
-        jobUpdateErrorAction["$set"]["status"] = "Error";
-        dbHandle["jobs"].update_one(bsoncxx::from_json(jobFilter.dump()),
-                                    bsoncxx::from_json(jobUpdateRunningAction.dump()));
+        dbHandle.UpdateJobStatus(job["hash"], JobStatus::Error);
       } else {
         spdlog::info("Worker: Job done");
-        json jobUpdateDoneAction;
-        jobUpdateDoneAction["$set"]["status"] = "Done";
-        dbHandle["jobs"].update_one(bsoncxx::from_json(jobFilter.dump()),
-                                    bsoncxx::from_json(jobUpdateDoneAction.dump()));
+        dbHandle.UpdateJobStatus(job["hash"], JobStatus::Done);
       }
 
     } else {
