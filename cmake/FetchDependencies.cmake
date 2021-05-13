@@ -21,7 +21,7 @@ set(SPDLOG_FMT_EXTERNAL_HO
 FetchContent_Declare(
   spdlog
   GIT_REPOSITORY https://github.com/gabime/spdlog.git
-  GIT_TAG v1.5.0)
+  GIT_TAG v1.7.0)
 FetchContent_GetProperties(spdlog)
 if(NOT spdlog_POPULATED)
   set(SPDLOG_INSTALL ON)
