@@ -34,7 +34,6 @@ find_package(Boost REQUIRED COMPONENTS filesystem)
 
 # === nlohmannjson ===
 FetchContent_Declare(json
-  # GIT_REPOSITORY https://github.com/nlohmann/json.git
   GIT_REPOSITORY https://github.com/ArthurSonzogni/nlohmann_json_cmake_fetchcontent.git
   GIT_TAG v3.7.3)
 FetchContent_GetProperties(json)
@@ -52,26 +51,6 @@ if(NOT docopt_POPULATED)
   FetchContent_Populate(docopt)
   add_subdirectory(${docopt_SOURCE_DIR} ${docopt_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
-
-# === MongoDB C and C++ drivers ===
-# 
-# FetchContent_Declare(mongodbc
-# GIT_REPOSITORY https://github.com/mongodb/mongo-c-driver
-#   GIT_TAG 1.17.4)
-# FetchContent_GetProperties(mongodbc)
-# if(NOT mongodbc_POPULATED)
-#   FetchContent_Populate(mongodbc)
-#   add_subdirectory(${mongodbc_SOURCE_DIR} ${mongodbc_BINARY_DIR} EXCLUDE_FROM_ALL)
-# endif()
-
-# FetchContent_Declare(mongodbcxx
-# GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver
-#   GIT_TAG r3.6.2)
-# FetchContent_GetProperties(mongodbcxx)
-# if(NOT mongodbcxx_POPULATED)
-#   FetchContent_Populate(mongodbcxx)
-#   add_subdirectory(${mongodbcxx_SOURCE_DIR} ${mongodbcxx_BINARY_DIR} EXCLUDE_FROM_ALL)
-# endif()
 
 find_package(bsoncxx REQUIRED)
 find_package(mongocxx REQUIRED 3.6.0)
