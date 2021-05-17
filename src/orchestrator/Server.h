@@ -16,12 +16,15 @@ namespace PMS {
 namespace Orchestrator {
 class Server {
 public:
-  Server(unsigned int port) : m_port{port}, m_thread{&Server::keepAliveUntilSignal, this, m_exitSignal.get_future()} {}
+  Server(unsigned int port) : m_port{port} {}
   ~Server();
 
   void Start();
+  void Stop();
 
 private:
+  void Listen();
+
   void keepAliveUntilSignal(std::future<void> exitSignal);
 
   void echo_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
@@ -29,11 +32,11 @@ private:
     m_endpoint.send(hdl, msg->get_payload(), msg->get_opcode());
   }
 
+  void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
+
+  bool m_isRunning = false;
   unsigned int m_port;
   WSserver m_endpoint;
-
-  std::promise<void> m_exitSignal;
-  std::thread m_thread;
 };
 
 } // namespace Orchestrator
