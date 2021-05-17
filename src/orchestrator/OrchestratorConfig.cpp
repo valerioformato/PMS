@@ -29,6 +29,8 @@ Config::Config(std::string fileName) {
     dbcredtype = CredType::None;
   }
   dbcredentials = configJson["dbcredentials"];
+
+  listeningPort = configJson["listeningPort"];
 }
 } // namespace Orchestrator
 } // namespace PMS

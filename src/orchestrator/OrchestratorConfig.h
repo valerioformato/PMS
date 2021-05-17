@@ -21,6 +21,8 @@ struct Config {
 
   CredType dbcredtype;
   std::string dbcredentials; // TODO: Figure out how to log to the DB, which credentials to be used?
+
+  unsigned int listeningPort = 0;
 };
 } // namespace Orchestrator
 } // namespace PMS

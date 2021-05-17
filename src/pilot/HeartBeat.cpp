@@ -3,7 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
-// our hreaders
+// our headers
 #include "pilot/HeartBeat.h"
 
 using json = nlohmann::json;

@@ -9,6 +9,7 @@
 // our headers
 #include "db/PoolHandle.h"
 #include "orchestrator/OrchestratorConfig.h"
+#include "orchestrator/Server.h"
 
 static constexpr auto USAGE =
     R"(PMS job orchestrator executable.
@@ -45,9 +46,11 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Orchestrator::Config config{configFileName};
 
-  spdlog::info("Connecting to DB: {}@{}/{}", config.dbuser, config.dbhost, config.dbname);
-  std::shared_ptr<PMS::DB::PoolHandle> poolHandle;
+  // spdlog::info("Connecting to DB: {}@{}/{}", config.dbuser, config.dbhost, config.dbname);
+  // std::shared_ptr<PMS::DB::PoolHandle> poolHandle;
 
+  Orchestrator::Server server{config.listeningPort};
+  server.Start();
 
   return 0;
 }

@@ -30,7 +30,7 @@ if(NOT spdlog_POPULATED)
 endif()
 
 # === boost ===
-find_package(Boost REQUIRED COMPONENTS filesystem)
+find_package(Boost REQUIRED COMPONENTS filesystem system thread regex)
 
 # === nlohmannjson ===
 FetchContent_Declare(json
@@ -51,6 +51,20 @@ if(NOT docopt_POPULATED)
   FetchContent_Populate(docopt)
   add_subdirectory(${docopt_SOURCE_DIR} ${docopt_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
+
+# === websocket++ ===
+FetchContent_Declare(websocketpp
+GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
+  GIT_TAG 0.8.2)
+FetchContent_GetProperties(websocketpp)
+if(NOT websocketpp_POPULATED)
+  FetchContent_Populate(websocketpp)
+  add_subdirectory(${websocketpp_SOURCE_DIR} ${websocketpp_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+# add interface library with all websocketpp dependencies
+add_library(PMSWebsockets INTERFACE)
+target_include_directories(PMSWebsockets INTERFACE ${websocketpp_SOURCE_DIR})
+target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost::regex)
 
 find_package(bsoncxx REQUIRED)
 find_package(mongocxx REQUIRED 3.6.0)
