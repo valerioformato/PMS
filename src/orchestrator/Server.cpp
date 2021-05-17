@@ -8,6 +8,9 @@
 // our headers
 #include "orchestrator/Server.h"
 
+// https://github.com/okdshin/PicoSHA2
+#include "orchestrator/picosha2.h"
+
 using json = nlohmann::json;
 
 namespace PMS {
@@ -32,7 +35,14 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
 
   spdlog::trace("Received a valid job :)");
 
-  m_endpoint.send(hdl, "Job received", websocketpp::frame::opcode::text);
+  // create an hash for this job
+  std::string job_hash;
+  picosha2::hash256_hex_string(msg->get_payload(), job_hash);
+  job["hash"] = job_hash;
+
+  auto nowString = std::chrono::high_resolution_clock::now();
+
+  m_endpoint.send(hdl, fmt::format("Job received, generated hash: {}", job_hash), websocketpp::frame::opcode::text);
 }
 
 void Server::Listen() {
@@ -63,7 +73,7 @@ void Server::Start() {
   // Initialize Asio
   m_endpoint.init_asio();
 
-  // Set the default message handler to the our handler
+  // Set the default message handler to our own handler
   m_endpoint.set_message_handler(
       std::bind(&Server::message_handler, this, std::placeholders::_1, std::placeholders::_2));
 

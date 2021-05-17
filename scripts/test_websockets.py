@@ -14,7 +14,7 @@ def getNextJob():
         "dataset": "some_dataset",
         "user": "vformato",
         "executable": "./testScript.sh",
-        "exe_args": [],
+        "exe_args": [f"{nJobs}"],
         "status": "Done",
         "stdin": "",
         "stdout": "test.out",
@@ -42,10 +42,10 @@ async def hello():
             print(f"Server replied: {response}")
 
         # send invalid job
-        print("Sending an invalid message")
-        await websocket.send("aaaa:;jsfdbu348231@3327t8{)")
-        response = await websocket.recv()
-        print(f"Server replied: {response}")
+        # print("Sending an invalid message")
+        # await websocket.send("aaaa:;jsfdbu348231@3327t8{)")
+        # response = await websocket.recv()
+        # print(f"Server replied: {response}")
 
 
 asyncio.get_event_loop().run_until_complete(hello())
