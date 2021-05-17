@@ -26,13 +26,13 @@ static constexpr auto USAGE =
 
 using namespace PMS;
 
+// we need to do some workaround to cleanly shut down the server
+// when a SIGINT or SIGKILL arrives
 namespace {
 volatile std::sig_atomic_t gSignalStatus;
 }
 
-void signal_handler(int signal) {
-  gSignalStatus = signal;
-}
+void signal_handler(int signal) { gSignalStatus = signal; }
 
 void signal_watcher(Orchestrator::Server &server) {
   while (gSignalStatus == 0) {
@@ -68,8 +68,12 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Orchestrator::Config config{configFileName};
 
-  // spdlog::info("Connecting to DB: {}@{}/{}", config.dbuser, config.dbhost, config.dbname);
-  // std::shared_ptr<PMS::DB::PoolHandle> poolHandle;
+  spdlog::info("Connecting to DB: {}/{}", config.dbuser, config.dbhost, config.dbname);
+  std::shared_ptr<PMS::DB::PoolHandle> poolHandle =
+      std::make_shared<PMS::DB::PoolHandle>(config.dbhost, config.dbname);
+
+  auto dbHandle = poolHandle->DBHandle();
+  dbHandle.SetupJobIndexes();
 
   Orchestrator::Server server{config.listeningPort};
 
