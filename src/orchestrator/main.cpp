@@ -69,21 +69,25 @@ int main(int argc, const char **argv) {
   const Orchestrator::Config config{configFileName};
 
   spdlog::info("Connecting to DB: {}/{}", config.dbuser, config.dbhost, config.dbname);
-  std::shared_ptr<PMS::DB::PoolHandle> poolHandle =
-      std::make_shared<PMS::DB::PoolHandle>(config.dbhost, config.dbname);
+  std::shared_ptr<PMS::DB::PoolHandle> poolHandle = std::make_shared<PMS::DB::PoolHandle>(config.dbhost, config.dbname);
 
   auto dbHandle = poolHandle->DBHandle();
   dbHandle.SetupJobIndexes();
 
   Orchestrator::Server server{config.listeningPort};
 
+  // prepare to run everything...
+  std::vector<std::thread> threads;
+
   // pass the server to the signal watcher so it can be cleanly shutdown if the process is
   // interrupted
-  std::thread watchThread{signal_watcher, std::ref(server)};
+  threads.emplace_back(signal_watcher, std::ref(server));
 
-  server.Start();
+  // run the websocket server in a dedicated thread
+  threads.emplace_back([](Orchestrator::Server &server) { server.Start(); }, std::ref(server));
 
-  watchThread.join();
+  // finishing...
+  std::for_each(begin(threads), end(threads), [](std::thread &thread) { thread.join(); });
 
   return 0;
 }
