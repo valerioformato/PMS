@@ -27,7 +27,7 @@ static constexpr auto USAGE =
 using namespace PMS;
 
 // we need to do some workaround to cleanly shut down the server
-// when a SIGINT or SIGKILL arrives
+// when a SIGINT or SIGTERM arrives
 namespace {
 volatile std::sig_atomic_t gSignalStatus;
 }
@@ -62,7 +62,7 @@ int main(int argc, const char **argv) {
 
   // Install a signal handler
   std::signal(SIGINT, signal_handler);
-  std::signal(SIGKILL, signal_handler);
+  std::signal(SIGTERM, signal_handler);
 
   // read the configuration from input file
   std::string configFileName = args["<configfile>"].asString();
