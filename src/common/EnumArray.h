@@ -1,3 +1,6 @@
+#ifndef PMS_COMMON_ENUMARRAY_H
+#define PMS_COMMON_ENUMARRAY_H
+
 template <typename ContainedClass, typename Enum, unsigned int EnumSize>
 class EnumArray : public std::array<ContainedClass, EnumSize> {
 public:
@@ -8,7 +11,7 @@ public:
   EnumArray(const EnumArray<ContainedClass, Enum, EnumSize> &c) : BaseType(c) {}
   EnumArray(const std::array<ContainedClass, EnumSize> &values) : BaseType(values) {}
   EnumArray(std::array<ContainedClass, EnumSize> &&values) : BaseType(values) {}
-  template <typename... V> EnumArray(V &&... vals) : BaseType{{std::forward<V>(vals)...}} {};
+  template <typename... V> EnumArray(V &&...vals) : BaseType{{std::forward<V>(vals)...}} {};
 
   // assignment
   EnumArray<ContainedClass, Enum, EnumSize> &operator=(const EnumArray<ContainedClass, Enum, EnumSize> &lhs) {
@@ -28,3 +31,4 @@ public:
     return BaseType::at(static_cast<std::underlying_type_t<Enum>>(index));
   }
 };
+#endif

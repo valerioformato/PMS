@@ -24,11 +24,11 @@ Config::Config(std::string fileName) {
   dbuser = configJson["dbuser"];
 
   if (configJson["dbcredtype"] == "password") {
-    dbcredtype = CredType::PWD;
+    dbcredtype = DB::CredType::PWD;
   } else if (configJson["dbcredtype"] == "X509") {
-    dbcredtype = CredType::X509;
+    dbcredtype = DB::CredType::X509;
   } else {
-    dbcredtype = CredType::None;
+    dbcredtype = DB::CredType::None;
   }
   dbcredentials = configJson["dbcredentials"];
 }

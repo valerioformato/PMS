@@ -1,3 +1,6 @@
+#ifndef PMS_COMMON_JOB_H
+#define PMS_COMMON_JOB_H
+
 #include "common/EnumArray.h"
 
 namespace PMS {
@@ -6,3 +9,4 @@ constexpr unsigned int nJobStatus = 4;
 enum class JobStatus { Pending, Running, Done, Error };
 static EnumArray<std::string, JobStatus, nJobStatus> JobStatusNames = {"Pending", "Running", "Done", "Error"};
 } // namespace PMS
+#endif
