@@ -20,6 +20,7 @@ namespace PMS {
 namespace DB {
 class PoolHandle {
 public:
+  PoolHandle(const std::string &dbhost, const std::string &dbname);
   PoolHandle(const std::string &dbhost, const std::string &dbname, const std::string &dbuser, const std::string &dbpwd);
 
   ::PMS::DB::DBHandle DBHandle() { return ::PMS::DB::DBHandle{m_pool, m_dbName}; }

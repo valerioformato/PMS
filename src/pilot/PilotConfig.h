@@ -4,14 +4,11 @@
 // c++ headers
 #include <string>
 
+// our headers
+#include "db/CredType.h"
+
 namespace PMS {
 namespace Pilot {
-enum class CredType {
-  None = 0,
-  PWD,
-  X509,
-};
-
 struct Config {
   Config(std::string fileName);
 
@@ -21,7 +18,7 @@ struct Config {
   std::string dbname;
   std::string dbuser;
 
-  CredType dbcredtype;
+  DB::CredType dbcredtype;
   std::string dbcredentials; // TODO: Figure out how to log to the DB, which credentials to be used?
 };
 } // namespace Pilot

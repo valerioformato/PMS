@@ -30,11 +30,10 @@ if(NOT spdlog_POPULATED)
 endif()
 
 # === boost ===
-find_package(Boost REQUIRED COMPONENTS filesystem)
+find_package(Boost REQUIRED COMPONENTS filesystem system thread regex)
 
 # === nlohmannjson ===
 FetchContent_Declare(json
-  # GIT_REPOSITORY https://github.com/nlohmann/json.git
   GIT_REPOSITORY https://github.com/ArthurSonzogni/nlohmann_json_cmake_fetchcontent.git
   GIT_TAG v3.7.3)
 FetchContent_GetProperties(json)
@@ -53,25 +52,19 @@ if(NOT docopt_POPULATED)
   add_subdirectory(${docopt_SOURCE_DIR} ${docopt_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
-# === MongoDB C and C++ drivers ===
-# 
-# FetchContent_Declare(mongodbc
-# GIT_REPOSITORY https://github.com/mongodb/mongo-c-driver
-#   GIT_TAG 1.17.4)
-# FetchContent_GetProperties(mongodbc)
-# if(NOT mongodbc_POPULATED)
-#   FetchContent_Populate(mongodbc)
-#   add_subdirectory(${mongodbc_SOURCE_DIR} ${mongodbc_BINARY_DIR} EXCLUDE_FROM_ALL)
-# endif()
-
-# FetchContent_Declare(mongodbcxx
-# GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver
-#   GIT_TAG r3.6.2)
-# FetchContent_GetProperties(mongodbcxx)
-# if(NOT mongodbcxx_POPULATED)
-#   FetchContent_Populate(mongodbcxx)
-#   add_subdirectory(${mongodbcxx_SOURCE_DIR} ${mongodbcxx_BINARY_DIR} EXCLUDE_FROM_ALL)
-# endif()
+# === websocket++ ===
+FetchContent_Declare(websocketpp
+GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
+  GIT_TAG 0.8.2)
+FetchContent_GetProperties(websocketpp)
+if(NOT websocketpp_POPULATED)
+  FetchContent_Populate(websocketpp)
+  add_subdirectory(${websocketpp_SOURCE_DIR} ${websocketpp_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+# add interface library with all websocketpp dependencies
+add_library(PMSWebsockets INTERFACE)
+target_include_directories(PMSWebsockets INTERFACE ${websocketpp_SOURCE_DIR})
+target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost::regex)
 
 find_package(bsoncxx REQUIRED)
 find_package(mongocxx REQUIRED 3.6.0)

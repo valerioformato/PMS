@@ -26,6 +26,8 @@ public:
 
   void UpdateJobStatus(std::string hash, JobStatus status);
 
+  void SetupJobIndexes();
+
 private:
   mongocxx::pool::entry m_poolEntry;
   std::string m_dbname;

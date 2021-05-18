@@ -17,18 +17,23 @@ Config::Config(std::string fileName) {
   json configJson;
   infile >> configJson;
 
-  dbhost = configJson["dbhost"];
-  dbname = configJson["dbname"];
-  dbuser = configJson["dbuser"];
+  back_dbhost = configJson["back_dbhost"];
+  back_dbname = configJson["back_dbname"];
 
-  if (configJson["dbcredtype"] == "password") {
-    dbcredtype = CredType::PWD;
-  } else if (configJson["dbcredtype"] == "X509") {
-    dbcredtype = CredType::X509;
+  front_dbhost = configJson["front_dbhost"];
+  front_dbname = configJson["front_dbname"];
+  front_dbuser = configJson["front_dbuser"];
+
+  if (configJson["front_dbcredtype"] == "password") {
+    front_dbcredtype = DB::CredType::PWD;
+  } else if (configJson["front_dbcredtype"] == "X509") {
+    front_dbcredtype = DB::CredType::X509;
   } else {
-    dbcredtype = CredType::None;
+    front_dbcredtype = DB::CredType::None;
   }
-  dbcredentials = configJson["dbcredentials"];
+  front_dbcredentials = configJson["front_dbcredentials"];
+
+  listeningPort = configJson["listeningPort"];
 }
 } // namespace Orchestrator
 } // namespace PMS

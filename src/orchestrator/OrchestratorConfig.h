@@ -4,6 +4,9 @@
 // c++ headers
 #include <string>
 
+// our headers
+#include "db/CredType.h"
+
 namespace PMS {
 namespace Orchestrator {
 enum class CredType {
@@ -15,12 +18,17 @@ enum class CredType {
 struct Config {
   Config(std::string fileName);
 
-  std::string dbhost;
-  std::string dbname;
-  std::string dbuser;
+  std::string back_dbhost;
+  std::string back_dbname;
 
-  CredType dbcredtype;
-  std::string dbcredentials; // TODO: Figure out how to log to the DB, which credentials to be used?
+  std::string front_dbhost;
+  std::string front_dbname;
+  std::string front_dbuser;
+
+  DB::CredType front_dbcredtype;
+  std::string front_dbcredentials;
+
+  unsigned int listeningPort = 0;
 };
 } // namespace Orchestrator
 } // namespace PMS

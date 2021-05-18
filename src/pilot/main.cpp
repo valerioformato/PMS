@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "db/CredType.h"
 #include "db/PoolHandle.h"
 #include "pilot/PilotConfig.h"
 #include "pilot/Worker.h"
@@ -49,11 +50,11 @@ int main(int argc, const char **argv) {
   spdlog::info("Connecting to DB: {}@{}/{}", config.dbuser, config.dbhost, config.dbname);
   std::shared_ptr<PMS::DB::PoolHandle> poolHandle;
   switch (config.dbcredtype) {
-  case Pilot::CredType::PWD:
+  case DB::CredType::PWD:
     poolHandle =
         std::make_shared<PMS::DB::PoolHandle>(config.dbhost, config.dbname, config.dbuser, config.dbcredentials);
     break;
-  case Pilot::CredType::X509:
+  case DB::CredType::X509:
     // TODO: Figure out how X509 credentials propagate
     throw std::runtime_error("X509 credentials not supported yet");
     break;
