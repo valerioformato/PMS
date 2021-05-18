@@ -10,6 +10,7 @@
 // our headers
 #include "db/CredType.h"
 #include "db/PoolHandle.h"
+#include "orchestrator/Director.h"
 #include "orchestrator/OrchestratorConfig.h"
 #include "orchestrator/Server.h"
 
@@ -88,8 +89,7 @@ int main(int argc, const char **argv) {
   std::shared_ptr<PMS::DB::PoolHandle> backPoolHandle =
       std::make_shared<PMS::DB::PoolHandle>(config.back_dbhost, config.back_dbname);
 
-  auto dbHandle = poolHandle->DBHandle();
-  dbHandle.SetupJobIndexes();
+  Orchestrator::Director director{frontPoolHandle, backPoolHandle};
 
   Orchestrator::Server server{config.listeningPort};
 
@@ -101,7 +101,7 @@ int main(int argc, const char **argv) {
   threads.emplace_back(signal_watcher, std::ref(server));
 
   // run the websocket server in a dedicated thread
-  threads.emplace_back([](Orchestrator::Server &server) { server.Start(); }, std::ref(server));
+  threads.emplace_back([](Orchestrator::Server &_server) { _server.Start(); }, std::ref(server));
 
   // finishing...
   std::for_each(begin(threads), end(threads), [](std::thread &thread) { thread.join(); });

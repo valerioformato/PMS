@@ -1,5 +1,6 @@
 set(PMSOrchestrator_src 
     main.cpp
+    Director.cpp
     OrchestratorConfig.cpp 
     Server.cpp
   )
