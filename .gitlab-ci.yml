@@ -1,0 +1,21 @@
+stages:
+  - build
+
+# TEMPLATES
+.build: &build
+  stage: build
+  script:
+      - mkdir build
+      - cd build
+      - cmake -GNinja -DCMAKE_PREFIX_PATH=/PMS/software/install/mongo-cxx-driver ../
+      - ninja
+  needs: []
+
+build-centos8:
+  <<: *build-docker
+  image: vformato/pms-ci:centos8
+
+build-ubuntu20.04:
+  <<: *build-docker
+  image: vformato/pms-ci:ubuntu20.04
+
