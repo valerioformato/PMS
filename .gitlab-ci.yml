@@ -11,6 +11,11 @@ stages:
       - ninja
   needs: []
 
+.build-docker: &build-docker
+  <<: *build
+  tags:
+      - docker
+
 build-centos8:
   <<: *build-docker
   image: vformato/pms-ci:centos8
