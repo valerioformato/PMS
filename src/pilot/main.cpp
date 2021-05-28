@@ -1,6 +1,5 @@
 // c++ headers
 #include <functional>
-#include <iostream>
 
 // external dependencies
 #include <docopt.h>

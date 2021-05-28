@@ -4,6 +4,7 @@
 // c++ headers
 #include <memory>
 #include <thread>
+#include <utility>
 
 // our headers
 #include "db/PoolHandle.h"
@@ -12,7 +13,7 @@ namespace PMS {
 namespace Pilot {
 class Worker {
 public:
-  Worker(std::shared_ptr<DB::PoolHandle> handle) : m_poolHandle{handle} {}
+  explicit Worker(std::shared_ptr<DB::PoolHandle> handle) : m_poolHandle{std::move(handle)} {}
 
   void Start(const std::string &user, const std::string &task = "");
 

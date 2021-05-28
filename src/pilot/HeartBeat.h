@@ -8,6 +8,7 @@
 
 // external headers
 #include <boost/uuid/random_generator.hpp>
+#include <utility>
 #include <boost/uuid/uuid.hpp>
 
 // our headers
@@ -18,7 +19,7 @@ namespace Pilot {
 class HeartBeat {
 public:
   HeartBeat(boost::uuids::uuid uuid, std::shared_ptr<DB::PoolHandle> handle)
-      : m_uuid{uuid}, m_poolHandle{handle}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this,
+      : m_uuid{uuid}, m_poolHandle{std::move(handle)}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this,
                                                                      m_exitSignal.get_future()} {}
   ~HeartBeat();
 

@@ -1,5 +1,4 @@
 // c++ headers
-#include <iostream>
 #include <thread>
 
 // external headers
@@ -35,9 +34,9 @@ void Worker::Start(const std::string &user, const std::string &task) {
   // main loop
   while (true) {
     json filter;
-    if (user != "")
+    if (!user.empty())
       filter["user"] = user;
-    if (task != "")
+    if (!task.empty())
       filter["task"] = task;
     filter["status"] = "Pending";
 
@@ -70,11 +69,11 @@ void Worker::Start(const std::string &user, const std::string &task) {
 
       std::string jobStdout = "/dev/null", jobStderr = "/dev/null", jobStdin = "/dev/null";
       try {
-        if (job["stdout"] != "")
+        if (!job["stdout"].empty())
           jobStdout = job["stdout"];
-        if (job["stderr"] != "")
+        if (!job["stderr"].empty())
           jobStderr = job["stderr"];
-        if (job["stdin"] != "")
+        if (!job["stdin"].empty())
           jobStdin = job["stdin"];
       } catch (...) {
         spdlog::error("Worker: Job stdin/stdout/stderr not defined");
