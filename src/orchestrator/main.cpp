@@ -80,7 +80,6 @@ int main(int argc, const char **argv) {
   case DB::CredType::X509:
     // TODO: Figure out how X509 credentials propagate
     throw std::runtime_error("X509 credentials not supported yet");
-    break;
   default:
     break;
   }

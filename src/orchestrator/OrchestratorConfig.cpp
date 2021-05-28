@@ -12,7 +12,7 @@ using json = nlohmann::json;
 
 namespace PMS {
 namespace Orchestrator {
-Config::Config(std::string fileName) {
+Config::Config(const std::string& fileName) {
   std::ifstream infile(fileName);
   json configJson;
   infile >> configJson;

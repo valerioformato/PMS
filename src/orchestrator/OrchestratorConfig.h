@@ -16,7 +16,7 @@ enum class CredType {
 };
 
 struct Config {
-  Config(std::string fileName);
+  Config(const std::string& fileName);
 
   std::string back_dbhost;
   std::string back_dbname;

@@ -3,6 +3,7 @@
 
 // c++ headers
 #include <queue>
+#include <utility>
 #include <vector>
 
 // external dependencies
@@ -19,7 +20,7 @@ namespace Orchestrator {
 class Director {
 public:
   Director(std::shared_ptr<DB::PoolHandle> frontPoolHandle, std::shared_ptr<DB::PoolHandle> backPoolHandle)
-      : m_frontPoolHandle{frontPoolHandle}, m_backPoolHandle{backPoolHandle} {}
+      : m_frontPoolHandle{std::move(frontPoolHandle)}, m_backPoolHandle{std::move(backPoolHandle)} {}
 
   void Start();
   void Stop();
