@@ -32,11 +32,10 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
 
   DB::DBHandle dbHandle = m_poolHandle->DBHandle();
 
-  while (exitSignal.wait_for(std::chrono::milliseconds(1)) == std::future_status::timeout) {
+  while (exitSignal.wait_for(std::chrono::seconds(1)) == std::future_status::timeout) {
     spdlog::trace("Updating HeartBeat");
-    auto result = dbHandle["pilots"].update_one(bsoncxx::from_json(updateFilter.dump()),
-                                                bsoncxx::from_json(updateAction.dump()), updateOpt);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    dbHandle["pilots"].update_one(bsoncxx::from_json(updateFilter.dump()), bsoncxx::from_json(updateAction.dump()),
+                                  updateOpt);
   }
 
   spdlog::trace("Removing pilot from DB");
