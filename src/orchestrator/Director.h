@@ -2,9 +2,12 @@
 #define PMS_ORCHESTRATOR_DIRECTOR_H
 
 // c++ headers
+#include <future>
 #include <queue>
-#include <utility>
+#include <thread>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 // external dependencies
 #include <nlohmann/json.hpp>
@@ -29,7 +32,7 @@ public:
   void AddNewJob(json &&job) { m_incomingJobs.push(job); };
 
 private:
-  void UpdateTasks();
+  void UpdateTasks(std::future<void> exitSignal);
 
   std::shared_ptr<DB::PoolHandle> m_frontPoolHandle;
   std::shared_ptr<DB::PoolHandle> m_backPoolHandle;
@@ -37,6 +40,9 @@ private:
   std::queue<json> m_incomingJobs;
 
   std::unordered_map<std::string, Task> m_tasks;
+
+  std::promise<void> m_exitSignal;
+  std::vector<std::thread> m_threads;
 };
 
 } // namespace Orchestrator

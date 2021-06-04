@@ -102,8 +102,14 @@ int main(int argc, const char **argv) {
   // run the websocket server in a dedicated thread
   threads.emplace_back([](Orchestrator::Server &_server) { _server.Start(); }, std::ref(server));
 
+  // start the director
+  director.Start();
+
   // finishing...
   std::for_each(begin(threads), end(threads), [](std::thread &thread) { thread.join(); });
+
+  // stop all director operations
+  director.Stop();
 
   return 0;
 }
