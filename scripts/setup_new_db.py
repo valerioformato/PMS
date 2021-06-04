@@ -1,7 +1,10 @@
+from getpass import getpass
+
 import pymongo
 import urllib
 import argparse
 import subprocess
+import sys
 
 def main():
     parser = argparse.ArgumentParser(description='Create a new user in the admin DB.')
@@ -12,18 +15,21 @@ def main():
     args = parser.parse_args()
 
     if not args.dbuser:
-        print "Error: you need to provide a user to log on the DB (-U option)"
+        print("Error: you need to provide a user to log on the DB (-U option)")
         sys.exit(1)
         pass
 
     if not args.db:
-        print "Error: you need to provide the name of the DB (-D option)"
+        print("Error: you need to provide the name of the DB (-D option)")
         sys.exit(1)
         pass
 
     dbuser = args.dbuser[0]
     if args.dbpass:
         dbpass = args.dbpass[0]
+    else:
+        dbpass = getpass("Type in your old password: ")
+
     dbname = args.db[0]
     hostname = str(subprocess.Popen(['hostname',''], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.read().strip())
 
@@ -33,13 +39,11 @@ def main():
     else:
         dbhost = hostname
 
-    if not args.dbpass:
-        dbpass = getpass("Type in your old password: ")
 
 
     # connect to db
     client = pymongo.MongoClient(
-        'mongodb://{}:{}@{}/{}'.format(dbuser, urllib.quote(dbpass), dbhost, dbname))
+        'mongodb://{}:{}@{}/{}'.format(dbuser, urllib.parse.quote(dbpass), dbhost, dbname))
     db = client[dbname]
 
     if not 'jobs' in db.collection_names():
