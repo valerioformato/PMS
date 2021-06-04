@@ -4,7 +4,7 @@
 // c++ headers
 #include <queue>
 #include <utility>
-#include <vector>
+#include <unordered_map>
 
 // external dependencies
 #include <nlohmann/json.hpp>
@@ -36,7 +36,7 @@ private:
 
   std::queue<json> m_incomingJobs;
 
-  std::vector<Task> m_tasks;
+  std::unordered_map<std::string, Task> m_tasks;
 };
 
 } // namespace Orchestrator
