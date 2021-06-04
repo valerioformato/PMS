@@ -3,13 +3,14 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "common/JsonUtils.h"
 #include "db/DBHandle.h"
 
 using json = nlohmann::json;
 
 namespace PMS {
 namespace DB {
-void DBHandle::UpdateJobStatus(std::string hash, JobStatus status) {
+void DBHandle::UpdateJobStatus(const std::string &hash, JobStatus status) const {
   json jobFilter;
   try {
     jobFilter["hash"] = hash;
@@ -20,8 +21,7 @@ void DBHandle::UpdateJobStatus(std::string hash, JobStatus status) {
 
   json jobUpdateRunningAction;
   jobUpdateRunningAction["$set"]["status"] = JobStatusNames[status];
-  this->operator[]("jobs").update_one(bsoncxx::from_json(jobFilter.dump()),
-                                      bsoncxx::from_json(jobUpdateRunningAction.dump()));
+  this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateRunningAction));
 }
 
 void DBHandle::SetupJobIndexes() {

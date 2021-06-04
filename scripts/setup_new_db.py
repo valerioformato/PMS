@@ -9,9 +9,9 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description='Create a new user in the admin DB.')
     parser.add_argument('-H' , '--dbhost'     , type=str, nargs=1  , help='MongoDB host. If not specified hostname will be used')
-    parser.add_argument('-U' , '--dbuser'     , type=str, nargs=1  , help='MongoDB user. Mandatory')
-    parser.add_argument('-P' , '--dbpass'     , type=str, nargs=1  , help='MongoDB password. Mandatory')
-    parser.add_argument('-D' , '--db'         , type=str, nargs=1  , help='MongoDB db name. Mandatory')
+    parser.add_argument('-u' , '--dbuser'     , type=str, nargs=1  , help='MongoDB user. Mandatory')
+    parser.add_argument('-p' , '--dbpass'     , type=str, nargs=1  , help='MongoDB password. Mandatory')
+    parser.add_argument('-d' , '--db'         , type=str, nargs=1  , help='MongoDB db name. Mandatory')
     args = parser.parse_args()
 
     if not args.dbuser:

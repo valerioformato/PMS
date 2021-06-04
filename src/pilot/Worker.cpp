@@ -11,6 +11,7 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "common/JsonUtils.h"
 #include "pilot/HeartBeat.h"
 #include "pilot/Worker.h"
 
@@ -46,7 +47,7 @@ void Worker::Start(const std::string &user, const std::string &task) {
     if (query_result) {
       spdlog::info("Worker: got a new job");
 
-      json job = json::parse(bsoncxx::to_json(query_result.value()));
+      json job = JsonUtils::bson2json(query_result.value());
 
       spdlog::trace("Job: {}", job.dump(2));
 
@@ -77,14 +78,6 @@ void Worker::Start(const std::string &user, const std::string &task) {
           jobStdin = job["stdin"];
       } catch (...) {
         spdlog::error("Worker: Job stdin/stdout/stderr not defined");
-      }
-
-      json jobFilter;
-      try {
-        jobFilter["hash"] = job["hash"];
-      } catch (...) {
-        spdlog::error("Worker: Job has no hash, THIS SHOULD NEVER HAPPEN!");
-        break;
       }
 
       spdlog::info("Worker: Spawning process");
