@@ -43,7 +43,7 @@ void Worker::Start(const std::string &user, const std::string &task) {
 
     DB::DBHandle dbHandle = m_poolHandle->DBHandle();
 
-    auto query_result = dbHandle["jobs"].find_one(bsoncxx::from_json(filter.dump()));
+    auto query_result = dbHandle["jobs"].find_one(JsonUtils::json2bson(filter));
     if (query_result) {
       spdlog::info("Worker: got a new job");
 

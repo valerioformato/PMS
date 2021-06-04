@@ -20,7 +20,7 @@ void Director::Start() {
   m_backPoolHandle->DBHandle().SetupJobIndexes();
 
   m_threads.emplace_back(&Director::UpdateTasks, this, m_exitSignal.get_future());
-};
+}
 
 void Director::Stop() { m_exitSignal.set_value(); }
 
