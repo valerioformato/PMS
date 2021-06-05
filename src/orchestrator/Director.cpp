@@ -35,14 +35,19 @@ void Director::UpdateTasks(std::future<void> exitSignal) {
   json taskAggregateQuery;
   taskAggregateQuery["_id"] = "$task";
 
-  mongocxx::pipeline aggregationPipeline;
 
-  while (exitSignal.wait_for(std::chrono::seconds(60)) == std::future_status::timeout) {
+  do {
+    spdlog::debug("Updating tasks");
+
+    // the pipeline must be re-created from scratch
+    mongocxx::pipeline aggregationPipeline;
+
     // get list of all tasks
-    auto tasksResult = handle["jobs"].aggregate(aggregationPipeline.group(bsoncxx::from_json(taskAggregateQuery)));
+    auto tasksResult = handle["jobs"].aggregate(aggregationPipeline.group(JsonUtils::json2bson(taskAggregateQuery)));
+
+    // beware: cursors cannot be reused as-is
     for (const auto &result : tasksResult) {
       json tmpdoc = JsonUtils::bson2json(result);
-      spdlog::trace("{}", tmpdoc.dump(2));
 
       // find task in internal task list
       std::string taskName = tmpdoc["_id"];
@@ -60,8 +65,11 @@ void Director::UpdateTasks(std::future<void> exitSignal) {
 
       countQuery["status"] = JobStatusNames[JobStatus::Error];
       task.failedJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
+
+      spdlog::debug("Task {0} updated - {1} job{4} ({2} done, {3} failed)", task.name, task.totJobs, task.doneJobs,
+                    task.failedJobs, task.totJobs > 1 ? "s" : "");
     }
-  }
+  } while (exitSignal.wait_for(std::chrono::seconds(60)) == std::future_status::timeout);
 }
 } // namespace Orchestrator
 } // namespace PMS
