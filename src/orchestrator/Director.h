@@ -13,6 +13,7 @@
 #include <nlohmann/json.hpp>
 
 // our headers
+#include "common/queue.h"
 #include "db/PoolHandle.h"
 #include "orchestrator/Task.h"
 
@@ -37,7 +38,7 @@ private:
   std::shared_ptr<DB::PoolHandle> m_frontPoolHandle;
   std::shared_ptr<DB::PoolHandle> m_backPoolHandle;
 
-  std::queue<json> m_incomingJobs;
+  ts_queue<json> m_incomingJobs;
 
   std::unordered_map<std::string, Task> m_tasks;
 
