@@ -33,6 +33,7 @@ public:
   void AddNewJob(json &&job) { m_incomingJobs.push(job); };
 
 private:
+  void JobInsert(std::future<void> exitSignal);
   void UpdateTasks(std::future<void> exitSignal);
 
   std::shared_ptr<DB::PoolHandle> m_frontPoolHandle;

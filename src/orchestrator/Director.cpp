@@ -29,12 +29,37 @@ void Director::Stop() {
     thread.join();
 }
 
+void Director::JobInsert(std::future<void> exitSignal) {
+  auto handle = m_backPoolHandle->DBHandle();
+
+  std::vector<bsoncxx::document::value> toBeInserted;
+  do {
+    while (!m_incomingJobs.empty()) {
+      auto job = m_incomingJobs.consume();
+
+      json jobQuery;
+      jobQuery["task"] = job["task"];
+      jobQuery["hash"] = job["hash"];
+
+      // check if this job is already in back-end database
+      auto queryResult = handle["jobs"].find_one(JsonUtils::json2bson(jobQuery));
+      if (queryResult)
+        continue;
+
+      toBeInserted.push_back(JsonUtils::json2bson(job));
+    }
+
+    handle["jobs"].insert_many(toBeInserted);
+
+    toBeInserted.clear();
+  } while (exitSignal.wait_for(std::chrono::milliseconds(1)) == std::future_status::timeout);
+}
+
 void Director::UpdateTasks(std::future<void> exitSignal) {
   auto handle = m_backPoolHandle->DBHandle();
 
   json taskAggregateQuery;
   taskAggregateQuery["_id"] = "$task";
-
 
   do {
     spdlog::debug("Updating tasks");
