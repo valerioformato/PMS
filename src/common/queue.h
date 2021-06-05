@@ -62,8 +62,15 @@ public:
     m_queue.pop();
   };
 
+  T consume(){
+    std::lock_guard<decltype(m_mutex)>{m_mutex};
+    T result = front();
+    pop();
+    return result;
+  }
+
 private:
-  std::mutex m_mutex;
+  mutable std::mutex m_mutex;
   std::queue<T> m_queue;
 };
 
