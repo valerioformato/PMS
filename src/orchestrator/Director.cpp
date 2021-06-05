@@ -22,7 +22,12 @@ void Director::Start() {
   m_threads.emplace_back(&Director::UpdateTasks, this, m_exitSignal.get_future());
 }
 
-void Director::Stop() { m_exitSignal.set_value(); }
+void Director::Stop() {
+  m_exitSignal.set_value();
+
+  for (auto &thread : m_threads)
+    thread.join();
+}
 
 void Director::UpdateTasks(std::future<void> exitSignal) {
   auto handle = m_backPoolHandle->DBHandle();
