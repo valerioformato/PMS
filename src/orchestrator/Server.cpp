@@ -21,30 +21,69 @@ Server::~Server() {
   }
 }
 
+std::unordered_map<std::string, Server::Command> Server::m_commandLUT{
+    {"submitJob", Command::SubmitJob},
+    {"cleanTask", Command::CleanTask},
+    {"declareTaskDependency", Command::DeclareTaskDependency},
+};
+
+std::string Server::HandleCommand(Command command, const json &msg) {
+  std::string reply;
+
+  switch (command) {
+  case Command::SubmitJob: {
+    // create an hash for this job
+    std::string job_hash;
+    picosha2::hash256_hex_string(msg.dump(), job_hash);
+    json job = msg["job"];
+    job["hash"] = job_hash;
+
+    auto result = m_director->AddNewJob(std::move(job));
+    // note: don't use job after this line!
+
+    reply = result == Director::OperationResult::Success ? fmt::format("Job received, generated hash: {}", job_hash)
+                                                         : "Job submission failed.";
+  } break;
+  case Command::CleanTask: {
+    auto result = m_director->CleanTask(msg["task"]);
+    reply = result == Director::OperationResult::Success ? fmt::format("Task \"{}\" cleaned", msg["task"])
+                                                         : fmt::format("Failed to clean task \"{}\"", msg["task"]);
+  } break;
+  case Command::DeclareTaskDependency:
+    // reply = fmt::format("Task {} now depends on task {}", msg["task"], msg["dependsOn"]);
+    return "DeclareTaskDependency not supported yet :(";
+  default:
+    reply = fmt::format("Command \"{}\" is not in the list of available commands", msg["command"]);
+    break;
+  }
+
+  return reply;
+}
+
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
   m_logger->trace("Received message {}", msg->get_payload());
 
-  json job;
+  json parsedMessage;
   try {
-    job = json::parse(msg->get_payload());
+    parsedMessage = json::parse(msg->get_payload());
   } catch (const std::exception &e) {
     m_logger->error("Error in parsing message: {}", e.what());
-    m_endpoint.send(hdl, "Invalid job description, please check... :|", websocketpp::frame::opcode::text);
+    m_endpoint.send(hdl, fmt::format("Invalid message, please check... :|\n  Error: {}", e.what()),
+                    websocketpp::frame::opcode::text);
     return;
   }
 
-  m_logger->trace("Received a valid job :)");
+  if (parsedMessage["command"].empty()) {
+    m_logger->error("No command in message. Sending back error...");
+    m_endpoint.send(hdl, "Invalid message, missing \"command\" field", websocketpp::frame::opcode::text);
+    return;
+  }
 
-  // create an hash for this job
-  std::string job_hash;
-  picosha2::hash256_hex_string(msg->get_payload(), job_hash);
-  job["hash"] = job_hash;
+  m_logger->trace("Received a valid message :)");
 
-  m_director->AddNewJob(std::move(job));
+  std::string reply = HandleCommand(m_commandLUT[parsedMessage["command"]], parsedMessage);
 
-  // note: don't use job after this line!
-
-  m_endpoint.send(hdl, fmt::format("Job received, generated hash: {}", job_hash), websocketpp::frame::opcode::text);
+  m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
 
 void Server::Listen() {

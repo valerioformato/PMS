@@ -31,12 +31,11 @@ private:
 
   void keepAliveUntilSignal(std::future<void> exitSignal);
 
-  void echo_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-    // write a new message
-    m_endpoint.send(hdl, msg->get_payload(), msg->get_opcode());
-  }
-
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
+
+  enum class Command { SubmitJob, CleanTask, DeclareTaskDependency };
+  std::string HandleCommand(Command command, const json &msg);
+  static std::unordered_map<std::string, Command> m_commandLUT;
 
   std::shared_ptr<spdlog::logger> m_logger;
 

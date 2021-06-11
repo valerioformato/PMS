@@ -8,7 +8,7 @@ nJobs = 0
 def getNextJob():
     global nJobs
     nJobs += 1
-    return json.dumps({
+    return {
         "task": "sometask",
         "subtask": "somesubtask",
         "dataset": "some_dataset",
@@ -25,21 +25,31 @@ def getNextJob():
             "cern"
         ],
         "jobName": "thisIsATestJobForOutput"
-    })
+    }
+
+
+async def send_to_orchestrator(websocket, msg):
+    await websocket.send(json.dumps(msg))
+
+    response = await websocket.recv()
+    print(f"Server replied: {response}")
 
 
 async def hello():
     uri = "ws://localhost:9002"
     async with websockets.connect(uri) as websocket:
+        myReq = {"command": "cleanTask", "task": "sometask"}
+
+        print("Cleaning the task...")
+        await send_to_orchestrator(websocket, myReq)
 
         for ijob in range(0, 3):
             newJob = getNextJob()
 
-            print("Sending a valid JSON job...")
-            await websocket.send(newJob)
+            myReq = {"command": "submitJob", "job": newJob}
 
-            response = await websocket.recv()
-            print(f"Server replied: {response}")
+            print("Sending a valid JSON job...")
+            await send_to_orchestrator(websocket, myReq)
 
         # send invalid job
         # print("Sending an invalid message")
