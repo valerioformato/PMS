@@ -25,6 +25,8 @@ namespace PMS {
 namespace Orchestrator {
 class Director {
 public:
+  enum class OperationResult { Success, ProcessError, DatabaseError };
+
   Director(std::shared_ptr<DB::PoolHandle> frontPoolHandle, std::shared_ptr<DB::PoolHandle> backPoolHandle)
       : m_logger{spdlog::stdout_color_st("Director")}, m_frontPoolHandle{std::move(frontPoolHandle)},
         m_backPoolHandle{std::move(backPoolHandle)} {}
@@ -32,8 +34,10 @@ public:
   void Start();
   void Stop();
 
-  void AddNewJob(const json &job) { m_incomingJobs.push(job); };
-  void AddNewJob(json &&job) { m_incomingJobs.push(job); };
+  OperationResult AddNewJob(const json &job);
+  OperationResult AddNewJob(json &&job);
+
+  OperationResult CleanTask(const std::string &task) const;
 
 private:
   void JobInsert();

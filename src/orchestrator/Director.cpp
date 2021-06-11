@@ -29,6 +29,32 @@ void Director::Stop() {
     thread.join();
 }
 
+Director::OperationResult Director::AddNewJob(const json &job) {
+  m_incomingJobs.push(job);
+  return OperationResult::Success;
+}
+
+Director::OperationResult Director::AddNewJob(json &&job) {
+  m_incomingJobs.push(job);
+  return OperationResult::Success;
+}
+
+Director::OperationResult Director::CleanTask(const std::string &task) const {
+  auto handle = m_backPoolHandle->DBHandle();
+
+  json deleteQuery;
+  deleteQuery["task"] = task;
+  try {
+    m_logger->debug("Cleaning task {}", task);
+    handle["jobs"].delete_many(JsonUtils::json2bson(deleteQuery));
+  } catch (const std::exception &e) {
+    m_logger->error("Server query failed with error {}", e.what());
+    return OperationResult::DatabaseError;
+  }
+
+  return OperationResult::Success;
+}
+
 void Director::JobInsert() {
   auto handle = m_backPoolHandle->DBHandle();
 
