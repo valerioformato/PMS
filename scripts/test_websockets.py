@@ -15,7 +15,6 @@ def getNextJob():
         "user": "vformato",
         "executable": "./testScript.sh",
         "exe_args": [f"{nJobs}"],
-        "status": "Done",
         "stdin": "",
         "stdout": "test.out",
         "stderr": "test.err",

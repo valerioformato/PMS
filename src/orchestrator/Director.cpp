@@ -74,8 +74,10 @@ void Director::JobInsert() {
       if (queryResult)
         continue;
 
-      m_logger->trace("Director: Queueing up job {} for insertion", job["hash"]);
+      m_logger->trace("Queueing up job {} for insertion", job["hash"]);
 
+      // job initial status should always be Pending :)
+      job["status"] = JobStatusNames[JobStatus::Pending];
       toBeInserted.push_back(JsonUtils::json2bson(job));
     }
 
@@ -103,12 +105,17 @@ void Director::UpdateTasks() {
     // get list of all tasks
     auto tasksResult = handle["jobs"].aggregate(aggregationPipeline.group(JsonUtils::json2bson(taskAggregateQuery)));
 
+    std::vector<std::string> dbTasks;
+
     // beware: cursors cannot be reused as-is
     for (const auto &result : tasksResult) {
       json tmpdoc = JsonUtils::bson2json(result);
 
       // find task in internal task list
       std::string taskName = tmpdoc["_id"];
+
+      dbTasks.emplace_back(taskName);
+
       Task &task = m_tasks[taskName];
       if (task.name.empty())
         task.name = taskName;
@@ -127,6 +134,20 @@ void Director::UpdateTasks() {
       m_logger->debug("Task {0} updated - {1} job{4} ({2} done, {3} failed)", task.name, task.totJobs, task.doneJobs,
                       task.failedJobs, task.totJobs > 1 ? "s" : "");
     }
+
+    // check if there are tasks in the internal representation that are no longer in the DB
+    std::vector<std::string> deletedTasks;
+    for (const auto &taskIt : m_tasks) {
+      if (std::find(begin(dbTasks), end(dbTasks), taskIt.first) == end(dbTasks))
+        deletedTasks.push_back(taskIt.first);
+    }
+
+    // ... and then remove them!
+    std::for_each(begin(deletedTasks), end(deletedTasks), [this](const auto &taskName) {
+      m_logger->debug("Removing task {}", taskName);
+      m_tasks.erase(m_tasks.find(taskName));
+    });
+
   } while (m_exitSignalFuture.wait_for(std::chrono::seconds(60)) == std::future_status::timeout);
 }
 } // namespace Orchestrator
