@@ -10,13 +10,16 @@
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 
+// our headers
+#include "orchestrator/Director.h"
+
 using WSserver = websocketpp::server<websocketpp::config::asio>;
 
 namespace PMS {
 namespace Orchestrator {
 class Server {
 public:
-  Server(unsigned int port) : m_port{port} {}
+  Server(unsigned int port, std::shared_ptr<Director> director) : m_port{port}, m_director{std::move(director)} {}
   ~Server();
 
   void Start();
@@ -37,6 +40,7 @@ private:
   bool m_isRunning = false;
   unsigned int m_port;
   WSserver m_endpoint;
+  std::shared_ptr<Director> m_director;
 };
 
 } // namespace Orchestrator

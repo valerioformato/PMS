@@ -88,9 +88,9 @@ int main(int argc, const char **argv) {
   std::shared_ptr<PMS::DB::PoolHandle> backPoolHandle =
       std::make_shared<PMS::DB::PoolHandle>(config.back_dbhost, config.back_dbname);
 
-  Orchestrator::Director director{frontPoolHandle, backPoolHandle};
+  auto director = std::make_shared<Orchestrator::Director>(frontPoolHandle, backPoolHandle);
 
-  Orchestrator::Server server{config.listeningPort};
+  Orchestrator::Server server{config.listeningPort, director};
 
   // prepare to run everything...
   std::vector<std::thread> threads;
@@ -103,13 +103,13 @@ int main(int argc, const char **argv) {
   threads.emplace_back([](Orchestrator::Server &_server) { _server.Start(); }, std::ref(server));
 
   // start the director
-  director.Start();
+  director->Start();
 
   // finishing...
   std::for_each(begin(threads), end(threads), [](std::thread &thread) { thread.join(); });
 
   // stop all director operations
-  director.Stop();
+  director->Stop();
 
   return 0;
 }

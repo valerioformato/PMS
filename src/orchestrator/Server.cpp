@@ -40,7 +40,9 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
   picosha2::hash256_hex_string(msg->get_payload(), job_hash);
   job["hash"] = job_hash;
 
-  // TODO: insert job in backend DB
+  m_director->AddNewJob(std::move(job));
+
+  // note: don't use job after this line!
 
   m_endpoint.send(hdl, fmt::format("Job received, generated hash: {}", job_hash), websocketpp::frame::opcode::text);
 }
