@@ -19,7 +19,8 @@ namespace Orchestrator {
 void Director::Start() {
   m_backPoolHandle->DBHandle().SetupJobIndexes();
 
-  m_threads.emplace_back(&Director::UpdateTasks, this, m_exitSignal.get_future());
+  m_threads.emplace_back(&Director::UpdateTasks, this);
+  m_threads.emplace_back(&Director::JobInsert, this);
 }
 
 void Director::Stop() {
@@ -29,11 +30,12 @@ void Director::Stop() {
     thread.join();
 }
 
-void Director::JobInsert(std::future<void> exitSignal) {
+void Director::JobInsert() {
   auto handle = m_backPoolHandle->DBHandle();
 
   std::vector<bsoncxx::document::value> toBeInserted;
   do {
+    // spdlog::trace("queue size = {}", m_incomingJobs.size());
     while (!m_incomingJobs.empty()) {
       auto job = m_incomingJobs.consume();
 
@@ -46,16 +48,21 @@ void Director::JobInsert(std::future<void> exitSignal) {
       if (queryResult)
         continue;
 
+      spdlog::trace("Director: Queueing up job {} for insertion", job["hash"]);
+
       toBeInserted.push_back(JsonUtils::json2bson(job));
     }
 
-    handle["jobs"].insert_many(toBeInserted);
+    if (!toBeInserted.empty()) {
+      spdlog::debug("Inserting {} new jobs into backend DB", toBeInserted.size());
+      handle["jobs"].insert_many(toBeInserted);
 
-    toBeInserted.clear();
-  } while (exitSignal.wait_for(std::chrono::milliseconds(1)) == std::future_status::timeout);
+      toBeInserted.clear();
+    }
+  } while (m_exitSignalFuture.wait_for(std::chrono::milliseconds(1)) == std::future_status::timeout);
 }
 
-void Director::UpdateTasks(std::future<void> exitSignal) {
+void Director::UpdateTasks() {
   auto handle = m_backPoolHandle->DBHandle();
 
   json taskAggregateQuery;
@@ -94,7 +101,7 @@ void Director::UpdateTasks(std::future<void> exitSignal) {
       spdlog::debug("Task {0} updated - {1} job{4} ({2} done, {3} failed)", task.name, task.totJobs, task.doneJobs,
                     task.failedJobs, task.totJobs > 1 ? "s" : "");
     }
-  } while (exitSignal.wait_for(std::chrono::seconds(60)) == std::future_status::timeout);
+  } while (m_exitSignalFuture.wait_for(std::chrono::seconds(60)) == std::future_status::timeout);
 }
 } // namespace Orchestrator
 } // namespace PMS

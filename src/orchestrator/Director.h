@@ -33,8 +33,8 @@ public:
   void AddNewJob(json &&job) { m_incomingJobs.push(job); };
 
 private:
-  void JobInsert(std::future<void> exitSignal);
-  void UpdateTasks(std::future<void> exitSignal);
+  void JobInsert();
+  void UpdateTasks();
 
   std::shared_ptr<DB::PoolHandle> m_frontPoolHandle;
   std::shared_ptr<DB::PoolHandle> m_backPoolHandle;
@@ -44,6 +44,7 @@ private:
   std::unordered_map<std::string, Task> m_tasks;
 
   std::promise<void> m_exitSignal;
+  std::shared_future<void> m_exitSignalFuture{m_exitSignal.get_future()};
   std::vector<std::thread> m_threads;
 };
 
