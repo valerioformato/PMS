@@ -59,6 +59,8 @@ int main(int argc, const char **argv) {
     break;
   }
 
+  spdlog::set_pattern("[%D %T] %-12n [%^%l%$] %v");
+
   // Use the default logger (stdout, multi-threaded, colored)
   spdlog::info("Starting orchestrator");
 

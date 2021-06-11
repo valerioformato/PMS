@@ -5,7 +5,6 @@
 #include <fmt/ostream.h>
 #include <mongocxx/pipeline.hpp>
 #include <nlohmann/json.hpp>
-#include <spdlog/spdlog.h>
 
 // our headers
 #include "common/Job.h"
@@ -35,7 +34,6 @@ void Director::JobInsert() {
 
   std::vector<bsoncxx::document::value> toBeInserted;
   do {
-    // spdlog::trace("queue size = {}", m_incomingJobs.size());
     while (!m_incomingJobs.empty()) {
       auto job = m_incomingJobs.consume();
 
@@ -48,13 +46,13 @@ void Director::JobInsert() {
       if (queryResult)
         continue;
 
-      spdlog::trace("Director: Queueing up job {} for insertion", job["hash"]);
+      m_logger->trace("Director: Queueing up job {} for insertion", job["hash"]);
 
       toBeInserted.push_back(JsonUtils::json2bson(job));
     }
 
     if (!toBeInserted.empty()) {
-      spdlog::debug("Inserting {} new jobs into backend DB", toBeInserted.size());
+      m_logger->debug("Inserting {} new jobs into backend DB", toBeInserted.size());
       handle["jobs"].insert_many(toBeInserted);
 
       toBeInserted.clear();
@@ -69,7 +67,7 @@ void Director::UpdateTasks() {
   taskAggregateQuery["_id"] = "$task";
 
   do {
-    spdlog::debug("Updating tasks");
+    m_logger->debug("Updating tasks");
 
     // the pipeline must be re-created from scratch
     mongocxx::pipeline aggregationPipeline;
@@ -98,8 +96,8 @@ void Director::UpdateTasks() {
       countQuery["status"] = JobStatusNames[JobStatus::Error];
       task.failedJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
 
-      spdlog::debug("Task {0} updated - {1} job{4} ({2} done, {3} failed)", task.name, task.totJobs, task.doneJobs,
-                    task.failedJobs, task.totJobs > 1 ? "s" : "");
+      m_logger->debug("Task {0} updated - {1} job{4} ({2} done, {3} failed)", task.name, task.totJobs, task.doneJobs,
+                      task.failedJobs, task.totJobs > 1 ? "s" : "");
     }
   } while (m_exitSignalFuture.wait_for(std::chrono::seconds(60)) == std::future_status::timeout);
 }

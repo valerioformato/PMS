@@ -22,18 +22,18 @@ Server::~Server() {
 }
 
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-  spdlog::trace("Received message {}", msg->get_payload());
+  m_logger->trace("Received message {}", msg->get_payload());
 
   json job;
   try {
     job = json::parse(msg->get_payload());
   } catch (const std::exception &e) {
-    spdlog::error("Error in parsing message: {}", e.what());
+    m_logger->error("Error in parsing message: {}", e.what());
     m_endpoint.send(hdl, "Invalid job description, please check... :|", websocketpp::frame::opcode::text);
     return;
   }
 
-  spdlog::trace("Received a valid job :)");
+  m_logger->trace("Received a valid job :)");
 
   // create an hash for this job
   std::string job_hash;
@@ -54,19 +54,19 @@ void Server::Listen() {
   for (unsigned int iTry = 0; iTry < maxTries; iTry++) {
     try {
       m_endpoint.listen(m_port);
-      spdlog::debug("Port {} acquired.", m_port);
+      m_logger->debug("Port {} acquired.", m_port);
       return;
     } catch (const std::exception &e) {
-      spdlog::debug("Error in acquiring port... retrying... {} / {}", iTry, maxTries);
+      m_logger->debug("Error in acquiring port... retrying... {} / {}", iTry, maxTries);
       std::this_thread::sleep_for(std::chrono::seconds{10});
     }
   }
 
-  spdlog::error("Impossible to acquire port {}.", m_port);
+  m_logger->error("Impossible to acquire port {}.", m_port);
 }
 
 void Server::Start() {
-  spdlog::info("Starting Websocket server");
+  m_logger->info("Starting Websocket server");
 
   // Set logging settings
   m_endpoint.set_error_channels(websocketpp::log::elevel::all);
@@ -90,7 +90,7 @@ void Server::Start() {
 }
 
 void Server::Stop() {
-  spdlog::info("Stopping Websocket server");
+  m_logger->info("Stopping Websocket server");
   m_endpoint.stop();
   m_endpoint.stop_listening();
   m_isRunning = false;

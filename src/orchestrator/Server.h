@@ -19,7 +19,8 @@ namespace PMS {
 namespace Orchestrator {
 class Server {
 public:
-  Server(unsigned int port, std::shared_ptr<Director> director) : m_port{port}, m_director{std::move(director)} {}
+  Server(unsigned int port, std::shared_ptr<Director> director)
+      : m_logger{spdlog::stdout_color_st("Server")}, m_port{port}, m_director{std::move(director)} {}
   ~Server();
 
   void Start();
@@ -36,6 +37,8 @@ private:
   }
 
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
+
+  std::shared_ptr<spdlog::logger> m_logger;
 
   bool m_isRunning = false;
   unsigned int m_port;

@@ -11,6 +11,8 @@
 
 // external dependencies
 #include <nlohmann/json.hpp>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
 
 // our headers
 #include "common/queue.h"
@@ -24,7 +26,8 @@ namespace Orchestrator {
 class Director {
 public:
   Director(std::shared_ptr<DB::PoolHandle> frontPoolHandle, std::shared_ptr<DB::PoolHandle> backPoolHandle)
-      : m_frontPoolHandle{std::move(frontPoolHandle)}, m_backPoolHandle{std::move(backPoolHandle)} {}
+      : m_logger{spdlog::stdout_color_st("Director")}, m_frontPoolHandle{std::move(frontPoolHandle)},
+        m_backPoolHandle{std::move(backPoolHandle)} {}
 
   void Start();
   void Stop();
@@ -35,6 +38,8 @@ public:
 private:
   void JobInsert();
   void UpdateTasks();
+
+  std::shared_ptr<spdlog::logger> m_logger;
 
   std::shared_ptr<DB::PoolHandle> m_frontPoolHandle;
   std::shared_ptr<DB::PoolHandle> m_backPoolHandle;
