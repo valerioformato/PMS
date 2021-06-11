@@ -40,13 +40,15 @@ Director::OperationResult Director::AddNewJob(json &&job) {
 }
 
 Director::OperationResult Director::CleanTask(const std::string &task) const {
-  auto handle = m_backPoolHandle->DBHandle();
+  auto bHandle = m_backPoolHandle->DBHandle();
+  auto fHandle = m_frontPoolHandle->DBHandle();
 
   json deleteQuery;
   deleteQuery["task"] = task;
   try {
     m_logger->debug("Cleaning task {}", task);
-    handle["jobs"].delete_many(JsonUtils::json2bson(deleteQuery));
+    bHandle["jobs"].delete_many(JsonUtils::json2bson(deleteQuery));
+    fHandle["jobs"].delete_many(JsonUtils::json2bson(deleteQuery));
   } catch (const std::exception &e) {
     m_logger->error("Server query failed with error {}", e.what());
     return OperationResult::DatabaseError;
