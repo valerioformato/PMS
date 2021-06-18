@@ -20,6 +20,7 @@ void Director::Start() {
 
   m_threads.emplace_back(&Director::UpdateTasks, this);
   m_threads.emplace_back(&Director::JobInsert, this);
+  m_threads.emplace_back(&Director::JobTransfer, this);
 }
 
 void Director::Stop() {
@@ -76,6 +77,8 @@ Director::OperationResult Director::CleanTask(const std::string &task) const {
 }
 
 void Director::JobInsert() {
+  static constexpr auto coolDown = std::chrono::milliseconds(1);
+
   auto handle = m_backPoolHandle->DBHandle();
 
   std::vector<bsoncxx::document::value> toBeInserted;
@@ -105,10 +108,12 @@ void Director::JobInsert() {
 
       toBeInserted.clear();
     }
-  } while (m_exitSignalFuture.wait_for(std::chrono::milliseconds(1)) == std::future_status::timeout);
+  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
 void Director::JobTransfer() {
+  static constexpr auto coolDown = std::chrono::seconds(10);
+
   auto bHandle = m_backPoolHandle->DBHandle();
   auto fHandle = m_frontPoolHandle->DBHandle();
 
@@ -146,10 +151,12 @@ void Director::JobTransfer() {
 
       toBeInserted.clear();
     }
-  } while (m_exitSignalFuture.wait_for(std::chrono::seconds(10)) == std::future_status::timeout);
+  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
 void Director::UpdateTasks() {
+  static constexpr auto coolDown = std::chrono::seconds(60);
+
   auto handle = m_backPoolHandle->DBHandle();
 
   json taskAggregateQuery;
@@ -225,7 +232,7 @@ void Director::UpdateTasks() {
       m_tasks.erase(m_tasks.find(taskName));
     });
 
-  } while (m_exitSignalFuture.wait_for(std::chrono::seconds(60)) == std::future_status::timeout);
+  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 } // namespace Orchestrator
 } // namespace PMS

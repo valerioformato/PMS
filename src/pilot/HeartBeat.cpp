@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "common/JsonUtils.h"
 #include "pilot/HeartBeat.h"
 
 using json = nlohmann::json;
@@ -34,12 +35,11 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
 
   do {
     spdlog::trace("Updating HeartBeat");
-    dbHandle["pilots"].update_one(bsoncxx::from_json(updateFilter.dump()), bsoncxx::from_json(updateAction.dump()),
-                                  updateOpt);
+    dbHandle["pilots"].update_one(JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction), updateOpt);
   } while (exitSignal.wait_for(std::chrono::seconds(1)) == std::future_status::timeout);
 
   spdlog::trace("Removing pilot from DB");
-  dbHandle["pilots"].delete_one(bsoncxx::from_json(updateFilter.dump()));
+  dbHandle["pilots"].delete_one(JsonUtils::json2bson(updateFilter));
 }
 
 } // namespace Pilot
