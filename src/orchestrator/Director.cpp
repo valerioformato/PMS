@@ -39,6 +39,24 @@ Director::OperationResult Director::AddNewJob(json &&job) {
   return OperationResult::Success;
 }
 
+Director::OperationResult Director::AddTaskDependency(const std::string &task, const std::string &dependsOn) {
+  auto &thisTask = m_tasks[task];
+  if (thisTask.name.empty()) {
+    // this means task is newly created
+    thisTask.name = task;
+  }
+
+  auto &dTask = m_tasks[dependsOn];
+  if (dTask.name.empty()) {
+    // this means task is newly created
+    dTask.name = dependsOn;
+  }
+
+  thisTask.dependencies.push_back(dependsOn);
+
+  return OperationResult::Success;
+}
+
 Director::OperationResult Director::CleanTask(const std::string &task) const {
   auto bHandle = m_backPoolHandle->DBHandle();
   auto fHandle = m_frontPoolHandle->DBHandle();

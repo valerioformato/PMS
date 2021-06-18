@@ -49,9 +49,12 @@ std::string Server::HandleCommand(Command command, const json &msg) {
     reply = result == Director::OperationResult::Success ? fmt::format("Task \"{}\" cleaned", msg["task"])
                                                          : fmt::format("Failed to clean task \"{}\"", msg["task"]);
   } break;
-  case Command::DeclareTaskDependency:
-    // reply = fmt::format("Task {} now depends on task {}", msg["task"], msg["dependsOn"]);
-    return "DeclareTaskDependency not supported yet :(";
+  case Command::DeclareTaskDependency: {
+    auto result = m_director->AddTaskDependency(msg["task"], msg["dependsOn"]);
+    reply = result == Director::OperationResult::Success
+                ? fmt::format("Task \"{}\" now depends on task {}", msg["task"], msg["dependsOn"])
+                : fmt::format("Failed to add task dependency");
+  } break;
   default:
     reply = fmt::format("Command \"{}\" is not in the list of available commands", msg["command"]);
     break;
