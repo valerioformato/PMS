@@ -120,6 +120,24 @@ void Director::UpdateTasks() {
       if (task.name.empty())
         task.name = taskName;
 
+      if (task.dependencies.empty()) {
+        task.readyForScheduling = true;
+      } else {
+        bool taskIsReady = true;
+        for (const auto &requiredTaskName : task.dependencies) {
+          auto requiredTaskIt = m_tasks.find(requiredTaskName);
+          if (requiredTaskIt == end(m_tasks)) {
+            m_logger->warn("Task {} required by task {} not found in internal map", requiredTaskName, taskName);
+            task.readyForScheduling = false;
+            break;
+          }
+
+          taskIsReady &= requiredTaskIt->second.IsFinished();
+        }
+
+        task.readyForScheduling = taskIsReady;
+      }
+
       // update job counters in task
       json countQuery;
       countQuery["task"] = taskName;
