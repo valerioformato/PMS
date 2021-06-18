@@ -108,6 +108,47 @@ void Director::JobInsert() {
   } while (m_exitSignalFuture.wait_for(std::chrono::milliseconds(1)) == std::future_status::timeout);
 }
 
+void Director::JobTransfer() {
+  auto bHandle = m_backPoolHandle->DBHandle();
+  auto fHandle = m_frontPoolHandle->DBHandle();
+
+  std::vector<bsoncxx::document::view_or_value> toBeInserted;
+  do {
+    // collect jobs from each active task
+    for (const auto &task : m_tasks) {
+      if (!task.second.readyForScheduling || !task.second.IsActive()) {
+        continue;
+      }
+
+      json getJobsQuery;
+      getJobsQuery["task"] = task.second.name;
+      getJobsQuery["inFrontDB"]["$exists"] = false;
+
+      auto queryResult = bHandle["jobs"].find(JsonUtils::json2bson(getJobsQuery));
+      std::copy(queryResult.begin(), queryResult.end(), begin(toBeInserted));
+    }
+
+    if (!toBeInserted.empty()) {
+      m_logger->debug("Inserting {} new jobs into backend DB", toBeInserted.size());
+      fHandle["jobs"].insert_many(toBeInserted);
+
+      for (const auto &jobIt : toBeInserted) {
+        json job = JsonUtils::bson2json(jobIt);
+
+        json updateFilter;
+        updateFilter["hash"] = job["hash"];
+
+        json updateAction;
+        updateAction["$set"]["inFrontDB"] = true;
+
+        bHandle["jobs"].update_one(JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction));
+      }
+
+      toBeInserted.clear();
+    }
+  } while (m_exitSignalFuture.wait_for(std::chrono::seconds(10)) == std::future_status::timeout);
+}
+
 void Director::UpdateTasks() {
   auto handle = m_backPoolHandle->DBHandle();
 
