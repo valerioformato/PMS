@@ -43,19 +43,17 @@ void Worker::Start(const std::string &user, const std::string &task) {
       filter["task"] = task;
     filter["status"] = JobStatusNames[JobStatus::Pending];
 
+    json updateAction;
+    updateAction["$set"]["status"] = JobStatusNames[JobStatus::Claimed];
+    updateAction["$set"]["pilotUuid"] = boost::uuids::to_string(uuid);
+
     DB::DBHandle dbHandle = m_poolHandle->DBHandle();
 
-    auto query_result = dbHandle["jobs"].find_one(JsonUtils::json2bson(filter));
+    // get new job and mark it as claimed
+    auto query_result =
+        dbHandle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
     if (query_result) {
       json job = JsonUtils::bson2json(query_result.value());
-      dbHandle.ClaimJob(job["hash"], boost::uuids::to_string(uuid));
-
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-      if (!CheckJobClaim(job["hash"], boost::uuids::to_string(uuid))) {
-        spdlog::warn("Worker: Job {} already claimed by another pilot", job["hash"]);
-        continue;
-      }
-
       spdlog::info("Worker: got a new job");
 
       spdlog::trace("Job: {}", job.dump(2));
@@ -122,22 +120,5 @@ void Worker::Start(const std::string &user, const std::string &task) {
       break;
   }
 }
-
-bool Worker::CheckJobClaim(const std::string &hash, const std::string &uuid) const {
-  json filter;
-  filter["status"] = JobStatusNames[JobStatus::Pending];
-
-  DB::DBHandle dbHandle = m_poolHandle->DBHandle();
-
-  auto query_result = dbHandle["jobs"].find_one(JsonUtils::json2bson(filter));
-  if (query_result) {
-    json job = JsonUtils::bson2json(query_result.value());
-    return job["pilotUuid"] == uuid;
-  } else {
-    spdlog::error("Worker: Job {} should be claimed but is not in the DB!!!", hash);
-    return false;
-  }
-}
-
 } // namespace Pilot
 } // namespace PMS

@@ -24,21 +24,6 @@ void DBHandle::UpdateJobStatus(const std::string &hash, JobStatus status) const 
   this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateRunningAction));
 }
 
-void DBHandle::ClaimJob(const std::string &hash, const std::string &pilotUuid) const {
-  json jobFilter;
-  try {
-    jobFilter["hash"] = hash;
-  } catch (...) {
-    spdlog::error("DBHandle::UpdateJobStatus Job has no hash, THIS SHOULD NEVER HAPPEN!");
-    return;
-  }
-
-  json jobUpdateRunningAction;
-  jobUpdateRunningAction["$set"]["status"] = JobStatusNames[JobStatus::Claimed];
-  jobUpdateRunningAction["$set"]["pilotUuid"] = pilotUuid;
-  this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateRunningAction));
-}
-
 void DBHandle::SetupJobIndexes() {
   using bsoncxx::builder::basic::kvp;
   using bsoncxx::builder::basic::make_document;

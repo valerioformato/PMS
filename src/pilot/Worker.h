@@ -18,8 +18,6 @@ public:
   void Start(const std::string &user, const std::string &task = "");
 
 private:
-  bool CheckJobClaim(const std::string &hash, const std::string &uuid) const;
-
   std::thread m_thread;
   std::shared_ptr<DB::PoolHandle> m_poolHandle;
 };
