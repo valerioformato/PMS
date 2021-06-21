@@ -130,11 +130,15 @@ void Director::JobTransfer() {
       getJobsQuery["inFrontDB"]["$exists"] = false;
 
       auto queryResult = bHandle["jobs"].find(JsonUtils::json2bson(getJobsQuery));
-      std::copy(queryResult.begin(), queryResult.end(), begin(toBeInserted));
+      for (const auto &job : queryResult) {
+        // filtering out the _id field
+        toBeInserted.push_back(
+            JsonUtils::filter(job, [](const bsoncxx::document::element &el) { return el.key().to_string() == "_id"; }));
+      }
     }
 
     if (!toBeInserted.empty()) {
-      m_logger->debug("Inserting {} new jobs into backend DB", toBeInserted.size());
+      m_logger->debug("Inserting {} new jobs into frontend DB", toBeInserted.size());
       fHandle["jobs"].insert_many(toBeInserted);
 
       for (const auto &jobIt : toBeInserted) {
