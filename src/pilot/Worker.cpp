@@ -26,8 +26,8 @@ void Worker::Start(const std::string &user, const std::string &task) {
 
   // TODO: implement mechanism to decide when a task is actually
   // finished
-  // bool work_done = false;
-  bool work_done = true;
+  bool work_done = false;
+  // bool work_done = true;
 
   // generate a pilot uuid
   boost::uuids::uuid uuid = boost::uuids::random_generator()();
@@ -70,26 +70,29 @@ void Worker::Start(const std::string &user, const std::string &task) {
       }
 
       // let's check if executable is a shell script
-      if (executable.substr(executable.length() - 3, 3) == ".sh") {
+      if (executable.length() > 3 && executable.substr(executable.length() - 3, 3) == ".sh") {
         arguments.insert(begin(arguments), executable);
         executable = "sh";
       }
 
       std::string jobStdout = "/dev/null", jobStderr = "/dev/null", jobStdin = "/dev/null";
       try {
-        if (!job["stdout"].empty())
+        if (job["stdout"] != "")
           jobStdout = job["stdout"];
-        if (!job["stderr"].empty())
+        if (job["stderr"] != "")
           jobStderr = job["stderr"];
-        if (!job["stdin"].empty())
+        if (job["stdin"] != "")
           jobStdin = job["stdin"];
       } catch (...) {
         spdlog::error("Worker: Job stdin/stdout/stderr not defined");
       }
 
       spdlog::info("Worker: Spawning process");
-      spdlog::info("Worker:  - {} {}", executable, fmt::join(arguments, " "));
-      spdlog::trace("{}", bp::search_path(executable));
+      if (arguments.empty())
+        spdlog::info("Worker:  - {}", executable);
+      else
+        spdlog::info("Worker:  - {} {}", executable, fmt::join(arguments, " "));
+      spdlog::trace("{} ({}, {}, {})", bp::search_path(executable), jobStdin, jobStdout, jobStderr);
       std::error_code procError;
       bp::child proc(bp::search_path(executable), arguments, bp::std_out > jobStdout, bp::std_err > jobStderr,
                      bp::std_in < jobStdin, bp::shell, procError);
@@ -98,9 +101,9 @@ void Worker::Start(const std::string &user, const std::string &task) {
       dbHandle.UpdateJobStatus(job["hash"], JobStatus::Running);
 
       proc.wait();
-      spdlog::trace("procerr: {} ({})", procError.message(), procError.value());
 
       if (procError) {
+        spdlog::trace("procerr: {} ({})", procError.message(), procError.value());
         spdlog::error("Worker: Job exited with an error: {}", procError.message());
         dbHandle.UpdateJobStatus(job["hash"], JobStatus::Error);
       } else {
