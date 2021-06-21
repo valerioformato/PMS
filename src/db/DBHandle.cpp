@@ -22,6 +22,19 @@ void DBHandle::UpdateJobStatus(const std::string &hash, JobStatus status) const 
   json jobUpdateAction;
   jobUpdateAction["$set"]["status"] = JobStatusNames[status];
   jobUpdateAction["$currentDate"]["lastUpdate"] = true;
+
+  switch (status) {
+  case JobStatus::Running:
+    jobUpdateAction["$currentDate"]["startTime"] = true;
+    break;
+  case JobStatus::Error:
+  case JobStatus::Done:
+    jobUpdateAction["$currentDate"]["finishTime"] = true;
+    break;
+  default:
+    break;
+  }
+
   this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction));
 }
 
