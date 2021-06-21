@@ -45,6 +45,7 @@ private:
   void JobInsert();
   void JobTransfer();
   void UpdateTasks();
+  void DBSync();
 
   std::shared_ptr<spdlog::logger> m_logger;
 

@@ -21,6 +21,7 @@ void Director::Start() {
   m_threads.emplace_back(&Director::UpdateTasks, this);
   m_threads.emplace_back(&Director::JobInsert, this);
   m_threads.emplace_back(&Director::JobTransfer, this);
+  m_threads.emplace_back(&Director::DBSync, this);
 }
 
 void Director::Stop() {
@@ -238,5 +239,48 @@ void Director::UpdateTasks() {
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
+
+using time_point = std::chrono::system_clock::time_point;
+
+void Director::DBSync() {
+  static constexpr auto coolDown = std::chrono::seconds(60);
+
+  static time_point lastCheck = std::chrono::system_clock::now();
+
+  auto bHandle = m_backPoolHandle->DBHandle();
+  auto fHandle = m_frontPoolHandle->DBHandle();
+
+  do {
+    // this is why we prefer using nlohmann json wherever possible...
+    // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
+    // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
+    // no possible issues or strange mis-conversions when this data is handled by the DB.
+    bsoncxx::document::value getJobsQuery = bsoncxx::builder::basic::make_document(
+        bsoncxx::builder::basic::kvp("lastUpdate", [](bsoncxx::builder::basic::sub_document sub_doc) {
+          sub_doc.append(bsoncxx::builder::basic::kvp("$gt", bsoncxx::types::b_date(lastCheck)));
+        }));
+
+    auto queryResult = fHandle["jobs"].find(getJobsQuery.view());
+    m_logger->debug("Syncing DBs...");
+
+    unsigned int nUpdatedJobs{0};
+    for (const auto &_job : queryResult) {
+      json job = JsonUtils::bson2json(_job);
+
+      json jobQuery;
+      jobQuery["hash"] = job["hash"];
+
+      json jobUpdateAction;
+      jobUpdateAction["$set"]["status"] = job["status"];
+
+      bHandle["jobs"].update_one(JsonUtils::json2bson(jobQuery), JsonUtils::json2bson(jobUpdateAction));
+      nUpdatedJobs++;
+    }
+
+    lastCheck = std::chrono::system_clock::now();
+    m_logger->debug("DBs synced: {} jobs updated in backend DB", nUpdatedJobs);
+  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
+}
+
 } // namespace Orchestrator
 } // namespace PMS

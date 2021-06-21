@@ -19,9 +19,10 @@ void DBHandle::UpdateJobStatus(const std::string &hash, JobStatus status) const 
     return;
   }
 
-  json jobUpdateRunningAction;
-  jobUpdateRunningAction["$set"]["status"] = JobStatusNames[status];
-  this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateRunningAction));
+  json jobUpdateAction;
+  jobUpdateAction["$set"]["status"] = JobStatusNames[status];
+  jobUpdateAction["$currentDate"]["lastUpdate"] = true;
+  this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction));
 }
 
 void DBHandle::SetupJobIndexes() {
