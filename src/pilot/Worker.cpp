@@ -92,7 +92,9 @@ void Worker::Start(const std::string &user, const std::string &task) {
         spdlog::info("Worker:  - {}", executable);
       else
         spdlog::info("Worker:  - {} {}", executable, fmt::join(arguments, " "));
+
       spdlog::trace("{} ({}, {}, {})", bp::search_path(executable), jobStdin, jobStdout, jobStderr);
+
       std::error_code procError;
       bp::child proc(bp::search_path(executable), arguments, bp::std_out > jobStdout, bp::std_err > jobStderr,
                      bp::std_in < jobStdin, bp::shell, procError);
@@ -116,8 +118,6 @@ void Worker::Start(const std::string &user, const std::string &task) {
       std::this_thread::sleep_for(std::chrono::seconds(1));
       continue;
     }
-
-    // do the actual work, fork and run the job
 
     if (work_done)
       break;
