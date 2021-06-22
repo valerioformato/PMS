@@ -1,11 +1,14 @@
 # handle dependencies
 include(FetchContent)
 
+# needed for the fmt and spdlog static libraries
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # === fmt ===
 FetchContent_Declare(
   fmt
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG 6.1.2)
+  GIT_TAG 7.1.3)
 FetchContent_GetProperties(fmt)
 if(NOT fmt_POPULATED)
   set(FMT_INSTALL ON)
@@ -14,14 +17,14 @@ if(NOT fmt_POPULATED)
 endif()
 
 # === spdlog ===
-# Force spdlog to use downloaded fmt library, using the header-only target
-set(SPDLOG_FMT_EXTERNAL_HO
+# Force spdlog to use downloaded fmt library
+set(SPDLOG_FMT_EXTERNAL
     ON
     CACHE INTERNAL "") # Forces the value
 FetchContent_Declare(
   spdlog
   GIT_REPOSITORY https://github.com/gabime/spdlog.git
-  GIT_TAG v1.7.0)
+  GIT_TAG v1.8.5)
 FetchContent_GetProperties(spdlog)
 if(NOT spdlog_POPULATED)
   set(SPDLOG_INSTALL ON)
