@@ -8,6 +8,7 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <bsoncxx/string/to_string.hpp>
 #include <fmt/format.h>
+#include <fmt/os.h>
 #include <fmt/ostream.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -52,11 +53,23 @@ void Worker::Start(const std::string &user, const std::string &task) {
     // get new job and mark it as claimed
     auto query_result =
         dbHandle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
+
     if (query_result) {
       json job = JsonUtils::bson2json(query_result.value());
       spdlog::info("Worker: got a new job");
 
       spdlog::trace("Job: {}", job.dump(2));
+
+      // prepare a sandbox directory for the job
+      boost::filesystem::path wdPath{fmt::format("job_{}", std::string(job["hash"]))};
+      boost::filesystem::create_directory(wdPath);
+
+      // make the shell script executable
+      boost::filesystem::path shellScriptPath = wdPath / "pilot_task.sh";
+      auto shellScript = fmt::output_file(shellScriptPath.string());
+      boost::filesystem::permissions(shellScriptPath, boost::filesystem::owner_all | boost::filesystem::group_read);
+
+      shellScript.print("#! /bin/bash\n");
 
       std::string executable;
       std::vector<std::string> arguments;
@@ -69,35 +82,55 @@ void Worker::Start(const std::string &user, const std::string &task) {
         break;
       }
 
-      // let's check if executable is a shell script
-      if (executable.length() > 3 && executable.substr(executable.length() - 3, 3) == ".sh") {
-        arguments.insert(begin(arguments), executable);
-        executable = "sh";
+      jobSTDIO finalIO;
+      if (job["stdout"] != "")
+        finalIO.stdout = job["stdout"];
+      if (job["stderr"] != "")
+        finalIO.stderr = job["stderr"];
+      if (job["stdin"] != "")
+        finalIO.stdin = job["stdin"];
+
+      // local IO to the working directory, will copy later to the final location
+      jobSTDIO localIO{finalIO.stdin.empty() ? "/dev/null" : finalIO.stdin,
+                       fmt::format("{}/stdout.txt", wdPath.string()), fmt::format("{}/stderr.txt", wdPath.string())};
+
+      SetupLocalIO(localIO);
+
+      if (!job["env"].empty()) {
+        EnvInfoType envType = GetEnvType(job["env"]["type"]);
+        switch (envType) {
+        case EnvInfoType::Script:
+          shellScript.print(". {}\n", boost::filesystem::canonical(job["env"]["file"]).string());
+          break;
+        case EnvInfoType::NONE:
+          spdlog::error("Invalid env type {} is not supported", job["env"]["type"]);
+        default:
+          break;
+        }
       }
 
-      std::string jobStdout = "/dev/null", jobStderr = "/dev/null", jobStdin = "/dev/null";
-      try {
-        if (job["stdout"] != "")
-          jobStdout = job["stdout"];
-        if (job["stderr"] != "")
-          jobStderr = job["stderr"];
-        if (job["stdin"] != "")
-          jobStdin = job["stdin"];
-      } catch (...) {
-        spdlog::error("Worker: Job stdin/stdout/stderr not defined");
-      }
+      boost::filesystem::path exePath{executable};
+      spdlog::trace("{} ({}, {}, {})", exePath.string(), finalIO.stdin, finalIO.stdout, finalIO.stderr);
 
       spdlog::info("Worker: Spawning process");
-      if (arguments.empty())
-        spdlog::info("Worker:  - {}", executable);
-      else
-        spdlog::info("Worker:  - {} {}", executable, fmt::join(arguments, " "));
+      std::string executableWithArgs;
+      if (arguments.empty()) {
+        executableWithArgs = fmt::format("{}", boost::filesystem::canonical(exePath).string());
+      } else {
+        executableWithArgs =
+            fmt::format("{} {} ", boost::filesystem::canonical(exePath).string(), fmt::join(arguments, " "));
+      }
+      spdlog::info("Worker:  - {}", executableWithArgs);
 
-      spdlog::trace("{} ({}, {}, {})", bp::search_path(executable), jobStdin, jobStdout, jobStderr);
+      shellScript.print("{}\n", executableWithArgs);
+
+      // close the script file before execution, or the child will silently fail
+      shellScript.close();
 
       std::error_code procError;
-      bp::child proc(bp::search_path(executable), arguments, bp::std_out > jobStdout, bp::std_err > jobStderr,
-                     bp::std_in < jobStdin, bp::shell, procError);
+      bp::child proc(bp::search_path("sh"), shellScriptPath.filename(), bp::std_out > localIO.stdout,
+                     bp::std_err > localIO.stderr, bp::std_in < localIO.stdin, bp::start_dir(wdPath), bp::shell,
+                     procError);
 
       // set status to "Running"
       dbHandle.UpdateJobStatus(job["hash"], JobStatus::Running);
@@ -113,6 +146,9 @@ void Worker::Start(const std::string &user, const std::string &task) {
         dbHandle.UpdateJobStatus(job["hash"], JobStatus::Done);
       }
 
+      // remove temporary sandbox directory
+      // boost::filesystem::remove(wdPath);
+
     } else {
       spdlog::trace("Worker: no jobs, sleep for 1s");
       std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -123,5 +159,16 @@ void Worker::Start(const std::string &user, const std::string &task) {
       break;
   }
 }
+
+Worker::EnvInfoType Worker::GetEnvType(const std::string &envName) {
+  auto it = std::find_if(begin(m_envInfoNames), end(m_envInfoNames),
+                         [&envName](const auto &_pair) { return _pair.second == envName; });
+
+  if (it == end(m_envInfoNames))
+    return EnvInfoType::NONE;
+
+  return it->first;
+}
+
 } // namespace Pilot
 } // namespace PMS

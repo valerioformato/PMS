@@ -20,6 +20,10 @@ def getNextJob():
         "stdin": "",
         "stdout": "test.out",
         "stderr": "test.err",
+        "env": {
+            "type": "script",
+            "file": "setenv.sh"
+        },
         "retries": 0,
         "sites": [
             "cnaf",

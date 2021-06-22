@@ -2,12 +2,18 @@
 #define PMS_PILOT_WORKER_H
 
 // c++ headers
+#include <map>
 #include <memory>
 #include <thread>
 #include <utility>
 
+// external headers
+#include <nlohmann/json.hpp>
+
 // our headers
 #include "db/PoolHandle.h"
+
+using json = nlohmann::json;
 
 namespace PMS {
 namespace Pilot {
@@ -18,6 +24,16 @@ public:
   void Start(const std::string &user, const std::string &task = "");
 
 private:
+  enum class EnvInfoType { NONE, Script, List };
+  std::map<EnvInfoType, std::string> m_envInfoNames = {{EnvInfoType::Script, "script"}, {EnvInfoType::List, "list"}};
+  EnvInfoType GetEnvType(const std::string &envName);
+
+  struct jobSTDIO {
+    std::string stdin;
+    std::string stdout;
+    std::string stderr;
+  };
+
   std::thread m_thread;
   std::shared_ptr<DB::PoolHandle> m_poolHandle;
 };
