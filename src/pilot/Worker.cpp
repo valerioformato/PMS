@@ -23,7 +23,7 @@ namespace bp = boost::process;
 
 namespace PMS {
 namespace Pilot {
-void Worker::Start(const std::string &user, const std::string &task) {
+void Worker::Start(const std::string &user, const std::string &task, unsigned long int maxJobs) {
 
   // TODO: implement mechanism to decide when a task is actually
   // finished
@@ -34,6 +34,8 @@ void Worker::Start(const std::string &user, const std::string &task) {
   boost::uuids::uuid uuid = boost::uuids::random_generator()();
 
   HeartBeat hb{uuid, m_poolHandle};
+
+  unsigned long int doneJobs;
 
   // main loop
   while (true) {
@@ -116,7 +118,7 @@ void Worker::Start(const std::string &user, const std::string &task) {
         executableWithArgs = fmt::format("{}", boost::filesystem::canonical(exePath).string());
       } else {
         executableWithArgs =
-            fmt::format("{} {} ", boost::filesystem::canonical(exePath).string(), fmt::join(arguments, " "));
+            fmt::format("{} {}", boost::filesystem::canonical(exePath).string(), fmt::join(arguments, " "));
       }
       spdlog::info("Worker:  - {}", executableWithArgs);
 
@@ -145,7 +147,10 @@ void Worker::Start(const std::string &user, const std::string &task) {
       }
 
       // remove temporary sandbox directory
-      // boost::filesystem::remove(wdPath);
+      boost::filesystem::remove(wdPath);
+
+      if (++doneJobs == maxJobs)
+        work_done = true;
 
     } else {
       spdlog::trace("Worker: no jobs, sleep for 1s");

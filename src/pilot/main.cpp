@@ -15,12 +15,13 @@ static constexpr auto USAGE =
     R"(PMS Pilot fish executable.
 
     Usage:
-          PMSPilot <configfile> [ -v | -vv ]
+          PMSPilot <configfile> [ -v | -vv ] [ -m MAXJOBS ]
           PMSPilot --version
  Options:
-          -v...         Enable debug output (verbose, trace)
-          -h --help     Show this screen.
-          --version     Show version.
+          -v...                         Enable debug output (verbose, trace)
+          -h --help                     Show this screen.
+          -m MAXJOBS --maxJobs=MAXJOBS  Number of jobs to run before shutdown
+          --version                     Show version.
 )";
 
 using namespace PMS;
@@ -61,8 +62,11 @@ int main(int argc, const char **argv) {
     break;
   }
 
+  unsigned long int maxJobs =
+      args.find("MAXJOBS") == end(args) ? std::numeric_limits<unsigned long int>::max() : args["MAXJOBS"].asLong();
+
   Pilot::Worker worker{poolHandle};
-  worker.Start(config.user, config.task);
+  worker.Start(config.user, config.task, maxJobs);
 
   return 0;
 }

@@ -21,7 +21,7 @@ class Worker {
 public:
   explicit Worker(std::shared_ptr<DB::PoolHandle> handle) : m_poolHandle{std::move(handle)} {}
 
-  void Start(const std::string &user, const std::string &task = "");
+  void Start(const std::string &user, const std::string &task = "", unsigned long int maxJobs = std::numeric_limits<unsigned long int>::max());
 
 private:
   enum class EnvInfoType { NONE, Script, List };
