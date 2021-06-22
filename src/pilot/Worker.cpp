@@ -94,8 +94,6 @@ void Worker::Start(const std::string &user, const std::string &task) {
       jobSTDIO localIO{finalIO.stdin.empty() ? "/dev/null" : finalIO.stdin,
                        fmt::format("{}/stdout.txt", wdPath.string()), fmt::format("{}/stderr.txt", wdPath.string())};
 
-      SetupLocalIO(localIO);
-
       if (!job["env"].empty()) {
         EnvInfoType envType = GetEnvType(job["env"]["type"]);
         switch (envType) {
