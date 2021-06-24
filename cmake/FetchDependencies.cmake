@@ -13,7 +13,7 @@ FetchContent_GetProperties(fmt)
 if(NOT fmt_POPULATED)
   set(FMT_INSTALL ON)
   FetchContent_Populate(fmt)
-  add_subdirectory(${fmt_SOURCE_DIR} ${fmt_BINARY_DIR})
+  add_subdirectory(${fmt_SOURCE_DIR} ${fmt_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
 # === spdlog ===
@@ -29,7 +29,7 @@ FetchContent_GetProperties(spdlog)
 if(NOT spdlog_POPULATED)
   set(SPDLOG_INSTALL ON)
   FetchContent_Populate(spdlog)
-  add_subdirectory(${spdlog_SOURCE_DIR} ${spdlog_BINARY_DIR})
+  add_subdirectory(${spdlog_SOURCE_DIR} ${spdlog_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
 # === boost ===
@@ -42,7 +42,7 @@ FetchContent_Declare(json
 FetchContent_GetProperties(json)
 if(NOT json_POPULATED)
   FetchContent_Populate(json)
-  add_subdirectory(${json_SOURCE_DIR} ${json_BINARY_DIR} EXCLUDE_FROM_ALL)
+  add_subdirectory(${json_SOURCE_DIR} ${json_BINARY_DIR})
 endif()
 
 # === docopt ===
@@ -54,6 +54,8 @@ if(NOT docopt_POPULATED)
   FetchContent_Populate(docopt)
   add_subdirectory(${docopt_SOURCE_DIR} ${docopt_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
+install(TARGETS docopt DESTINATION lib)
+
 
 # === websocket++ ===
 FetchContent_Declare(websocketpp
