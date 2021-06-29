@@ -28,6 +28,8 @@ build-ubuntu20.04:
 dockerize-ubuntu20.04:
   stage: dockerize
   image: docker:stable
+  #only:
+  #  - master
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
@@ -35,4 +37,6 @@ dockerize-ubuntu20.04:
     - docker:dind
   script:
     - cp docker/Dockerfile .
-    - docker build -t pms:latest .
+    - docker login --user vformato --password $dockerhubtoken
+    - docker build -t vformato/pms:latest .
+    - docker push vformato/pms:latest
