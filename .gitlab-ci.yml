@@ -27,7 +27,12 @@ build-ubuntu20.04:
 
 dockerize-ubuntu20.04:
   stage: dockerize
-  image: docker
+  image: docker:stable
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  services:
+    - docker:dind
   script:
     - cp docker/Dockerfile .
-    - docker build PMS .
+    - docker build -t pms:latest .
