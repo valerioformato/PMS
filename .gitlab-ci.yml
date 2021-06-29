@@ -37,6 +37,6 @@ dockerize-ubuntu20.04:
     - docker:dind
   script:
     - cp docker/Dockerfile .
-    - docker login --user vformato --password $dockerhubtoken
+    - docker login --username vformato --password $dockerhubtoken
     - docker build -t vformato/pms:latest .
     - docker push vformato/pms:latest
