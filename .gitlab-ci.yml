@@ -26,6 +26,7 @@ build-ubuntu20.04:
   image: vformato/pms-ci:ubuntu20.04
 
 dockerize-ubuntu20.04:
+  stage: dockerize
   script:
     - cp docker/Dockerfile .
     - docker build PMS .
