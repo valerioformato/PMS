@@ -1,5 +1,6 @@
 stages:
   - build
+  - dockerize
 
 # TEMPLATES
 .build: &build
@@ -24,3 +25,7 @@ build-ubuntu20.04:
   <<: *build-docker
   image: vformato/pms-ci:ubuntu20.04
 
+dockerize-ubuntu20.04:
+  script:
+    - cp docker/Dockerfile .
+    - docker build PMS .
