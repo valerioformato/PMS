@@ -1,5 +1,6 @@
 stages:
   - build
+  - dockerize
 
 # TEMPLATES
 .build: &build
@@ -24,3 +25,18 @@ build-ubuntu20.04:
   <<: *build-docker
   image: vformato/pms-ci:ubuntu20.04
 
+dockerize-ubuntu20.04:
+  stage: dockerize
+  image: docker:stable
+  only:
+    - master
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+  services:
+    - docker:dind
+  script:
+    - cp docker/Dockerfile .
+    - docker login --username vformato --password $dockerhubtoken
+    - docker build -t vformato/pms:latest .
+    - docker push vformato/pms:latest
