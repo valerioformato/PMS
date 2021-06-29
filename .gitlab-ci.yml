@@ -27,6 +27,7 @@ build-ubuntu20.04:
 
 dockerize-ubuntu20.04:
   stage: dockerize
+  image: docker
   script:
     - cp docker/Dockerfile .
     - docker build PMS .
