@@ -28,8 +28,8 @@ build-ubuntu20.04:
 dockerize-ubuntu20.04:
   stage: dockerize
   image: docker:stable
-  #only:
-  #  - master
+  only:
+    - master
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2
