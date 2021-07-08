@@ -23,12 +23,15 @@ Server::~Server() {
 
 std::unordered_map<std::string, Server::Command> Server::m_commandLUT{
     {"submitJob", Command::SubmitJob},
+    {"creteTask", Command::CreateTask},
     {"cleanTask", Command::CleanTask},
     {"declareTaskDependency", Command::DeclareTaskDependency},
 };
 
 std::string Server::HandleCommand(Command command, const json &msg) {
   std::string reply;
+
+  // TODO: add token validation where needed
 
   switch (command) {
   case Command::SubmitJob: {
@@ -43,6 +46,12 @@ std::string Server::HandleCommand(Command command, const json &msg) {
 
     reply = result == Director::OperationResult::Success ? fmt::format("Job received, generated hash: {}", job_hash)
                                                          : "Job submission failed.";
+  } break;
+  case Command::CreateTask: {
+    auto result_s = m_director->CreateTask(msg["task"]);
+    reply = result_s.result == Director::OperationResult::Success
+                ? result_s.token
+                : fmt::format("Failed to create task \"{}\"", msg["task"]);
   } break;
   case Command::CleanTask: {
     auto result = m_director->CleanTask(msg["task"]);

@@ -33,7 +33,7 @@ private:
 
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
 
-  enum class Command { SubmitJob, CleanTask, DeclareTaskDependency };
+  enum class Command { SubmitJob, CreateTask, CleanTask, DeclareTaskDependency };
   std::string HandleCommand(Command command, const json &msg);
   static std::unordered_map<std::string, Command> m_commandLUT;
 

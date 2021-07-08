@@ -26,7 +26,7 @@ public:
 
   void UpdateJobStatus(const std::string &hash, JobStatus status) const;
 
-  void SetupJobIndexes();
+  void SetupDBCollections();
 
 private:
   mongocxx::pool::entry m_poolEntry;

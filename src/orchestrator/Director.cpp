@@ -2,6 +2,10 @@
 #include <algorithm>
 
 // external headers
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <bsoncxx/string/to_string.hpp>
 #include <fmt/ostream.h>
 #include <mongocxx/pipeline.hpp>
 #include <nlohmann/json.hpp>
@@ -16,7 +20,7 @@ using json = nlohmann::json;
 namespace PMS {
 namespace Orchestrator {
 void Director::Start() {
-  m_backPoolHandle->DBHandle().SetupJobIndexes();
+  m_backPoolHandle->DBHandle().SetupDBCollections();
 
   m_threads.emplace_back(&Director::UpdateTasks, this);
   m_threads.emplace_back(&Director::JobInsert, this);
@@ -59,16 +63,47 @@ Director::OperationResult Director::AddTaskDependency(const std::string &task, c
   return OperationResult::Success;
 }
 
-Director::OperationResult Director::CleanTask(const std::string &task) const {
+Director::CreateTaskResult Director::CreateTask(const std::string &task) {
+  if (m_tasks.find(task) != end(m_tasks)) {
+    return {OperationResult::DatabaseError, ""};
+  }
+
+  // generate a random token
+  std::string token = boost::uuids::to_string(boost::uuids::random_generator()());
+
+  auto newTask = m_tasks[task];
+  newTask.name = task;
+  newTask.token = token;
+
+  // insert new task in backend DB
+  auto handle = m_backPoolHandle->DBHandle();
+
+  json insertQuery;
+  insertQuery["name"] = newTask.name;
+  insertQuery["token"] = newTask.token;
+
+  handle["tasks"].insert_one(JsonUtils::json2bson(insertQuery));
+
+  return {OperationResult::Success, token};
+}
+
+Director::OperationResult Director::CleanTask(const std::string &task) {
   auto bHandle = m_backPoolHandle->DBHandle();
   auto fHandle = m_frontPoolHandle->DBHandle();
 
-  json deleteQuery;
-  deleteQuery["task"] = task;
   try {
+    json jobDeleteQuery;
+    jobDeleteQuery["task"] = task;
+
     m_logger->debug("Cleaning task {}", task);
-    bHandle["jobs"].delete_many(JsonUtils::json2bson(deleteQuery));
-    fHandle["jobs"].delete_many(JsonUtils::json2bson(deleteQuery));
+    bHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery));
+    fHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery));
+
+    json taskDeleteQuery;
+    taskDeleteQuery["name"] = task;
+
+    bHandle["tasks"].delete_many(JsonUtils::json2bson(taskDeleteQuery));
+    m_tasks.erase(task);
   } catch (const std::exception &e) {
     m_logger->error("Server query failed with error {}", e.what());
     return OperationResult::DatabaseError;
@@ -164,17 +199,15 @@ void Director::UpdateTasks() {
 
   auto handle = m_backPoolHandle->DBHandle();
 
-  json taskAggregateQuery;
-  taskAggregateQuery["_id"] = "$task";
-
   do {
     m_logger->debug("Updating tasks");
 
     // the pipeline must be re-created from scratch
+    // TODO: rework to query the "tasks" collection
     mongocxx::pipeline aggregationPipeline;
 
     // get list of all tasks
-    auto tasksResult = handle["jobs"].aggregate(aggregationPipeline.group(JsonUtils::json2bson(taskAggregateQuery)));
+    auto tasksResult = handle["tasks"].find({});
 
     std::vector<std::string> dbTasks;
 
@@ -183,13 +216,17 @@ void Director::UpdateTasks() {
       json tmpdoc = JsonUtils::bson2json(result);
 
       // find task in internal task list
-      std::string taskName = tmpdoc["_id"];
+      std::string taskName = tmpdoc["name"];
 
       dbTasks.emplace_back(taskName);
 
       Task &task = m_tasks[taskName];
-      if (task.name.empty())
-        task.name = taskName;
+      if (task.name.empty()) {
+        m_logger->warn("Task {} is in DB but was not found in memory");
+
+        task.name = tmpdoc["name"];
+        task.token = tmpdoc["token"];
+      }
 
       if (task.dependencies.empty()) {
         task.readyForScheduling = true;
@@ -223,19 +260,6 @@ void Director::UpdateTasks() {
       m_logger->debug("Task {0} updated - {1} job{4} ({2} done, {3} failed)", task.name, task.totJobs, task.doneJobs,
                       task.failedJobs, task.totJobs > 1 ? "s" : "");
     }
-
-    // check if there are tasks in the internal representation that are no longer in the DB
-    std::vector<std::string> deletedTasks;
-    for (const auto &taskIt : m_tasks) {
-      if (std::find(begin(dbTasks), end(dbTasks), taskIt.first) == end(dbTasks))
-        deletedTasks.push_back(taskIt.first);
-    }
-
-    // ... and then remove them!
-    std::for_each(begin(deletedTasks), end(deletedTasks), [this](const auto &taskName) {
-      m_logger->debug("Removing task {}", taskName);
-      m_tasks.erase(m_tasks.find(taskName));
-    });
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }

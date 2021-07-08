@@ -38,7 +38,7 @@ void DBHandle::UpdateJobStatus(const std::string &hash, JobStatus status) const 
   this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction));
 }
 
-void DBHandle::SetupJobIndexes() {
+void DBHandle::SetupDBCollections() {
   using bsoncxx::builder::basic::kvp;
   using bsoncxx::builder::basic::make_document;
 
@@ -52,6 +52,13 @@ void DBHandle::SetupJobIndexes() {
     // task is not a unique index :)
     index_options.unique(false);
     (*m_poolEntry)[m_dbname]["jobs"].create_index(make_document(kvp("task", 1)), index_options);
+  }
+  if (!(*m_poolEntry)[m_dbname].has_collection("tasks")) {
+    spdlog::debug("Creating indexes for the \"tasks\" collection");
+    mongocxx::options::index index_options{};
+    // hash is a unique index
+    index_options.unique(true);
+    (*m_poolEntry)[m_dbname]["tasks"].create_index(make_document(kvp("name", 1)), index_options);
   }
 }
 } // namespace DB

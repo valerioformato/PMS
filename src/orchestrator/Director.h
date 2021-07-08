@@ -39,7 +39,14 @@ public:
 
   OperationResult AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
 
-  OperationResult CleanTask(const std::string &task) const;
+  struct CreateTaskResult {
+    OperationResult result;
+    std::string token;
+  };
+  CreateTaskResult CreateTask(const std::string &task);
+  OperationResult CleanTask(const std::string &task);
+
+  bool ValidateTaskToken(const std::string &task, const std::string &token) const;
 
 private:
   void JobInsert();
