@@ -35,6 +35,11 @@ std::string Server::HandleCommand(Command command, const json &msg) {
 
   switch (command) {
   case Command::SubmitJob: {
+    if (!m_director->ValidateTaskToken(msg["job"]["task"], msg["token"])) {
+      reply = fmt::format("Invalid token for task {}", msg["job"]["task"]);
+      break;
+    }
+
     // create an hash for this job
     std::string job_hash;
     picosha2::hash256_hex_string(msg.dump(), job_hash);
@@ -54,11 +59,21 @@ std::string Server::HandleCommand(Command command, const json &msg) {
                 : fmt::format("Failed to create task \"{}\"", msg["task"]);
   } break;
   case Command::CleanTask: {
+    if (!m_director->ValidateTaskToken(msg["task"], msg["token"])) {
+      reply = fmt::format("Invalid token for task {}", msg["task"]);
+      break;
+    }
+
     auto result = m_director->CleanTask(msg["task"]);
     reply = result == Director::OperationResult::Success ? fmt::format("Task \"{}\" cleaned", msg["task"])
                                                          : fmt::format("Failed to clean task \"{}\"", msg["task"]);
   } break;
   case Command::DeclareTaskDependency: {
+    if (!m_director->ValidateTaskToken(msg["task"], msg["token"])) {
+      reply = fmt::format("Invalid token for task {}", msg["task"]);
+      break;
+    }
+
     auto result = m_director->AddTaskDependency(msg["task"], msg["dependsOn"]);
     reply = result == Director::OperationResult::Success
                 ? fmt::format("Task \"{}\" now depends on task {}", msg["task"], msg["dependsOn"])

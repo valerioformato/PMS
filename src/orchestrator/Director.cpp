@@ -306,5 +306,13 @@ void Director::DBSync() {
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
+bool Director::ValidateTaskToken(const std::string &task, const std::string &token) const {
+  if (m_tasks.find(task) == end(m_tasks)) {
+    return false;
+  }
+
+  return m_tasks.at(task).token == token;
+}
+
 } // namespace Orchestrator
 } // namespace PMS
