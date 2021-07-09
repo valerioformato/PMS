@@ -27,6 +27,8 @@ public:
   void Stop();
 
 private:
+  std::pair<bool, std::string> ValidateTaskToken(const json &msg) const;
+
   void Listen();
 
   void keepAliveUntilSignal(std::future<void> exitSignal);

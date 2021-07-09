@@ -23,10 +23,22 @@ Server::~Server() {
 
 std::unordered_map<std::string, Server::Command> Server::m_commandLUT{
     {"submitJob", Command::SubmitJob},
-    {"creteTask", Command::CreateTask},
+    {"createTask", Command::CreateTask},
     {"cleanTask", Command::CleanTask},
     {"declareTaskDependency", Command::DeclareTaskDependency},
 };
+
+std::pair<bool, std::string> Server::ValidateTaskToken(const json &msg) const {
+  if (!msg.contains("token")) {
+    return {false, "Message doesn't contain a token"};
+  }
+
+  if (!m_director->ValidateTaskToken(msg["task"], msg["token"])) {
+    return {false, fmt::format("Invalid token for task {}", msg["task"])};
+  }
+
+  return {true, {}};
+}
 
 std::string Server::HandleCommand(Command command, const json &msg) {
   std::string reply;
@@ -35,8 +47,10 @@ std::string Server::HandleCommand(Command command, const json &msg) {
 
   switch (command) {
   case Command::SubmitJob: {
-    if (!m_director->ValidateTaskToken(msg["job"]["task"], msg["token"])) {
-      reply = fmt::format("Invalid token for task {}", msg["job"]["task"]);
+    // FIXME: use c++17 structured bindings when available
+    auto dummy = ValidateTaskToken(msg);
+    if (!dummy.first) {
+      reply = dummy.second;
       break;
     }
 
@@ -45,6 +59,7 @@ std::string Server::HandleCommand(Command command, const json &msg) {
     picosha2::hash256_hex_string(msg.dump(), job_hash);
     json job = msg["job"];
     job["hash"] = job_hash;
+    job["task"] = msg["task"];
 
     auto result = m_director->AddNewJob(std::move(job));
     // note: don't use job after this line!
@@ -55,12 +70,14 @@ std::string Server::HandleCommand(Command command, const json &msg) {
   case Command::CreateTask: {
     auto result_s = m_director->CreateTask(msg["task"]);
     reply = result_s.result == Director::OperationResult::Success
-                ? result_s.token
+                ? fmt::format("Task {} created. Token: {}", msg["task"], result_s.token)
                 : fmt::format("Failed to create task \"{}\"", msg["task"]);
   } break;
   case Command::CleanTask: {
-    if (!m_director->ValidateTaskToken(msg["task"], msg["token"])) {
-      reply = fmt::format("Invalid token for task {}", msg["task"]);
+    // FIXME: use c++17 structured bindings when available
+    auto dummy = ValidateTaskToken(msg);
+    if (!dummy.first) {
+      reply = dummy.second;
       break;
     }
 
@@ -69,8 +86,10 @@ std::string Server::HandleCommand(Command command, const json &msg) {
                                                          : fmt::format("Failed to clean task \"{}\"", msg["task"]);
   } break;
   case Command::DeclareTaskDependency: {
-    if (!m_director->ValidateTaskToken(msg["task"], msg["token"])) {
-      reply = fmt::format("Invalid token for task {}", msg["task"]);
+    // FIXME: use c++17 structured bindings when available
+    auto dummy = ValidateTaskToken(msg);
+    if (!dummy.first) {
+      reply = dummy.second;
       break;
     }
 

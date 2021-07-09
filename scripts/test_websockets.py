@@ -38,20 +38,29 @@ async def send_to_orchestrator(websocket, msg):
 
     response = await websocket.recv()
     print(f"Server replied: {response}")
+    return response
 
 
 async def hello():
     uri = "ws://localhost:9002"
-    async with websockets.connect(uri) as websocket:
-        myReq = {"command": "cleanTask", "task": "sometask"}
 
+    oldToken = "94964336-dda0-47fc-9d83-ba2e4675fd74"
+
+    async with websockets.connect(uri) as websocket:
         print("Cleaning the task...")
+        myReq = {"command": "cleanTask", "task": "sometask", "token": oldToken}
         await send_to_orchestrator(websocket, myReq)
+
+        print("Creating a new task...")
+        myReq = {"command": "createTask", "task": "sometask"}
+        resp = await send_to_orchestrator(websocket, myReq)
+        newToken = resp.split(" ")[-1]
 
         for ijob in range(0, 3):
             newJob = getNextJob()
 
-            myReq = {"command": "submitJob", "job": newJob}
+            myReq = {"command": "submitJob", "job": newJob,
+                     "task": "sometask", "token": newToken}
 
             print("Sending a valid JSON job...")
             await send_to_orchestrator(websocket, myReq)

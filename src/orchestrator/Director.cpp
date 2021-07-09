@@ -68,10 +68,12 @@ Director::CreateTaskResult Director::CreateTask(const std::string &task) {
     return {OperationResult::DatabaseError, ""};
   }
 
+  m_logger->trace("Creating task {}", task);
+
   // generate a random token
   std::string token = boost::uuids::to_string(boost::uuids::random_generator()());
 
-  auto newTask = m_tasks[task];
+  auto &newTask = m_tasks[task];
   newTask.name = task;
   newTask.token = token;
 
@@ -209,8 +211,6 @@ void Director::UpdateTasks() {
     // get list of all tasks
     auto tasksResult = handle["tasks"].find({});
 
-    std::vector<std::string> dbTasks;
-
     // beware: cursors cannot be reused as-is
     for (const auto &result : tasksResult) {
       json tmpdoc = JsonUtils::bson2json(result);
@@ -218,11 +218,9 @@ void Director::UpdateTasks() {
       // find task in internal task list
       std::string taskName = tmpdoc["name"];
 
-      dbTasks.emplace_back(taskName);
-
       Task &task = m_tasks[taskName];
       if (task.name.empty()) {
-        m_logger->warn("Task {} is in DB but was not found in memory");
+        m_logger->warn("Task {} is in DB but was not found in memory", taskName);
 
         task.name = tmpdoc["name"];
         task.token = tmpdoc["token"];
