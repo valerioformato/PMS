@@ -44,7 +44,7 @@ async def send_to_orchestrator(websocket, msg):
 async def hello():
     uri = "ws://localhost:9002"
 
-    oldToken = "94964336-dda0-47fc-9d83-ba2e4675fd74"
+    oldToken = "1cf2ebae-be4a-47df-a850-1157a6e5aeae"
 
     async with websockets.connect(uri) as websocket:
         print("Cleaning the task...")
@@ -65,11 +65,17 @@ async def hello():
             print("Sending a valid JSON job...")
             await send_to_orchestrator(websocket, myReq)
 
-        # send invalid job
-        # print("Sending an invalid message")
-        # await websocket.send("aaaa:;jsfdbu348231@3327t8{)")
-        # response = await websocket.recv()
-        # print(f"Server replied: {response}")
+
+async def simulate_pilot():
+    uri = "ws://localhost:9003"
+
+    token = "1cf2ebae-be4a-47df-a850-1157a6e5aeae"
+
+    async with websockets.connect(uri) as websocket:
+        print("Sending request...")
+        myReq = {"command": "p_claimJob", "task": "sometask", "token": token}
+        await send_to_orchestrator(websocket, myReq)
 
 
-asyncio.get_event_loop().run_until_complete(hello())
+# asyncio.run(hello())
+asyncio.run(simulate_pilot())
