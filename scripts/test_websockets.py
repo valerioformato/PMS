@@ -41,14 +41,15 @@ async def send_to_orchestrator(websocket, msg):
     return response
 
 
+token = "1cf2ebae-be4a-47df-a850-1157a6e5aeae"
+
+
 async def hello():
     uri = "ws://localhost:9002"
 
-    oldToken = "1cf2ebae-be4a-47df-a850-1157a6e5aeae"
-
     async with websockets.connect(uri) as websocket:
         print("Cleaning the task...")
-        myReq = {"command": "cleanTask", "task": "sometask", "token": oldToken}
+        myReq = {"command": "cleanTask", "task": "sometask", "token": token}
         await send_to_orchestrator(websocket, myReq)
 
         print("Creating a new task...")
@@ -69,12 +70,17 @@ async def hello():
 async def simulate_pilot():
     uri = "ws://localhost:9003"
 
-    token = "1cf2ebae-be4a-47df-a850-1157a6e5aeae"
-
     async with websockets.connect(uri) as websocket:
         print("Sending request...")
-        myReq = {"command": "p_claimJob", "task": "sometask", "token": token}
-        await send_to_orchestrator(websocket, myReq)
+        myReq = {
+            "command": "p_claimJob",
+            "filter": {"task": "sometask"},
+            "pilotUuid": "unnumeroacaso",
+            "token": token,
+        }
+
+        job = json.loads(await send_to_orchestrator(websocket, myReq))
+        print(json.dumps(job, indent=2))
 
 
 # asyncio.run(hello())

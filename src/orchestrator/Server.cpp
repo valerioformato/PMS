@@ -32,6 +32,9 @@ std::unordered_map<std::string, Server::UserCommand> Server::m_commandLUT{
 std::unordered_map<std::string, Server::PilotCommand> Server::m_pilot_commandLUT{
     // pilot available commands
     {"p_claimJob", PilotCommand::ClaimJob},
+    {"p_updateJobStatus", PilotCommand::UpdateJobStatus},
+    {"p_updateHeartBeat", PilotCommand::UpdateHeartBeat},
+    {"p_deleteHeartBeat", PilotCommand::DeleteHeartBeat},
 };
 
 std::pair<bool, std::string> Server::ValidateTaskToken(const json &msg) const {
@@ -39,7 +42,10 @@ std::pair<bool, std::string> Server::ValidateTaskToken(const json &msg) const {
     return {false, "Message doesn't contain a token"};
   }
 
-  if (!m_director->ValidateTaskToken(msg["task"], msg["token"])) {
+  bool tokenValid = msg.contains("filter") ? m_director->ValidateTaskToken(msg["filter"]["task"], msg["token"])
+                                           : m_director->ValidateTaskToken(msg["task"], msg["token"]);
+
+  if (!tokenValid) {
     return {false, fmt::format("Invalid token for task {}", msg["task"])};
   }
 
@@ -125,6 +131,46 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
       reply = dummy.second;
       break;
     }
+
+    if (!msg.contains("filter") || !msg.contains("pilotUuid")) {
+      return "Invalid request. Missing \"filter\" and/or \"pilotUuid\" keys";
+    }
+
+    reply = m_director->ClaimJob(msg).dump();
+  } break;
+  case PilotCommand::UpdateJobStatus: {
+    // FIXME: use c++17 structured bindings when available
+    auto dummy = ValidateTaskToken(msg);
+    if (!dummy.first) {
+      reply = dummy.second;
+      break;
+    }
+
+    assert(false);
+
+    reply = "You got a job! Congrats!";
+  } break;
+  case PilotCommand::UpdateHeartBeat: {
+    // FIXME: use c++17 structured bindings when available
+    auto dummy = ValidateTaskToken(msg);
+    if (!dummy.first) {
+      reply = dummy.second;
+      break;
+    }
+
+    assert(false);
+
+    reply = "You got a job! Congrats!";
+  } break;
+  case PilotCommand::DeleteHeartBeat: {
+    // FIXME: use c++17 structured bindings when available
+    auto dummy = ValidateTaskToken(msg);
+    if (!dummy.first) {
+      reply = dummy.second;
+      break;
+    }
+
+    assert(false);
 
     reply = "You got a job! Congrats!";
   } break;

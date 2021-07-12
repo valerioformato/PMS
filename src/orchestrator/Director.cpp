@@ -45,6 +45,26 @@ Director::OperationResult Director::AddNewJob(json &&job) {
   return OperationResult::Success;
 }
 
+json Director::ClaimJob(const json &req) {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  json filter = req["filter"];
+  filter["status"] = JobStatusNames[JobStatus::Pending];
+
+  json updateAction;
+  updateAction["$set"]["status"] = JobStatusNames[JobStatus::Claimed];
+  updateAction["$set"]["pilotUuid"] = req["pilotUuid"];
+
+  auto query_result =
+      handle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
+
+  if (query_result) {
+    return JsonUtils::bson2json(query_result.value());
+  } else {
+    return {};
+  }
+}
+
 Director::OperationResult Director::AddTaskDependency(const std::string &task, const std::string &dependsOn) {
   auto &thisTask = m_tasks[task];
   if (thisTask.name.empty()) {

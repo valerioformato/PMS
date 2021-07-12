@@ -37,6 +37,8 @@ public:
   OperationResult AddNewJob(const json &job);
   OperationResult AddNewJob(json &&job);
 
+  json ClaimJob(const json &);
+
   OperationResult AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
 
   struct CreateTaskResult {

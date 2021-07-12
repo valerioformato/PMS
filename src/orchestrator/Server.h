@@ -19,9 +19,6 @@ namespace PMS {
 namespace Orchestrator {
 class Server {
 public:
-  enum class Type { UserFacing, PilotFacing };
-
-public:
   Server(unsigned int port, std::shared_ptr<Director> director)
       : m_logger{spdlog::stdout_color_st("Server")}, m_port{port}, m_director{std::move(director)} {}
   ~Server();
@@ -34,8 +31,6 @@ private:
 
   void SetupEndpoint(WSserver &endpoint, unsigned int port);
 
-  void keepAliveUntilSignal(std::future<void> exitSignal);
-
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
   void pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
 
@@ -43,14 +38,13 @@ private:
   std::string HandleCommand(UserCommand command, const json &msg);
   static std::unordered_map<std::string, UserCommand> m_commandLUT;
 
-  enum class PilotCommand { ClaimJob };
+  enum class PilotCommand { ClaimJob, UpdateJobStatus, UpdateHeartBeat, DeleteHeartBeat };
   std::string HandleCommand(PilotCommand command, const json &msg);
   static std::unordered_map<std::string, PilotCommand> m_pilot_commandLUT;
 
   std::shared_ptr<spdlog::logger> m_logger;
 
   bool m_isRunning = false;
-  Type m_type;
   unsigned int m_port;
   WSserver m_endpoint;
   WSserver m_pilot_endpoint;
