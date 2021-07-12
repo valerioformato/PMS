@@ -65,6 +65,15 @@ json Director::ClaimJob(const json &req) {
   }
 }
 
+Director::OperationResult Director::UpdateJobStatus(const json &msg) {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  auto status = to_JobStatus(msg["status"]);
+
+  return handle.UpdateJobStatus(msg["hash"], msg["task"], status) ? OperationResult::Success
+                                                                  : OperationResult::DatabaseError;
+}
+
 Director::OperationResult Director::AddTaskDependency(const std::string &task, const std::string &dependsOn) {
   auto &thisTask = m_tasks[task];
   if (thisTask.name.empty()) {

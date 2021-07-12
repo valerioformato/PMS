@@ -133,17 +133,17 @@ void Worker::Start(const std::string &user, const std::string &task, unsigned lo
                      procError);
 
       // set status to "Running"
-      dbHandle.UpdateJobStatus(job["hash"], JobStatus::Running);
+      dbHandle.UpdateJobStatus(job["hash"], job["task"], JobStatus::Running);
 
       proc.wait();
 
       if (procError) {
         spdlog::trace("procerr: {} ({})", procError.message(), procError.value());
         spdlog::error("Worker: Job exited with an error: {}", procError.message());
-        dbHandle.UpdateJobStatus(job["hash"], JobStatus::Error);
+        dbHandle.UpdateJobStatus(job["hash"], job["task"], JobStatus::Error);
       } else {
         spdlog::info("Worker: Job done");
-        dbHandle.UpdateJobStatus(job["hash"], JobStatus::Done);
+        dbHandle.UpdateJobStatus(job["hash"], job["task"], JobStatus::Done);
       }
 
       // remove temporary sandbox directory

@@ -10,14 +10,10 @@ using json = nlohmann::json;
 
 namespace PMS {
 namespace DB {
-void DBHandle::UpdateJobStatus(const std::string &hash, JobStatus status) const {
+bool DBHandle::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) const {
   json jobFilter;
-  try {
-    jobFilter["hash"] = hash;
-  } catch (...) {
-    spdlog::error("DBHandle::UpdateJobStatus Job has no hash, THIS SHOULD NEVER HAPPEN!");
-    return;
-  }
+  jobFilter["task"] = task;
+  jobFilter["hash"] = hash;
 
   json jobUpdateAction;
   jobUpdateAction["$set"]["status"] = JobStatusNames[status];
@@ -35,7 +31,9 @@ void DBHandle::UpdateJobStatus(const std::string &hash, JobStatus status) const 
     break;
   }
 
-  this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction));
+  return this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction))
+             ? true
+             : false;
 }
 
 void DBHandle::SetupDBCollections() {

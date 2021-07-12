@@ -38,6 +38,7 @@ public:
   OperationResult AddNewJob(json &&job);
 
   json ClaimJob(const json &);
+  OperationResult UpdateJobStatus(const json &);
 
   OperationResult AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
 

@@ -146,9 +146,10 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
       break;
     }
 
-    assert(false);
+    auto result = m_director->UpdateJobStatus(msg);
 
-    reply = "You got a job! Congrats!";
+    reply =
+        result == Director::OperationResult::Success ? fmt::format("Ok") : fmt::format("Failed to change job status");
   } break;
   case PilotCommand::UpdateHeartBeat: {
     // FIXME: use c++17 structured bindings when available
