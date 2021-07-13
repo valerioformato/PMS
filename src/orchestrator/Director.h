@@ -39,6 +39,8 @@ public:
 
   json ClaimJob(const json &);
   OperationResult UpdateJobStatus(const json &);
+  OperationResult UpdateHeartBeat(const json &);
+  OperationResult DeleteHeartBeat(const json &);
 
   OperationResult AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
 

@@ -3,7 +3,6 @@
 
 // external headers
 #include <boost/uuid/random_generator.hpp>
-#include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <bsoncxx/string/to_string.hpp>
 #include <fmt/ostream.h>
@@ -72,6 +71,35 @@ Director::OperationResult Director::UpdateJobStatus(const json &msg) {
 
   return handle.UpdateJobStatus(msg["hash"], msg["task"], status) ? OperationResult::Success
                                                                   : OperationResult::DatabaseError;
+}
+
+Director::OperationResult Director::UpdateHeartBeat(const json &msg) {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  json updateFilter;
+  updateFilter["uuid"] = msg["uuid"];
+
+  json updateAction;
+  updateAction["$currentDate"]["lastHeartBeat"] = true;
+
+  mongocxx::options::update updateOpt{};
+  updateOpt.upsert(true);
+
+  auto queryResult = handle["pilots"].update_one(JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction), updateOpt);
+
+  return queryResult ? Director::OperationResult::Success : Director::OperationResult::DatabaseError;
+}
+
+Director::OperationResult Director::DeleteHeartBeat(const json &msg) {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  json updateFilter;
+  updateFilter["uuid"] = msg["uuid"];
+
+  auto queryResult =
+      handle["pilots"].delete_one(JsonUtils::json2bson(updateFilter));
+
+  return queryResult ? Director::OperationResult::Success : Director::OperationResult::DatabaseError;
 }
 
 Director::OperationResult Director::AddTaskDependency(const std::string &task, const std::string &dependsOn) {

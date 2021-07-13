@@ -133,7 +133,7 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
     }
 
     if (!msg.contains("filter") || !msg.contains("pilotUuid")) {
-      return "Invalid request. Missing \"filter\" and/or \"pilotUuid\" keys";
+      return R"(Invalid request. Missing "filter" and/or "pilotUuid" keys)";
     }
 
     reply = m_director->ClaimJob(msg).dump();
@@ -149,7 +149,7 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
     auto result = m_director->UpdateJobStatus(msg);
 
     reply =
-        result == Director::OperationResult::Success ? fmt::format("Ok") : fmt::format("Failed to change job status");
+        result == Director::OperationResult::Success ? "Ok" : "Failed to change job status";
   } break;
   case PilotCommand::UpdateHeartBeat: {
     // FIXME: use c++17 structured bindings when available
@@ -159,9 +159,10 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
       break;
     }
 
-    assert(false);
+    auto result = m_director->UpdateHeartBeat(msg);
 
-    reply = "You got a job! Congrats!";
+    reply =
+        result == Director::OperationResult::Success ? "Ok" : "Failed to update heartbeat";
   } break;
   case PilotCommand::DeleteHeartBeat: {
     // FIXME: use c++17 structured bindings when available
@@ -171,9 +172,11 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
       break;
     }
 
-    assert(false);
+    auto result = m_director->DeleteHeartBeat(msg);
 
-    reply = "You got a job! Congrats!";
+    reply =
+        result == Director::OperationResult::Success ? "Ok" : "Failed to delete heartbeat";
+
   } break;
   }
 
