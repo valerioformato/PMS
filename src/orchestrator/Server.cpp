@@ -33,6 +33,7 @@ std::unordered_map<std::string, Server::PilotCommand> Server::m_pilot_commandLUT
     // pilot available commands
     {"p_claimJob", PilotCommand::ClaimJob},
     {"p_updateJobStatus", PilotCommand::UpdateJobStatus},
+    {"p_registerNewPilot", PilotCommand::RegisterNewPilot},
     {"p_updateHeartBeat", PilotCommand::UpdateHeartBeat},
     {"p_deleteHeartBeat", PilotCommand::DeleteHeartBeat},
 };
@@ -125,57 +126,47 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
 
   switch (command) {
   case PilotCommand::ClaimJob: {
-    // FIXME: use c++17 structured bindings when available
-    auto dummy = ValidateTaskToken(msg);
-    if (!dummy.first) {
-      reply = dummy.second;
-      break;
-    }
+    // NB: token validation has already been done during pilot registration
 
-    if (!msg.contains("filter") || !msg.contains("pilotUuid")) {
-      return R"(Invalid request. Missing "filter" and/or "pilotUuid" keys)";
+    if (!msg.contains("pilotUuid")) {
+      return R"(Invalid request. Missing "pilotUuid" key)";
     }
 
     reply = m_director->ClaimJob(msg).dump();
   } break;
   case PilotCommand::UpdateJobStatus: {
-    // FIXME: use c++17 structured bindings when available
-    auto dummy = ValidateTaskToken(msg);
-    if (!dummy.first) {
-      reply = dummy.second;
-      break;
+    // NB: token validation has already been done during pilot registration
+
+    if (!msg.contains("pilotUuid") || !msg.contains("status") || !msg.contains("hash") || !msg.contains("task")) {
+      return R"(Invalid request. Missing "pilotUuid", "status", "hash", or "task" key)";
     }
 
     auto result = m_director->UpdateJobStatus(msg);
 
-    reply =
-        result == Director::OperationResult::Success ? "Ok" : "Failed to change job status";
+    reply = result == Director::OperationResult::Success ? "Ok" : "Failed to change job status";
+  } break;
+  case PilotCommand::RegisterNewPilot: {
+    auto result = m_director->RegisterNewPilot(msg);
+
+    json replyDoc;
+    replyDoc["validTasks"] = json::array({});
+    for (const auto &task : result.validTasks) {
+      replyDoc["validTasks"].push_back(task);
+    }
+
+    reply = result.result == Director::OperationResult::Success
+                ? replyDoc.dump()
+                : fmt::format("Could not register pilot {}", msg["pilotUuid"]);
   } break;
   case PilotCommand::UpdateHeartBeat: {
-    // FIXME: use c++17 structured bindings when available
-    auto dummy = ValidateTaskToken(msg);
-    if (!dummy.first) {
-      reply = dummy.second;
-      break;
-    }
-
     auto result = m_director->UpdateHeartBeat(msg);
 
-    reply =
-        result == Director::OperationResult::Success ? "Ok" : "Failed to update heartbeat";
+    reply = result == Director::OperationResult::Success ? "Ok" : "Failed to update heartbeat";
   } break;
   case PilotCommand::DeleteHeartBeat: {
-    // FIXME: use c++17 structured bindings when available
-    auto dummy = ValidateTaskToken(msg);
-    if (!dummy.first) {
-      reply = dummy.second;
-      break;
-    }
-
     auto result = m_director->DeleteHeartBeat(msg);
 
-    reply =
-        result == Director::OperationResult::Success ? "Ok" : "Failed to delete heartbeat";
+    reply = result == Director::OperationResult::Success ? "Ok" : "Failed to delete heartbeat";
 
   } break;
   }

@@ -10,6 +10,7 @@
 #include "db/PoolHandle.h"
 #include "pilot/PilotConfig.h"
 #include "pilot/Worker.h"
+#include "pilot/client/Client.h"
 
 static constexpr auto USAGE =
     R"(PMS Pilot fish executable.
@@ -47,26 +48,19 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Pilot::Config config{configFileName};
 
-  spdlog::info("Connecting to DB: {}@{}/{}", config.dbuser, config.dbhost, config.dbname);
-  std::shared_ptr<PMS::DB::PoolHandle> poolHandle;
-  switch (config.dbcredtype) {
-  case DB::CredType::PWD:
-    poolHandle =
-        std::make_shared<PMS::DB::PoolHandle>(config.dbhost, config.dbname, config.dbuser, config.dbcredentials);
-    break;
-  case DB::CredType::X509:
-    // TODO: Figure out how X509 credentials propagate
-    throw std::runtime_error("X509 credentials not supported yet");
-    break;
-  default:
-    break;
-  }
+  std::string serverUri = fmt::format("ws://{}:{}", config.server, config.serverPort);
+  spdlog::info("Connecting to Server: {}", serverUri);
+  auto wsClient = std::make_shared<PMS::Pilot::Client>(serverUri);
 
   unsigned long int maxJobs =
       args.find("MAXJOBS") == end(args) ? std::numeric_limits<unsigned long int>::max() : args["MAXJOBS"].asLong();
 
-  Pilot::Worker worker{poolHandle};
-  worker.Start(config.user, config.task, maxJobs);
+  Pilot::Worker worker{config, wsClient};
+  if (!worker.Register()) {
+    spdlog::warn("Served returned no valid tasks. Please check your token(s)");
+    return 0;
+  }
+  worker.Start(maxJobs);
 
   return 0;
 }

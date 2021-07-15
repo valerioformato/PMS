@@ -1,6 +1,7 @@
 import asyncio
 import json
 import websockets
+import time
 
 nJobs = 0
 
@@ -81,6 +82,19 @@ async def simulate_pilot():
 
         job = json.loads(await send_to_orchestrator(websocket, myReq))
         print(json.dumps(job, indent=2))
+
+        myReq = {
+            "command": "p_updateJobStatus",
+            "status": "Running",
+            "hash": job["hash"],
+            "task": job["task"],
+            "token": token,
+        }
+        await send_to_orchestrator(websocket, myReq)
+
+        time.sleep(1)
+        myReq["status"] = "Done"
+        await send_to_orchestrator(websocket, myReq)
 
 
 # asyncio.run(hello())

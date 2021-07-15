@@ -6,6 +6,7 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <bsoncxx/string/to_string.hpp>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 #include <mongocxx/pipeline.hpp>
 #include <nlohmann/json.hpp>
 
@@ -47,8 +48,12 @@ Director::OperationResult Director::AddNewJob(json &&job) {
 json Director::ClaimJob(const json &req) {
   auto handle = m_frontPoolHandle->DBHandle();
 
-  json filter = req["filter"];
+  auto tasks = GetPilotTasks(req["pilotUuid"]);
+  m_logger->trace("Pilot {} allowed tasks: {}", req["pilotUuid"], tasks);
+
+  json filter;
   filter["status"] = JobStatusNames[JobStatus::Pending];
+  filter["task"]["$in"] = tasks;
 
   json updateAction;
   updateAction["$set"]["status"] = JobStatusNames[JobStatus::Claimed];
@@ -58,7 +63,9 @@ json Director::ClaimJob(const json &req) {
       handle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
 
   if (query_result) {
-    return JsonUtils::bson2json(query_result.value());
+    // remove _id field before returning
+    return JsonUtils::bson2json(JsonUtils::filter(
+        query_result.value(), [](const bsoncxx::document::element &el) { return el.key().to_string() == "_id"; }));
   } else {
     return {};
   }
@@ -67,10 +74,36 @@ json Director::ClaimJob(const json &req) {
 Director::OperationResult Director::UpdateJobStatus(const json &msg) {
   auto handle = m_frontPoolHandle->DBHandle();
 
+  auto pilotTasks = GetPilotTasks(msg["pilotUuid"]);
+  if (std::find(begin(pilotTasks), end(pilotTasks), msg["task"]) == end(pilotTasks))
+    return OperationResult::DatabaseError;
+
   auto status = to_JobStatus(msg["status"]);
 
   return handle.UpdateJobStatus(msg["hash"], msg["task"], status) ? OperationResult::Success
                                                                   : OperationResult::DatabaseError;
+}
+
+Director::NewPilotResult Director::RegisterNewPilot(const json &msg) {
+  NewPilotResult result{OperationResult::Success, {}, {}};
+
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  json query;
+  query["uuid"] = msg["pilotUuid"];
+  query["user"] = msg["user"];
+  query["tasks"] = json::array({});
+  for (const auto &task : msg["tasks"]) {
+    if (ValidateTaskToken(task["name"], task["token"])) {
+      query["tasks"].push_back(task["name"]);
+      result.validTasks.push_back(task["name"]);
+    } else {
+      result.invalidTasks.push_back(task["name"]);
+    }
+  }
+
+  auto query_result = handle["pilots"].insert_one(JsonUtils::json2bson(query));
+  return bool(query_result) ? result : NewPilotResult{OperationResult::DatabaseError, {}, {}};
 }
 
 Director::OperationResult Director::UpdateHeartBeat(const json &msg) {
@@ -85,7 +118,8 @@ Director::OperationResult Director::UpdateHeartBeat(const json &msg) {
   mongocxx::options::update updateOpt{};
   updateOpt.upsert(true);
 
-  auto queryResult = handle["pilots"].update_one(JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction), updateOpt);
+  auto queryResult =
+      handle["pilots"].update_one(JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction), updateOpt);
 
   return queryResult ? Director::OperationResult::Success : Director::OperationResult::DatabaseError;
 }
@@ -93,11 +127,10 @@ Director::OperationResult Director::UpdateHeartBeat(const json &msg) {
 Director::OperationResult Director::DeleteHeartBeat(const json &msg) {
   auto handle = m_frontPoolHandle->DBHandle();
 
-  json updateFilter;
-  updateFilter["uuid"] = msg["uuid"];
+  json deleteFilter;
+  deleteFilter["uuid"] = msg["uuid"];
 
-  auto queryResult =
-      handle["pilots"].delete_one(JsonUtils::json2bson(updateFilter));
+  auto queryResult = handle["pilots"].delete_one(JsonUtils::json2bson(deleteFilter));
 
   return queryResult ? Director::OperationResult::Success : Director::OperationResult::DatabaseError;
 }
@@ -367,6 +400,21 @@ bool Director::ValidateTaskToken(const std::string &task, const std::string &tok
   }
 
   return m_tasks.at(task).token == token;
+}
+
+std::vector<std::string> Director::GetPilotTasks(const std::string &uuid) {
+  auto handle = m_frontPoolHandle->DBHandle();
+  std::vector<std::string> result;
+
+  json query;
+  query["uuid"] = uuid;
+  auto query_result = handle["pilots"].find_one(JsonUtils::json2bson(query));
+  if (query_result) {
+    json dummy = JsonUtils::bson2json(query_result.value());
+    std::copy(dummy["tasks"].begin(), dummy["tasks"].end(), std::back_inserter(result));
+  }
+
+  return result;
 }
 
 } // namespace Orchestrator

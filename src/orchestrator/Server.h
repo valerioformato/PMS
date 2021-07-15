@@ -38,7 +38,7 @@ private:
   std::string HandleCommand(UserCommand command, const json &msg);
   static std::unordered_map<std::string, UserCommand> m_commandLUT;
 
-  enum class PilotCommand { ClaimJob, UpdateJobStatus, UpdateHeartBeat, DeleteHeartBeat };
+  enum class PilotCommand { ClaimJob, UpdateJobStatus, RegisterNewPilot, UpdateHeartBeat, DeleteHeartBeat };
   std::string HandleCommand(PilotCommand command, const json &msg);
   static std::unordered_map<std::string, PilotCommand> m_pilot_commandLUT;
 

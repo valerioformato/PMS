@@ -6,6 +6,7 @@ namespace PMS {
 namespace Orchestrator {
 struct Task {
   std::string name;
+  std::string owner;
   unsigned int totJobs;
   unsigned int doneJobs;
   unsigned int failedJobs;

@@ -8,24 +8,24 @@
 
 // external headers
 #include <boost/uuid/random_generator.hpp>
-#include <utility>
 #include <boost/uuid/uuid.hpp>
+#include <utility>
 
 // our headers
-#include "db/PoolHandle.h"
+#include "pilot/client/Client.h"
 
 namespace PMS {
 namespace Pilot {
 class HeartBeat {
 public:
-  HeartBeat(boost::uuids::uuid uuid, std::shared_ptr<DB::PoolHandle> handle)
-      : m_uuid{uuid}, m_poolHandle{std::move(handle)}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this,
-                                                                     m_exitSignal.get_future()} {}
+  HeartBeat(boost::uuids::uuid uuid, std::shared_ptr<Client> wsClient)
+      : m_uuid{uuid}, m_wsClient{std::move(wsClient)}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this,
+                                                                                m_exitSignal.get_future()} {}
   ~HeartBeat();
 
 private:
   boost::uuids::uuid m_uuid;
-  std::shared_ptr<DB::PoolHandle> m_poolHandle;
+  std::shared_ptr<Client> m_wsClient;
   std::promise<void> m_exitSignal;
   std::thread m_thread;
 

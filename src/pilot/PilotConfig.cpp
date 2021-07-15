@@ -18,19 +18,15 @@ Config::Config(std::string fileName) {
   infile >> configJson;
 
   user = configJson["user"];
-  task = configJson["task"];
-  dbhost = configJson["dbhost"];
-  dbname = configJson["dbname"];
-  dbuser = configJson["dbuser"];
+  server = configJson["server"];
+  if (configJson.contains("serverPort"))
+    serverPort = configJson["serverPort"];
 
-  if (configJson["dbcredtype"] == "password") {
-    dbcredtype = DB::CredType::PWD;
-  } else if (configJson["dbcredtype"] == "X509") {
-    dbcredtype = DB::CredType::X509;
-  } else {
-    dbcredtype = DB::CredType::None;
-  }
-  dbcredentials = configJson["dbcredentials"];
+  auto dummy = configJson["tokens"];
+  std::copy(dummy.begin(), dummy.end(), std::back_inserter(tokens));
+
+  dummy = configJson["tasks"];
+  std::for_each(dummy.begin(), dummy.end(), [this](auto doc) { tasks.emplace_back(doc["name"], doc["token"]); });
 }
 } // namespace Pilot
 } // namespace PMS
