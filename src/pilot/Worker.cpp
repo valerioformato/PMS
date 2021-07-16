@@ -6,6 +6,7 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <bsoncxx/string/to_string.hpp>
+#include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <fmt/os.h>
 #include <fmt/ostream.h>
@@ -46,11 +47,15 @@ void Worker::Start(unsigned long int maxJobs) {
 
   // TODO: implement mechanism to decide when a task is actually
   // finished
-  // bool work_done = false;
-  bool work_done = true;
+  bool exit = false;
+  // bool exit = true;
+
+  constexpr auto maxWaitTime = std::chrono::minutes(10);
 
   HeartBeat hb{m_uuid, m_wsClient};
   unsigned long int doneJobs = 0;
+
+  auto lastJobFinished = std::chrono::system_clock::now();
 
   // main loop
   while (true) {
@@ -152,16 +157,25 @@ void Worker::Start(unsigned long int maxJobs) {
       // remove temporary sandbox directory
       boost::filesystem::remove_all(wdPath);
 
+      lastJobFinished = std::chrono::system_clock::now();
+
       if (++doneJobs == maxJobs)
-        work_done = true;
+        exit = true;
 
     } else {
-      spdlog::trace("Worker: no jobs, sleep for 1s");
       std::this_thread::sleep_for(std::chrono::seconds(1));
-      continue;
+
+      auto delta = std::chrono::system_clock::now() - lastJobFinished;
+      if (delta > maxWaitTime) {
+        exit = true;
+      } else {
+        spdlog::trace("Worker: no jobs, been waiting for {:%M:%S}...",
+                      std::chrono::duration_cast<std::chrono::seconds>(delta));
+        continue;
+      }
     }
 
-    if (work_done)
+    if (exit)
       break;
   }
 }
