@@ -20,26 +20,31 @@ HeartBeat::~HeartBeat() {
 void HeartBeat::updateHB(std::future<void> exitSignal) {
   spdlog::debug("Starting HeartBeat");
 
-  json updateFilter;
-  updateFilter["uuid"] = boost::uuids::to_string(m_uuid);
+  json updateMsg;
+  updateMsg["command"] = "p_updateHeartBeat";
+  updateMsg["uuid"] = boost::uuids::to_string(m_uuid);
 
-  json updateAction;
-  updateAction["$currentDate"]["lastHeartBeat"] = true;
-
-  mongocxx::options::update updateOpt{};
-  updateOpt.upsert(true);
-
-  spdlog::trace("{}, {}", updateFilter.dump(), updateAction.dump());
-
-  DB::DBHandle dbHandle = m_poolHandle->DBHandle();
+  auto connection = m_wsClient->PersistentConnection();
 
   do {
     spdlog::trace("Updating HeartBeat");
-    dbHandle["pilots"].update_one(JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction), updateOpt);
+    try {
+      connection->Send(updateMsg.dump());
+    } catch (const std::exception &e) {
+      spdlog::error("{}", e.what());
+    }
+
   } while (exitSignal.wait_for(std::chrono::seconds(1)) == std::future_status::timeout);
 
+  json deleteMsg;
+  deleteMsg["command"] = "p_deleteHeartBeat";
+  deleteMsg["uuid"] = boost::uuids::to_string(m_uuid);
   spdlog::trace("Removing pilot from DB");
-  dbHandle["pilots"].delete_one(JsonUtils::json2bson(updateFilter));
+  try {
+    connection->Send(deleteMsg.dump());
+  } catch (const std::exception &e) {
+    spdlog::error("{}", e.what());
+  }
 }
 
 } // namespace Pilot

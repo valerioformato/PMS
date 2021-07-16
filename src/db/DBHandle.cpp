@@ -10,14 +10,10 @@ using json = nlohmann::json;
 
 namespace PMS {
 namespace DB {
-void DBHandle::UpdateJobStatus(const std::string &hash, JobStatus status) const {
+bool DBHandle::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) const {
   json jobFilter;
-  try {
-    jobFilter["hash"] = hash;
-  } catch (...) {
-    spdlog::error("DBHandle::UpdateJobStatus Job has no hash, THIS SHOULD NEVER HAPPEN!");
-    return;
-  }
+  jobFilter["task"] = task;
+  jobFilter["hash"] = hash;
 
   json jobUpdateAction;
   jobUpdateAction["$set"]["status"] = JobStatusNames[status];
@@ -35,10 +31,12 @@ void DBHandle::UpdateJobStatus(const std::string &hash, JobStatus status) const 
     break;
   }
 
-  this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction));
+  return this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction))
+             ? true
+             : false;
 }
 
-void DBHandle::SetupJobIndexes() {
+void DBHandle::SetupDBCollections() {
   using bsoncxx::builder::basic::kvp;
   using bsoncxx::builder::basic::make_document;
 
@@ -52,6 +50,13 @@ void DBHandle::SetupJobIndexes() {
     // task is not a unique index :)
     index_options.unique(false);
     (*m_poolEntry)[m_dbname]["jobs"].create_index(make_document(kvp("task", 1)), index_options);
+  }
+  if (!(*m_poolEntry)[m_dbname].has_collection("tasks")) {
+    spdlog::debug("Creating indexes for the \"tasks\" collection");
+    mongocxx::options::index index_options{};
+    // hash is a unique index
+    index_options.unique(true);
+    (*m_poolEntry)[m_dbname]["tasks"].create_index(make_document(kvp("name", 1)), index_options);
   }
 }
 } // namespace DB

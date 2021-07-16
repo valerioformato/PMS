@@ -27,21 +27,27 @@ public:
   void Stop();
 
 private:
-  void Listen();
+  std::pair<bool, std::string> ValidateTaskToken(const json &msg) const;
 
-  void keepAliveUntilSignal(std::future<void> exitSignal);
+  void SetupEndpoint(WSserver &endpoint, unsigned int port);
 
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
+  void pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
 
-  enum class Command { SubmitJob, CleanTask, DeclareTaskDependency };
-  std::string HandleCommand(Command command, const json &msg);
-  static std::unordered_map<std::string, Command> m_commandLUT;
+  enum class UserCommand { SubmitJob, CreateTask, CleanTask, DeclareTaskDependency };
+  std::string HandleCommand(UserCommand command, const json &msg);
+  static std::unordered_map<std::string, UserCommand> m_commandLUT;
+
+  enum class PilotCommand { ClaimJob, UpdateJobStatus, RegisterNewPilot, UpdateHeartBeat, DeleteHeartBeat };
+  std::string HandleCommand(PilotCommand command, const json &msg);
+  static std::unordered_map<std::string, PilotCommand> m_pilot_commandLUT;
 
   std::shared_ptr<spdlog::logger> m_logger;
 
   bool m_isRunning = false;
   unsigned int m_port;
   WSserver m_endpoint;
+  WSserver m_pilot_endpoint;
   std::shared_ptr<Director> m_director;
 };
 

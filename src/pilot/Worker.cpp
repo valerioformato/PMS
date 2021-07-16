@@ -4,9 +4,9 @@
 // external headers
 #include <boost/process.hpp>
 #include <boost/uuid/random_generator.hpp>
-#include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <bsoncxx/string/to_string.hpp>
+#include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <fmt/os.h>
 #include <fmt/ostream.h>
@@ -14,6 +14,7 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "common/Job.h"
 #include "common/JsonUtils.h"
 #include "pilot/HeartBeat.h"
 #include "pilot/Worker.h"
@@ -23,43 +24,50 @@ namespace bp = boost::process;
 
 namespace PMS {
 namespace Pilot {
-void Worker::Start(const std::string &user, const std::string &task, unsigned long int maxJobs) {
+
+bool Worker::Register() {
+  // generate a pilot uuid
+  m_uuid = boost::uuids::random_generator()();
+
+  json req;
+  req["command"] = "p_registerNewPilot";
+  req["pilotUuid"] = boost::uuids::to_string(m_uuid);
+  req["user"] = m_config.user;
+  req["tasks"] = json::array({});
+  for (const auto &task : m_config.tasks) {
+    req["tasks"].emplace_back(json::object({{"name", task.first}, {"token", task.second}}));
+  }
+
+  json reply = json::parse(m_wsClient->Send(req));
+  fmt::print("{}\n", reply.dump(2));
+  return reply["validTasks"].size() > 0;
+}
+
+void Worker::Start(unsigned long int maxJobs) {
 
   // TODO: implement mechanism to decide when a task is actually
   // finished
-  bool work_done = false;
-  // bool work_done = true;
+  bool exit = false;
+  // bool exit = true;
 
-  // generate a pilot uuid
-  boost::uuids::uuid uuid = boost::uuids::random_generator()();
+  constexpr auto maxWaitTime = std::chrono::minutes(10);
 
-  HeartBeat hb{uuid, m_poolHandle};
+  HeartBeat hb{m_uuid, m_wsClient};
+  unsigned long int doneJobs = 0;
 
-  unsigned long int doneJobs;
+  auto lastJobFinished = std::chrono::system_clock::now();
 
   // main loop
   while (true) {
-    json filter;
-    if (!user.empty())
-      filter["user"] = user;
-    if (!task.empty())
-      filter["task"] = task;
-    filter["status"] = JobStatusNames[JobStatus::Pending];
 
-    json updateAction;
-    updateAction["$set"]["status"] = JobStatusNames[JobStatus::Claimed];
-    updateAction["$set"]["pilotUuid"] = boost::uuids::to_string(uuid);
+    json request;
+    request["command"] = "p_claimJob";
+    request["pilotUuid"] = boost::uuids::to_string(m_uuid);
 
-    DB::DBHandle dbHandle = m_poolHandle->DBHandle();
+    auto job = json::parse(m_wsClient->Send(request));
 
-    // get new job and mark it as claimed
-    auto query_result =
-        dbHandle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
-
-    if (query_result) {
-      json job = JsonUtils::bson2json(query_result.value());
+    if (!job.empty()) {
       spdlog::info("Worker: got a new job");
-
       spdlog::trace("Job: {}", job.dump(2));
 
       // prepare a sandbox directory for the job
@@ -133,32 +141,41 @@ void Worker::Start(const std::string &user, const std::string &task, unsigned lo
                      procError);
 
       // set status to "Running"
-      dbHandle.UpdateJobStatus(job["hash"], JobStatus::Running);
+      UpdateJobStatus(job["hash"], job["task"], JobStatus::Running);
 
       proc.wait();
 
       if (procError) {
         spdlog::trace("procerr: {} ({})", procError.message(), procError.value());
         spdlog::error("Worker: Job exited with an error: {}", procError.message());
-        dbHandle.UpdateJobStatus(job["hash"], JobStatus::Error);
+        UpdateJobStatus(job["hash"], job["task"], JobStatus::Error);
       } else {
         spdlog::info("Worker: Job done");
-        dbHandle.UpdateJobStatus(job["hash"], JobStatus::Done);
+        UpdateJobStatus(job["hash"], job["task"], JobStatus::Done);
       }
 
       // remove temporary sandbox directory
-      boost::filesystem::remove(wdPath);
+      boost::filesystem::remove_all(wdPath);
+
+      lastJobFinished = std::chrono::system_clock::now();
 
       if (++doneJobs == maxJobs)
-        work_done = true;
+        exit = true;
 
     } else {
-      spdlog::trace("Worker: no jobs, sleep for 1s");
       std::this_thread::sleep_for(std::chrono::seconds(1));
-      continue;
+
+      auto delta = std::chrono::system_clock::now() - lastJobFinished;
+      if (delta > maxWaitTime) {
+        exit = true;
+      } else {
+        spdlog::trace("Worker: no jobs, been waiting for {:%M:%S}...",
+                      std::chrono::duration_cast<std::chrono::seconds>(delta));
+        continue;
+      }
     }
 
-    if (work_done)
+    if (exit)
       break;
   }
 }
@@ -171,6 +188,18 @@ Worker::EnvInfoType Worker::GetEnvType(const std::string &envName) {
     return EnvInfoType::NONE;
 
   return it->first;
+}
+
+bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
+  json request;
+  request["command"] = "p_updateJobStatus";
+  request["pilotUuid"] = boost::uuids::to_string(m_uuid);
+  request["hash"] = hash;
+  request["task"] = task;
+  request["status"] = JobStatusNames[status];
+  auto reply = m_wsClient->Send(request);
+
+  return reply == "Ok";
 }
 
 } // namespace Pilot

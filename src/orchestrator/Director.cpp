@@ -2,7 +2,11 @@
 #include <algorithm>
 
 // external headers
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <bsoncxx/string/to_string.hpp>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 #include <mongocxx/pipeline.hpp>
 #include <nlohmann/json.hpp>
 
@@ -16,7 +20,7 @@ using json = nlohmann::json;
 namespace PMS {
 namespace Orchestrator {
 void Director::Start() {
-  m_backPoolHandle->DBHandle().SetupJobIndexes();
+  m_backPoolHandle->DBHandle().SetupDBCollections();
 
   m_threads.emplace_back(&Director::UpdateTasks, this);
   m_threads.emplace_back(&Director::JobInsert, this);
@@ -41,6 +45,96 @@ Director::OperationResult Director::AddNewJob(json &&job) {
   return OperationResult::Success;
 }
 
+json Director::ClaimJob(const json &req) {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  auto tasks = GetPilotTasks(req["pilotUuid"]);
+  m_logger->trace("Pilot {} allowed tasks: {}", req["pilotUuid"], tasks);
+
+  json filter;
+  filter["status"] = JobStatusNames[JobStatus::Pending];
+  filter["task"]["$in"] = tasks;
+
+  json updateAction;
+  updateAction["$set"]["status"] = JobStatusNames[JobStatus::Claimed];
+  updateAction["$set"]["pilotUuid"] = req["pilotUuid"];
+
+  auto query_result =
+      handle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
+
+  if (query_result) {
+    // remove _id field before returning
+    return JsonUtils::bson2json(JsonUtils::filter(
+        query_result.value(), [](const bsoncxx::document::element &el) { return el.key().to_string() == "_id"; }));
+  } else {
+    return {};
+  }
+}
+
+Director::OperationResult Director::UpdateJobStatus(const json &msg) {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  auto pilotTasks = GetPilotTasks(msg["pilotUuid"]);
+  if (std::find(begin(pilotTasks), end(pilotTasks), msg["task"]) == end(pilotTasks))
+    return OperationResult::DatabaseError;
+
+  auto status = to_JobStatus(msg["status"]);
+
+  return handle.UpdateJobStatus(msg["hash"], msg["task"], status) ? OperationResult::Success
+                                                                  : OperationResult::DatabaseError;
+}
+
+Director::NewPilotResult Director::RegisterNewPilot(const json &msg) {
+  NewPilotResult result{OperationResult::Success, {}, {}};
+
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  json query;
+  query["uuid"] = msg["pilotUuid"];
+  query["user"] = msg["user"];
+  query["tasks"] = json::array({});
+  for (const auto &task : msg["tasks"]) {
+    if (ValidateTaskToken(task["name"], task["token"])) {
+      query["tasks"].push_back(task["name"]);
+      result.validTasks.push_back(task["name"]);
+    } else {
+      result.invalidTasks.push_back(task["name"]);
+    }
+  }
+
+  auto query_result = handle["pilots"].insert_one(JsonUtils::json2bson(query));
+  return bool(query_result) ? result : NewPilotResult{OperationResult::DatabaseError, {}, {}};
+}
+
+Director::OperationResult Director::UpdateHeartBeat(const json &msg) {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  json updateFilter;
+  updateFilter["uuid"] = msg["uuid"];
+
+  json updateAction;
+  updateAction["$currentDate"]["lastHeartBeat"] = true;
+
+  mongocxx::options::update updateOpt{};
+  updateOpt.upsert(true);
+
+  auto queryResult =
+      handle["pilots"].update_one(JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction), updateOpt);
+
+  return queryResult ? Director::OperationResult::Success : Director::OperationResult::DatabaseError;
+}
+
+Director::OperationResult Director::DeleteHeartBeat(const json &msg) {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  json deleteFilter;
+  deleteFilter["uuid"] = msg["uuid"];
+
+  auto queryResult = handle["pilots"].delete_one(JsonUtils::json2bson(deleteFilter));
+
+  return queryResult ? Director::OperationResult::Success : Director::OperationResult::DatabaseError;
+}
+
 Director::OperationResult Director::AddTaskDependency(const std::string &task, const std::string &dependsOn) {
   auto &thisTask = m_tasks[task];
   if (thisTask.name.empty()) {
@@ -59,16 +153,49 @@ Director::OperationResult Director::AddTaskDependency(const std::string &task, c
   return OperationResult::Success;
 }
 
-Director::OperationResult Director::CleanTask(const std::string &task) const {
+Director::CreateTaskResult Director::CreateTask(const std::string &task) {
+  if (m_tasks.find(task) != end(m_tasks)) {
+    return {OperationResult::DatabaseError, ""};
+  }
+
+  m_logger->trace("Creating task {}", task);
+
+  // generate a random token
+  std::string token = boost::uuids::to_string(boost::uuids::random_generator()());
+
+  auto &newTask = m_tasks[task];
+  newTask.name = task;
+  newTask.token = token;
+
+  // insert new task in backend DB
+  auto handle = m_backPoolHandle->DBHandle();
+
+  json insertQuery;
+  insertQuery["name"] = newTask.name;
+  insertQuery["token"] = newTask.token;
+
+  handle["tasks"].insert_one(JsonUtils::json2bson(insertQuery));
+
+  return {OperationResult::Success, token};
+}
+
+Director::OperationResult Director::CleanTask(const std::string &task) {
   auto bHandle = m_backPoolHandle->DBHandle();
   auto fHandle = m_frontPoolHandle->DBHandle();
 
-  json deleteQuery;
-  deleteQuery["task"] = task;
   try {
+    json jobDeleteQuery;
+    jobDeleteQuery["task"] = task;
+
     m_logger->debug("Cleaning task {}", task);
-    bHandle["jobs"].delete_many(JsonUtils::json2bson(deleteQuery));
-    fHandle["jobs"].delete_many(JsonUtils::json2bson(deleteQuery));
+    bHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery));
+    fHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery));
+
+    json taskDeleteQuery;
+    taskDeleteQuery["name"] = task;
+
+    bHandle["tasks"].delete_many(JsonUtils::json2bson(taskDeleteQuery));
+    m_tasks.erase(task);
   } catch (const std::exception &e) {
     m_logger->error("Server query failed with error {}", e.what());
     return OperationResult::DatabaseError;
@@ -164,32 +291,30 @@ void Director::UpdateTasks() {
 
   auto handle = m_backPoolHandle->DBHandle();
 
-  json taskAggregateQuery;
-  taskAggregateQuery["_id"] = "$task";
-
   do {
     m_logger->debug("Updating tasks");
 
     // the pipeline must be re-created from scratch
+    // TODO: rework to query the "tasks" collection
     mongocxx::pipeline aggregationPipeline;
 
     // get list of all tasks
-    auto tasksResult = handle["jobs"].aggregate(aggregationPipeline.group(JsonUtils::json2bson(taskAggregateQuery)));
-
-    std::vector<std::string> dbTasks;
+    auto tasksResult = handle["tasks"].find({});
 
     // beware: cursors cannot be reused as-is
     for (const auto &result : tasksResult) {
       json tmpdoc = JsonUtils::bson2json(result);
 
       // find task in internal task list
-      std::string taskName = tmpdoc["_id"];
-
-      dbTasks.emplace_back(taskName);
+      std::string taskName = tmpdoc["name"];
 
       Task &task = m_tasks[taskName];
-      if (task.name.empty())
-        task.name = taskName;
+      if (task.name.empty()) {
+        m_logger->warn("Task {} is in DB but was not found in memory", taskName);
+
+        task.name = tmpdoc["name"];
+        task.token = tmpdoc["token"];
+      }
 
       if (task.dependencies.empty()) {
         task.readyForScheduling = true;
@@ -223,19 +348,6 @@ void Director::UpdateTasks() {
       m_logger->debug("Task {0} updated - {1} job{4} ({2} done, {3} failed)", task.name, task.totJobs, task.doneJobs,
                       task.failedJobs, task.totJobs > 1 ? "s" : "");
     }
-
-    // check if there are tasks in the internal representation that are no longer in the DB
-    std::vector<std::string> deletedTasks;
-    for (const auto &taskIt : m_tasks) {
-      if (std::find(begin(dbTasks), end(dbTasks), taskIt.first) == end(dbTasks))
-        deletedTasks.push_back(taskIt.first);
-    }
-
-    // ... and then remove them!
-    std::for_each(begin(deletedTasks), end(deletedTasks), [this](const auto &taskName) {
-      m_logger->debug("Removing task {}", taskName);
-      m_tasks.erase(m_tasks.find(taskName));
-    });
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
@@ -280,6 +392,29 @@ void Director::DBSync() {
     lastCheck = std::chrono::system_clock::now();
     m_logger->debug("DBs synced: {} jobs updated in backend DB", nUpdatedJobs);
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
+}
+
+bool Director::ValidateTaskToken(const std::string &task, const std::string &token) const {
+  if (m_tasks.find(task) == end(m_tasks)) {
+    return false;
+  }
+
+  return m_tasks.at(task).token == token;
+}
+
+std::vector<std::string> Director::GetPilotTasks(const std::string &uuid) {
+  auto handle = m_frontPoolHandle->DBHandle();
+  std::vector<std::string> result;
+
+  json query;
+  query["uuid"] = uuid;
+  auto query_result = handle["pilots"].find_one(JsonUtils::json2bson(query));
+  if (query_result) {
+    json dummy = JsonUtils::bson2json(query_result.value());
+    std::copy(dummy["tasks"].begin(), dummy["tasks"].end(), std::back_inserter(result));
+  }
+
+  return result;
 }
 
 } // namespace Orchestrator
