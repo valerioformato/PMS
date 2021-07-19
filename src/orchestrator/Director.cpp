@@ -4,7 +4,6 @@
 // external headers
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <bsoncxx/string/to_string.hpp>
 #include <fmt/ranges.h>
 #include <mongocxx/pipeline.hpp>
 #include <nlohmann/json.hpp>
@@ -81,8 +80,9 @@ Director::OperationResult Director::UpdateJobStatus(const json &msg) {
     return OperationResult::ProcessError;
   }
 
-  return handle.UpdateJobStatus(msg["hash"], msg["task"], status.value()) ? OperationResult::Success
-                                                                          : OperationResult::DatabaseError;
+  return handle.UpdateJobStatus(to_string(msg["hash"]), to_string(msg["task"]), status.value())
+             ? OperationResult::Success
+             : OperationResult::DatabaseError;
 }
 
 Director::NewPilotResult Director::RegisterNewPilot(const json &msg) {

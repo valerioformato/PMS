@@ -23,7 +23,7 @@ public:
 
   mongocxx::collection operator[](bsoncxx::string::view_or_value name) const { return (*m_poolEntry)[m_dbname][name]; };
 
-  bool UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) const;
+  [[nodiscard]] bool UpdateJobStatus(std::string_view hash, std::string_view task, JobStatus status) const;
 
   void SetupDBCollections();
 

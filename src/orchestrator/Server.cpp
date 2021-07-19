@@ -78,10 +78,9 @@ std::string Server::HandleCommand(UserCommand command, const json &msg) {
                                                          : "Job submission failed.";
   } break;
   case UserCommand::CreateTask: {
-    auto result_s = m_director->CreateTask(msg["task"]);
-    reply = result_s.result == Director::OperationResult::Success
-                ? fmt::format("Task {} created. Token: {}", msg["task"], result_s.token)
-                : fmt::format("Failed to create task \"{}\"", msg["task"]);
+    auto [result, token] = m_director->CreateTask(msg["task"]);
+    reply = result == Director::OperationResult::Success ? fmt::format("Task {} created. Token: {}", msg["task"], token)
+                                                         : fmt::format("Failed to create task \"{}\"", msg["task"]);
   } break;
   case UserCommand::CleanTask: {
     auto [valid, serverReply] = ValidateTaskToken(msg);

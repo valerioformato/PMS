@@ -9,7 +9,7 @@
 using json = nlohmann::json;
 
 namespace PMS::DB {
-bool DBHandle::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) const {
+bool DBHandle::UpdateJobStatus(std::string_view hash, std::string_view task, JobStatus status) const {
   json jobFilter;
   jobFilter["task"] = task;
   jobFilter["hash"] = hash;

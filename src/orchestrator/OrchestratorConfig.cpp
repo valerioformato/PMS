@@ -10,7 +10,7 @@
 using json = nlohmann::json;
 
 namespace PMS::Orchestrator {
-Config::Config(const std::string &fileName) {
+Config::Config(std::string_view fileName) {
   std::ifstream infile(fileName);
   json configJson;
   infile >> configJson;

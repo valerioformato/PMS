@@ -14,7 +14,7 @@ struct Task {
 
   std::string token;
 
-  bool IsFinished() const { return (totJobs > 0 && doneJobs == totJobs); }
-  bool IsActive() const { return (totJobs > 0) && ((doneJobs + failedJobs) != totJobs); }
+  [[nodiscard]] bool IsFinished() const { return (totJobs > 0 && doneJobs == totJobs); }
+  [[nodiscard]] bool IsActive() const { return (totJobs > 0) && ((doneJobs + failedJobs) != totJobs); }
 };
 } // namespace PMS::Orchestrator
