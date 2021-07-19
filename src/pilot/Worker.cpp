@@ -91,11 +91,11 @@ void Worker::Start(unsigned long int maxJobs) {
       }
 
       jobSTDIO finalIO;
-      if (job["stdout"] != "")
+      if (job.contains("stdout") && job["stdout"] != "")
         finalIO.stdout = job["stdout"];
-      if (job["stderr"] != "")
+      if (job.contains("stderr") && job["stderr"] != "")
         finalIO.stderr = job["stderr"];
-      if (job["stdin"] != "")
+      if (job.contains("stdin") && job["stdin"] != "")
         finalIO.stdin = job["stdin"];
 
       // local IO to the working directory, will copy later to the final location
