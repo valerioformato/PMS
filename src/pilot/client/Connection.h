@@ -33,7 +33,6 @@ private:
   std::shared_ptr<WSclient> m_endpoint;
   WSclient::connection_ptr m_connection;
   State m_status;
-  std::string m_uri;
   std::string m_server;
   std::string m_error_reason;
   std::promise<std::string> m_in_flight_message;

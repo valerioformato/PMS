@@ -4,7 +4,6 @@
 #include <spdlog/spdlog.h>
 
 // our headers
-#include "common/JsonUtils.h"
 #include "pilot/HeartBeat.h"
 
 using json = nlohmann::json;

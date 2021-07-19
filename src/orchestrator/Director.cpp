@@ -5,7 +5,6 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <bsoncxx/string/to_string.hpp>
-#include <fmt/ostream.h>
 #include <fmt/ranges.h>
 #include <mongocxx/pipeline.hpp>
 #include <nlohmann/json.hpp>

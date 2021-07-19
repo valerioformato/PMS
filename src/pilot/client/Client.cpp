@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 
 #include <spdlog/spdlog.h>
 
@@ -6,7 +7,7 @@
 
 namespace PMS {
 namespace Pilot {
-Client::Client(const std::string &serverUri) : m_serverUri{serverUri}, m_endpoint{std::make_shared<WSclient>()} {
+Client::Client(std::string serverUri) : m_serverUri{std::move(serverUri)}, m_endpoint{std::make_shared<WSclient>()} {
   m_endpoint->clear_access_channels(websocketpp::log::alevel::all);
   m_endpoint->clear_error_channels(websocketpp::log::elevel::all);
 
@@ -19,6 +20,7 @@ Client::Client(const std::string &serverUri) : m_serverUri{serverUri}, m_endpoin
 Client::~Client() {
   m_endpoint->stop_perpetual();
 
+  // FIXME: cleanup open connections upon destruction?
   // FIXME: use structured bindings when we go to c++17
   // for (auto &connection : m_connList) {
   //   if (connection->get_status() != Connection::State::Open) {

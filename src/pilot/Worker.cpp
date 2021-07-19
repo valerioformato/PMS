@@ -5,17 +5,14 @@
 #include <boost/process.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <bsoncxx/string/to_string.hpp>
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <fmt/os.h>
-#include <fmt/ostream.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 // our headers
 #include "common/Job.h"
-#include "common/JsonUtils.h"
 #include "pilot/HeartBeat.h"
 #include "pilot/Worker.h"
 

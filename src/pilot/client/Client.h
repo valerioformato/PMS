@@ -24,7 +24,7 @@ namespace Pilot {
 
 class Client {
 public:
-  Client(const std::string &serverUri);
+  explicit Client(std::string serverUri);
   ~Client();
 
   std::unique_ptr<Connection> PersistentConnection();

@@ -31,9 +31,7 @@ bool DBHandle::UpdateJobStatus(const std::string &hash, const std::string &task,
     break;
   }
 
-  return this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction))
-             ? true
-             : false;
+  return static_cast<bool>(this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction)));
 }
 
 void DBHandle::SetupDBCollections() {

@@ -8,7 +8,7 @@
 namespace PMS {
 namespace Pilot {
 struct Config {
-  Config(std::string fileName);
+  explicit Config(const std::string& fileName);
 
   std::string user;
   std::vector<std::pair<std::string, std::string>> tasks;

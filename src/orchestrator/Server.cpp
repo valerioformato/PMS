@@ -60,11 +60,9 @@ std::string Server::HandleCommand(UserCommand command, const json &msg) {
 
   switch (command) {
   case UserCommand::SubmitJob: {
-    // FIXME: use c++17 structured bindings when available
-    auto dummy = ValidateTaskToken(msg);
-    if (!dummy.first) {
-      reply = dummy.second;
-      break;
+    auto [valid, serverReply] = ValidateTaskToken(msg);
+    if (!valid) {
+      return serverReply;
     }
 
     // create an hash for this job
@@ -87,11 +85,9 @@ std::string Server::HandleCommand(UserCommand command, const json &msg) {
                 : fmt::format("Failed to create task \"{}\"", msg["task"]);
   } break;
   case UserCommand::CleanTask: {
-    // FIXME: use c++17 structured bindings when available
-    auto dummy = ValidateTaskToken(msg);
-    if (!dummy.first) {
-      reply = dummy.second;
-      break;
+    auto [valid, serverReply] = ValidateTaskToken(msg);
+    if (!valid) {
+      return serverReply;
     }
 
     auto result = m_director->CleanTask(msg["task"]);
@@ -99,11 +95,9 @@ std::string Server::HandleCommand(UserCommand command, const json &msg) {
                                                          : fmt::format("Failed to clean task \"{}\"", msg["task"]);
   } break;
   case UserCommand::DeclareTaskDependency: {
-    // FIXME: use c++17 structured bindings when available
-    auto dummy = ValidateTaskToken(msg);
-    if (!dummy.first) {
-      reply = dummy.second;
-      break;
+    auto [valid, serverReply] = ValidateTaskToken(msg);
+    if (!valid) {
+      return serverReply;
     }
 
     auto result = m_director->AddTaskDependency(msg["task"], msg["dependsOn"]);
@@ -122,12 +116,9 @@ std::string Server::HandleCommand(UserCommand command, const json &msg) {
 std::string Server::HandleCommand(PilotCommand command, const json &msg) {
   std::string reply;
 
-  // TODO: add token validation where needed
-
+  // NB: token validation has already been done during pilot registration
   switch (command) {
   case PilotCommand::ClaimJob: {
-    // NB: token validation has already been done during pilot registration
-
     if (!msg.contains("pilotUuid")) {
       return R"(Invalid request. Missing "pilotUuid" key)";
     }
@@ -135,8 +126,6 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
     reply = m_director->ClaimJob(msg).dump();
   } break;
   case PilotCommand::UpdateJobStatus: {
-    // NB: token validation has already been done during pilot registration
-
     if (!msg.contains("pilotUuid") || !msg.contains("status") || !msg.contains("hash") || !msg.contains("task")) {
       return R"(Invalid request. Missing "pilotUuid", "status", "hash", or "task" key)";
     }
@@ -167,7 +156,6 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
     auto result = m_director->DeleteHeartBeat(msg);
 
     reply = result == Director::OperationResult::Success ? "Ok" : "Failed to delete heartbeat";
-
   } break;
   }
 
@@ -259,10 +247,12 @@ void Server::Start() {
   m_logger->info("Starting Websocket server");
 
   // Set the default message handler to our own handler
-  m_endpoint.set_message_handler(
-      std::bind(&Server::message_handler, this, std::placeholders::_1, std::placeholders::_2));
-  m_pilot_endpoint.set_message_handler(
-      std::bind(&Server::pilot_handler, this, std::placeholders::_1, std::placeholders::_2));
+  m_endpoint.set_message_handler([this](auto &&PH1, auto &&PH2) {
+    message_handler(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+  });
+  m_pilot_endpoint.set_message_handler([this](auto &&PH1, auto &&PH2) {
+    pilot_handler(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+  });
 
   SetupEndpoint(m_endpoint, m_port);
   SetupEndpoint(m_pilot_endpoint, m_port + 1);

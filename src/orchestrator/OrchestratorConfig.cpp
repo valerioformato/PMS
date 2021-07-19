@@ -2,7 +2,6 @@
 #include <fstream>
 
 // external dependencies
-#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 // our headers
