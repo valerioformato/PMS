@@ -51,11 +51,11 @@ json Director::ClaimJob(const json &req) {
   m_logger->trace("Pilot {} allowed tasks: {}", req["pilotUuid"], tasks);
 
   json filter;
-  filter["status"] = JobStatusNames[JobStatus::Pending];
+  filter["status"] = magic_enum::enum_name(JobStatus::Pending);
   filter["task"]["$in"] = tasks;
 
   json updateAction;
-  updateAction["$set"]["status"] = JobStatusNames[JobStatus::Claimed];
+  updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Claimed);
   updateAction["$set"]["pilotUuid"] = req["pilotUuid"];
 
   auto query_result =
@@ -77,10 +77,13 @@ Director::OperationResult Director::UpdateJobStatus(const json &msg) {
   if (std::find(begin(pilotTasks), end(pilotTasks), msg["task"]) == end(pilotTasks))
     return OperationResult::DatabaseError;
 
-  auto status = to_JobStatus(msg["status"]);
+  auto status = magic_enum::enum_cast<JobStatus>(msg["status"]);
+  if(!status.has_value()){
+    return OperationResult::ProcessError;
+  }
 
-  return handle.UpdateJobStatus(msg["hash"], msg["task"], status) ? OperationResult::Success
-                                                                  : OperationResult::DatabaseError;
+  return handle.UpdateJobStatus(msg["hash"], msg["task"], status.value()) ? OperationResult::Success
+                                                                          : OperationResult::DatabaseError;
 }
 
 Director::NewPilotResult Director::RegisterNewPilot(const json &msg) {
@@ -225,7 +228,7 @@ void Director::JobInsert() {
       m_logger->trace("Queueing up job {} for insertion", job["hash"]);
 
       // job initial status should always be Pending :)
-      job["status"] = JobStatusNames[JobStatus::Pending];
+      job["status"] = magic_enum::enum_name(JobStatus::Pending);
       toBeInserted.push_back(JsonUtils::json2bson(job));
     }
 
@@ -338,10 +341,10 @@ void Director::UpdateTasks() {
       countQuery["task"] = taskName;
       task.totJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
 
-      countQuery["status"] = JobStatusNames[JobStatus::Done];
+      countQuery["status"] = magic_enum::enum_name(JobStatus::Done);
       task.doneJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
 
-      countQuery["status"] = JobStatusNames[JobStatus::Error];
+      countQuery["status"] = magic_enum::enum_name(JobStatus::Error);
       task.failedJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
 
       m_logger->debug("Task {0} updated - {1} job{4} ({2} done, {3} failed)", task.name, task.totJobs, task.doneJobs,

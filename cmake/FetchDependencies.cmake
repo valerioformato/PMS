@@ -4,6 +4,18 @@ include(FetchContent)
 # needed for the fmt and spdlog static libraries
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# https://github.com/Neargye/magic_enum.git
+# === magic_enum ===
+FetchContent_Declare(
+        mamgic_enum
+        GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
+        GIT_TAG v0.7.3)
+FetchContent_GetProperties(mamgic_enum)
+if(NOT mamgic_enum_POPULATED)
+  FetchContent_Populate(mamgic_enum)
+  add_subdirectory(${mamgic_enum_SOURCE_DIR} ${mamgic_enum_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+
 # === fmt ===
 FetchContent_Declare(
   fmt

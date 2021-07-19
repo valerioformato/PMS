@@ -193,7 +193,7 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   request["pilotUuid"] = boost::uuids::to_string(m_uuid);
   request["hash"] = hash;
   request["task"] = task;
-  request["status"] = JobStatusNames[status];
+  request["status"] = magic_enum::enum_name(status);
   auto reply = m_wsClient->Send(request);
 
   return reply == "Ok";

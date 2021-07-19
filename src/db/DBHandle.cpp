@@ -16,7 +16,7 @@ bool DBHandle::UpdateJobStatus(const std::string &hash, const std::string &task,
   jobFilter["hash"] = hash;
 
   json jobUpdateAction;
-  jobUpdateAction["$set"]["status"] = JobStatusNames[status];
+  jobUpdateAction["$set"]["status"] = magic_enum::enum_name(status);
   jobUpdateAction["$currentDate"]["lastUpdate"] = true;
 
   switch (status) {
