@@ -15,8 +15,7 @@
 
 using WSserver = websocketpp::server<websocketpp::config::asio>;
 
-namespace PMS {
-namespace Orchestrator {
+namespace PMS::Orchestrator {
 class Server {
 public:
   Server(unsigned int port, std::shared_ptr<Director> director)
@@ -51,7 +50,6 @@ private:
   std::shared_ptr<Director> m_director;
 };
 
-} // namespace Orchestrator
-} // namespace PMS
+} // namespace PMS::Orchestrator
 
 #endif

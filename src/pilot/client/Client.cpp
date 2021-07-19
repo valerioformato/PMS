@@ -5,8 +5,7 @@
 
 #include "pilot/client/Client.h"
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 Client::Client(std::string serverUri) : m_serverUri{std::move(serverUri)}, m_endpoint{std::make_shared<WSclient>()} {
   m_endpoint->clear_access_channels(websocketpp::log::alevel::all);
   m_endpoint->clear_error_channels(websocketpp::log::elevel::all);
@@ -51,5 +50,4 @@ std::unique_ptr<Connection> Client::PersistentConnection(const std::string &uri)
   return std::make_unique<Connection>(m_endpoint, uri);
 }
 
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot

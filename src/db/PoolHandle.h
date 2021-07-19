@@ -16,8 +16,7 @@
 // our headers
 #include "DBHandle.h"
 
-namespace PMS {
-namespace DB {
+namespace PMS::DB {
 class PoolHandle {
 public:
   PoolHandle(const std::string &dbhost, const std::string &dbname);
@@ -31,6 +30,5 @@ private:
   mongocxx::pool m_pool;
   std::string m_dbName;
 };
-} // namespace DB
-} // namespace PMS
+} // namespace PMS::DB
 #endif

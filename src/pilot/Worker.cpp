@@ -19,8 +19,7 @@
 using json = nlohmann::json;
 namespace bp = boost::process;
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 
 bool Worker::Register() {
   // generate a pilot uuid
@@ -199,5 +198,4 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   return reply == "Ok";
 }
 
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot

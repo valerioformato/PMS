@@ -16,8 +16,7 @@
 // our headers
 #include "common/Job.h"
 
-namespace PMS {
-namespace DB {
+namespace PMS::DB {
 class DBHandle {
 public:
   DBHandle(mongocxx::pool &pool, std::string dbname) : m_poolEntry{pool.acquire()}, m_dbname{std::move(dbname)} {}
@@ -32,7 +31,6 @@ private:
   mongocxx::pool::entry m_poolEntry;
   std::string m_dbname;
 };
-} // namespace DB
-} // namespace PMS
+} // namespace PMS::DB
 
 #endif

@@ -4,8 +4,7 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls_client.hpp>
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 
 using WSclient = websocketpp::client<websocketpp::config::asio_client>;
 
@@ -41,7 +40,6 @@ private:
   std::condition_variable cv;
 };
 
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot
 
 #endif

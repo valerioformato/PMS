@@ -8,8 +8,7 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace DB {
+namespace PMS::DB {
 bool DBHandle::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) const {
   json jobFilter;
   jobFilter["task"] = task;
@@ -31,7 +30,8 @@ bool DBHandle::UpdateJobStatus(const std::string &hash, const std::string &task,
     break;
   }
 
-  return static_cast<bool>(this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction)));
+  return static_cast<bool>(
+      this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction)));
 }
 
 void DBHandle::SetupDBCollections() {
@@ -57,5 +57,4 @@ void DBHandle::SetupDBCollections() {
     (*m_poolEntry)[m_dbname]["tasks"].create_index(make_document(kvp("name", 1)), index_options);
   }
 }
-} // namespace DB
-} // namespace PMS
+} // namespace PMS::DB

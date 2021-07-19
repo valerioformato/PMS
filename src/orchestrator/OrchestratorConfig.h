@@ -7,8 +7,7 @@
 // our headers
 #include "db/CredType.h"
 
-namespace PMS {
-namespace Orchestrator {
+namespace PMS::Orchestrator {
 enum class CredType {
   None = 0,
   PWD,
@@ -16,7 +15,7 @@ enum class CredType {
 };
 
 struct Config {
-  explicit Config(const std::string& fileName);
+  explicit Config(const std::string &fileName);
 
   std::string back_dbhost;
   std::string back_dbname;
@@ -30,7 +29,6 @@ struct Config {
 
   unsigned int listeningPort = 0;
 };
-} // namespace Orchestrator
-} // namespace PMS
+} // namespace PMS::Orchestrator
 
 #endif

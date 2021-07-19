@@ -17,13 +17,12 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace JsonUtils {
+namespace PMS::JsonUtils {
 inline json bson2json(bsoncxx::document::view bsonDoc) { return json::parse(bsoncxx::to_json(bsonDoc)); }
 inline bsoncxx::document::value json2bson(const json &jsonDoc) { return bsoncxx::from_json(jsonDoc.dump()); }
 
 using Predicate = std::function<bool(const bsoncxx::document::element &el)>;
-inline bsoncxx::document::value filter(bsoncxx::document::view doc, Predicate predicate) {
+inline bsoncxx::document::value filter(bsoncxx::document::view doc, const Predicate &predicate) {
   using namespace bsoncxx::builder;
 
   basic::document builder;
@@ -35,6 +34,5 @@ inline bsoncxx::document::value filter(bsoncxx::document::view doc, Predicate pr
   return builder.extract();
 }
 
-} // namespace JsonUtils
-} // namespace PMS
+} // namespace PMS::JsonUtils
 #endif // PMS_JSONUTILS_H

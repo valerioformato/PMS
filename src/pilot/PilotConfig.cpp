@@ -9,9 +9,8 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace Pilot {
-Config::Config(const std::string& fileName) {
+namespace PMS::Pilot {
+Config::Config(const std::string &fileName) {
   std::ifstream infile(fileName);
   json configJson;
   infile >> configJson;
@@ -27,5 +26,4 @@ Config::Config(const std::string& fileName) {
   dummy = configJson["tasks"];
   std::for_each(dummy.begin(), dummy.end(), [this](auto doc) { tasks.emplace_back(doc["name"], doc["token"]); });
 }
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot

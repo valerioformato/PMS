@@ -13,8 +13,7 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace Orchestrator {
+namespace PMS::Orchestrator {
 Server::~Server() {
   if (m_isRunning) {
     Stop();
@@ -275,5 +274,4 @@ void Server::Stop() {
   m_pilot_endpoint.stop_listening();
   m_isRunning = false;
 }
-} // namespace Orchestrator
-} // namespace PMS
+} // namespace PMS::Orchestrator

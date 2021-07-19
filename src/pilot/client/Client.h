@@ -19,8 +19,7 @@ using json = nlohmann::json;
 
 using WSclient = websocketpp::client<websocketpp::config::asio>;
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 
 class Client {
 public:
@@ -43,7 +42,6 @@ private:
   // std::vector<std::shared_ptr<Connection>> m_connList;
 };
 
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot
 
 #endif

@@ -16,8 +16,7 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace Orchestrator {
+namespace PMS::Orchestrator {
 void Director::Start() {
   m_backPoolHandle->DBHandle().SetupDBCollections();
 
@@ -78,7 +77,7 @@ Director::OperationResult Director::UpdateJobStatus(const json &msg) {
     return OperationResult::DatabaseError;
 
   auto status = magic_enum::enum_cast<JobStatus>(msg["status"]);
-  if(!status.has_value()){
+  if (!status.has_value()) {
     return OperationResult::ProcessError;
   }
 
@@ -419,5 +418,4 @@ std::vector<std::string> Director::GetPilotTasks(const std::string &uuid) {
   return result;
 }
 
-} // namespace Orchestrator
-} // namespace PMS
+} // namespace PMS::Orchestrator

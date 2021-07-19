@@ -1,7 +1,7 @@
 #ifndef PMS_COMMON_JOB_H
 #define PMS_COMMON_JOB_H
 
-#include "common/EnumArray.h"
+//#include "common/EnumArray.h"
 #include <magic_enum.hpp>
 
 namespace PMS {

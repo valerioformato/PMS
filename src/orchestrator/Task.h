@@ -2,8 +2,7 @@
 #include <string>
 #include <vector>
 
-namespace PMS {
-namespace Orchestrator {
+namespace PMS::Orchestrator {
 struct Task {
   std::string name;
   std::string owner;
@@ -18,5 +17,4 @@ struct Task {
   bool IsFinished() const { return (totJobs > 0 && doneJobs == totJobs); }
   bool IsActive() const { return (totJobs > 0) && ((doneJobs + failedJobs) != totJobs); }
 };
-} // namespace Orchestrator
-} // namespace PMS
+} // namespace PMS::Orchestrator

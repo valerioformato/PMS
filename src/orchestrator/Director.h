@@ -21,8 +21,7 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace Orchestrator {
+namespace PMS::Orchestrator {
 class Director {
 public:
   enum class OperationResult { Success, ProcessError, DatabaseError };
@@ -82,7 +81,6 @@ private:
   std::vector<std::thread> m_threads;
 };
 
-} // namespace Orchestrator
-} // namespace PMS
+} // namespace PMS::Orchestrator
 
 #endif

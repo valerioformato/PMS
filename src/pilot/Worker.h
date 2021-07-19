@@ -17,8 +17,7 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 class Worker {
 public:
   explicit Worker(Config config, std::shared_ptr<Client> wsClient)
@@ -47,7 +46,6 @@ private:
 
   boost::uuids::uuid m_uuid{};
 };
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot
 
 #endif

@@ -9,9 +9,8 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace Orchestrator {
-Config::Config(const std::string& fileName) {
+namespace PMS::Orchestrator {
+Config::Config(const std::string &fileName) {
   std::ifstream infile(fileName);
   json configJson;
   infile >> configJson;
@@ -34,5 +33,4 @@ Config::Config(const std::string& fileName) {
 
   listeningPort = configJson["listeningPort"];
 }
-} // namespace Orchestrator
-} // namespace PMS
+} // namespace PMS::Orchestrator
