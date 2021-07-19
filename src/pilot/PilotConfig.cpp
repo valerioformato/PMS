@@ -1,5 +1,6 @@
 // c++ headers
 #include <fstream>
+#include <filesystem>
 
 // external dependencies
 #include <nlohmann/json.hpp>
@@ -11,7 +12,7 @@ using json = nlohmann::json;
 
 namespace PMS::Pilot {
 Config::Config(const std::string &fileName) {
-  std::ifstream infile(fileName);
+  std::ifstream infile{std::filesystem::path{fileName}};
   json configJson;
   infile >> configJson;
 
