@@ -42,11 +42,11 @@ Director::OperationResult Director::AddNewJob(json &&job) {
   return OperationResult::Success;
 }
 
-json Director::ClaimJob(const json &req) {
+json Director::ClaimJob(std::string_view pilotUuid) {
   auto handle = m_frontPoolHandle->DBHandle();
 
-  auto tasks = GetPilotTasks(req["pilotUuid"]);
-  m_logger->trace("Pilot {} allowed tasks: {}", req["pilotUuid"], tasks);
+  auto tasks = GetPilotTasks(pilotUuid);
+  m_logger->trace("Pilot {} allowed tasks: {}", pilotUuid, tasks);
 
   json filter;
   filter["status"] = magic_enum::enum_name(JobStatus::Pending);
@@ -54,7 +54,7 @@ json Director::ClaimJob(const json &req) {
 
   json updateAction;
   updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Claimed);
-  updateAction["$set"]["pilotUuid"] = req["pilotUuid"];
+  updateAction["$set"]["pilotUuid"] = pilotUuid;
 
   auto query_result =
       handle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
@@ -68,38 +68,33 @@ json Director::ClaimJob(const json &req) {
   }
 }
 
-Director::OperationResult Director::UpdateJobStatus(const json &msg) {
+Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, std::string_view hash,
+                                                    std::string_view task, JobStatus status) {
   auto handle = m_frontPoolHandle->DBHandle();
 
-  auto pilotTasks = GetPilotTasks(msg["pilotUuid"]);
-  if (std::find(begin(pilotTasks), end(pilotTasks), msg["task"]) == end(pilotTasks))
+  auto pilotTasks = GetPilotTasks(pilotUuid);
+  if (std::find(begin(pilotTasks), end(pilotTasks), task) == end(pilotTasks))
     return OperationResult::DatabaseError;
 
-  auto status = magic_enum::enum_cast<JobStatus>(msg["status"]);
-  if (!status.has_value()) {
-    return OperationResult::ProcessError;
-  }
-
-  return handle.UpdateJobStatus(to_string(msg["hash"]), to_string(msg["task"]), status.value())
-             ? OperationResult::Success
-             : OperationResult::DatabaseError;
+  return handle.UpdateJobStatus(hash, task, status) ? OperationResult::Success : OperationResult::DatabaseError;
 }
 
-Director::NewPilotResult Director::RegisterNewPilot(const json &msg) {
+Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
+                                                    const std::vector<std::pair<std::string, std::string>> &tasks) {
   NewPilotResult result{OperationResult::Success, {}, {}};
 
   auto handle = m_frontPoolHandle->DBHandle();
 
   json query;
-  query["uuid"] = msg["pilotUuid"];
-  query["user"] = msg["user"];
+  query["uuid"] = pilotUuid;
+  query["user"] = user;
   query["tasks"] = json::array({});
-  for (const auto &task : msg["tasks"]) {
-    if (ValidateTaskToken(task["name"].get<std::string_view>(), task["token"].get<std::string_view>())) {
-      query["tasks"].push_back(task["name"]);
-      result.validTasks.push_back(task["name"]);
+  for (const auto &[taskName, token] : tasks) {
+    if (ValidateTaskToken(taskName, token)) {
+      query["tasks"].push_back(taskName);
+      result.validTasks.push_back(taskName);
     } else {
-      result.invalidTasks.push_back(task["name"]);
+      result.invalidTasks.push_back(taskName);
     }
   }
 
@@ -107,11 +102,11 @@ Director::NewPilotResult Director::RegisterNewPilot(const json &msg) {
   return bool(query_result) ? result : NewPilotResult{OperationResult::DatabaseError, {}, {}};
 }
 
-Director::OperationResult Director::UpdateHeartBeat(const json &msg) {
+Director::OperationResult Director::UpdateHeartBeat(std::string_view pilotUuid) {
   auto handle = m_frontPoolHandle->DBHandle();
 
   json updateFilter;
-  updateFilter["uuid"] = msg["uuid"];
+  updateFilter["uuid"] = pilotUuid;
 
   json updateAction;
   updateAction["$currentDate"]["lastHeartBeat"] = true;
@@ -125,11 +120,11 @@ Director::OperationResult Director::UpdateHeartBeat(const json &msg) {
   return queryResult ? Director::OperationResult::Success : Director::OperationResult::DatabaseError;
 }
 
-Director::OperationResult Director::DeleteHeartBeat(const json &msg) {
+Director::OperationResult Director::DeleteHeartBeat(std::string_view pilotUuid) {
   auto handle = m_frontPoolHandle->DBHandle();
 
   json deleteFilter;
-  deleteFilter["uuid"] = msg["uuid"];
+  deleteFilter["uuid"] = pilotUuid;
 
   auto queryResult = handle["pilots"].delete_one(JsonUtils::json2bson(deleteFilter));
 
@@ -403,7 +398,7 @@ bool Director::ValidateTaskToken(std::string_view task, std::string_view token) 
   return false;
 }
 
-std::vector<std::string> Director::GetPilotTasks(const std::string &uuid) {
+std::vector<std::string> Director::GetPilotTasks(std::string_view uuid) {
   auto handle = m_frontPoolHandle->DBHandle();
   std::vector<std::string> result;
 

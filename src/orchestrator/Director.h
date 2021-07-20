@@ -36,17 +36,19 @@ public:
   OperationResult AddNewJob(const json &job);
   OperationResult AddNewJob(json &&job);
 
-  json ClaimJob(const json &);
-  OperationResult UpdateJobStatus(const json &);
+  json ClaimJob(std::string_view pilotUuid);
+  OperationResult UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
+                                  JobStatus status);
 
   struct NewPilotResult {
     OperationResult result;
     std::vector<std::string> validTasks;
     std::vector<std::string> invalidTasks;
   };
-  NewPilotResult RegisterNewPilot(const json &);
-  OperationResult UpdateHeartBeat(const json &);
-  OperationResult DeleteHeartBeat(const json &);
+  NewPilotResult RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
+                                  const std::vector<std::pair<std::string, std::string>> &tasks);
+  OperationResult UpdateHeartBeat(std::string_view pilotUuid);
+  OperationResult DeleteHeartBeat(std::string_view pilotUuid);
 
   OperationResult AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
 
@@ -65,7 +67,7 @@ private:
   void UpdateTasks();
   void DBSync();
 
-  std::vector<std::string> GetPilotTasks(const std::string &uuid);
+  std::vector<std::string> GetPilotTasks(std::string_view uuid);
 
   std::shared_ptr<spdlog::logger> m_logger;
 

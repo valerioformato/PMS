@@ -12,7 +12,7 @@
 
 // our headers
 #include "orchestrator/Director.h"
-#include "orchestrator/UserCommands.h"
+#include "orchestrator/Commands.h"
 
 using WSserver = websocketpp::server<websocketpp::config::asio>;
 
@@ -40,7 +40,8 @@ private:
   static std::unordered_map<std::string_view, UserCommandType> m_commandLUT;
 
   enum class PilotCommandType { ClaimJob, UpdateJobStatus, RegisterNewPilot, UpdateHeartBeat, DeleteHeartBeat };
-  std::string HandleCommand(PilotCommandType command, const json &msg);
+  std::string HandleCommand(PilotCommand &&command);
+  static PilotCommand toPilotCommand(const json& msg);
   static std::unordered_map<std::string_view, PilotCommandType> m_pilot_commandLUT;
 
   std::shared_ptr<spdlog::logger> m_logger;
