@@ -2,6 +2,8 @@
 #include <chrono>
 
 // external dependencies
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -12,118 +14,177 @@
 #include "orchestrator/picosha2.h"
 
 using json = nlohmann::json;
+using namespace std::string_view_literals;
 
 namespace PMS::Orchestrator {
+template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 Server::~Server() {
   if (m_isRunning) {
     Stop();
   }
 }
 
-std::unordered_map<std::string, Server::UserCommand> Server::m_commandLUT{
+std::unordered_map<std::string_view, Server::UserCommandType> Server::m_commandLUT{
     // user available commands
-    {"submitJob", UserCommand::SubmitJob},
-    {"createTask", UserCommand::CreateTask},
-    {"cleanTask", UserCommand::CleanTask},
-    {"declareTaskDependency", UserCommand::DeclareTaskDependency},
+    {"submitJob"sv, UserCommandType::SubmitJob},
+    {"createTask"sv, UserCommandType::CreateTask},
+    {"cleanTask"sv, UserCommandType::CleanTask},
+    {"declareTaskDependency"sv, UserCommandType::DeclareTaskDependency},
 };
 
-std::unordered_map<std::string, Server::PilotCommand> Server::m_pilot_commandLUT{
+std::unordered_map<std::string_view, Server::PilotCommandType> Server::m_pilot_commandLUT{
     // pilot available commands
-    {"p_claimJob", PilotCommand::ClaimJob},
-    {"p_updateJobStatus", PilotCommand::UpdateJobStatus},
-    {"p_registerNewPilot", PilotCommand::RegisterNewPilot},
-    {"p_updateHeartBeat", PilotCommand::UpdateHeartBeat},
-    {"p_deleteHeartBeat", PilotCommand::DeleteHeartBeat},
+    {"p_claimJob"sv, PilotCommandType::ClaimJob},
+    {"p_updateJobStatus"sv, PilotCommandType::UpdateJobStatus},
+    {"p_registerNewPilot"sv, PilotCommandType::RegisterNewPilot},
+    {"p_updateHeartBeat"sv, PilotCommandType::UpdateHeartBeat},
+    {"p_deleteHeartBeat"sv, PilotCommandType::DeleteHeartBeat},
 };
 
-std::pair<bool, std::string> Server::ValidateTaskToken(const json &msg) const {
-  if (!msg.contains("token")) {
-    return {false, "Message doesn't contain a token"};
-  }
-
-  bool tokenValid = msg.contains("filter") ? m_director->ValidateTaskToken(msg["filter"]["task"], msg["token"])
-                                           : m_director->ValidateTaskToken(msg["task"], msg["token"]);
+std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, std::string_view token) const {
+  auto tokenValid = m_director->ValidateTaskToken(task, token);
 
   if (!tokenValid) {
-    return {false, fmt::format("Invalid token for task {}", msg["task"])};
+    return {false, fmt::format("Invalid token for task {}", task)};
   }
 
   return {true, {}};
 }
 
-std::string Server::HandleCommand(UserCommand command, const json &msg) {
-  std::string reply;
+std::string Server::HandleCommand(UserCommand &&command) {
+  return std::visit(overloaded{
+                        // Create a new task
+                        [this](const UCommand<CreateTask> &ucmd) {
+                          auto [result, token] = m_director->CreateTask(ucmd.cmd.task);
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format("Task {} created. Token: {}", ucmd.cmd.task, token)
+                                     : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
+                        },
+                        // Remove an existing task
+                        [this](const UCommand<CleanTask> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
 
-  // TODO: add token validation where needed
+                          auto result = m_director->CleanTask(ucmd.cmd.task);
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
+                                     : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
+                        },
+                        // Declare a dependency between tasks
+                        [this](const UCommand<DeclareTaskDependency> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
 
-  switch (command) {
-  case UserCommand::SubmitJob: {
-    auto [valid, serverReply] = ValidateTaskToken(msg);
-    if (!valid) {
-      return serverReply;
-    }
+                          auto result = m_director->AddTaskDependency(ucmd.cmd.task, ucmd.cmd.dependsOn);
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format("Task \"{}\" now depends on task {}", ucmd.cmd.task,
+                                                   ucmd.cmd.dependsOn)
+                                     : fmt::format("Failed to add task dependency");
+                        },
+                        // Submit a new job
+                        [this](UCommand<SubmitJob> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
 
-    // create an hash for this job
-    std::string job_hash;
-    picosha2::hash256_hex_string(msg.dump(), job_hash);
-    json job = msg["job"];
-    job["hash"] = job_hash;
-    job["task"] = msg["task"];
+                          // create an hash for this job
+                          std::string job_hash;
+                          ucmd.cmd.job["task"] = ucmd.cmd.task;
+                          picosha2::hash256_hex_string(ucmd.cmd.job.dump(), job_hash);
+                          ucmd.cmd.job["hash"] = job_hash;
 
-    auto result = m_director->AddNewJob(std::move(job));
-    // note: don't use job after this line!
+                          auto result = m_director->AddNewJob(ucmd.cmd.job);
 
-    reply = result == Director::OperationResult::Success ? fmt::format("Job received, generated hash: {}", job_hash)
-                                                         : "Job submission failed.";
-  } break;
-  case UserCommand::CreateTask: {
-    auto [result, token] = m_director->CreateTask(msg["task"]);
-    reply = result == Director::OperationResult::Success ? fmt::format("Task {} created. Token: {}", msg["task"], token)
-                                                         : fmt::format("Failed to create task \"{}\"", msg["task"]);
-  } break;
-  case UserCommand::CleanTask: {
-    auto [valid, serverReply] = ValidateTaskToken(msg);
-    if (!valid) {
-      return serverReply;
-    }
-
-    auto result = m_director->CleanTask(msg["task"]);
-    reply = result == Director::OperationResult::Success ? fmt::format("Task \"{}\" cleaned", msg["task"])
-                                                         : fmt::format("Failed to clean task \"{}\"", msg["task"]);
-  } break;
-  case UserCommand::DeclareTaskDependency: {
-    auto [valid, serverReply] = ValidateTaskToken(msg);
-    if (!valid) {
-      return serverReply;
-    }
-
-    auto result = m_director->AddTaskDependency(msg["task"], msg["dependsOn"]);
-    reply = result == Director::OperationResult::Success
-                ? fmt::format("Task \"{}\" now depends on task {}", msg["task"], msg["dependsOn"])
-                : fmt::format("Failed to add task dependency");
-  } break;
-  default:
-    reply = fmt::format("Command \"{}\" is not in the list of available commands", msg["command"]);
-    break;
-  }
-
-  return reply;
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format("Job received, generated hash: {}", job_hash)
+                                     : "Job submission failed.";
+                        },
+                        // Handle errors
+                        [](const UCommand<InvalidCommand> &ucmd) { return ucmd.cmd.errorMessage; },
+                    },
+                    command);
 }
 
-std::string Server::HandleCommand(PilotCommand command, const json &msg) {
+// std::string Server::HandleCommand(UserCommandType command, const json &msg) {
+//   std::string reply;
+//
+//   // TODO: add token validation where needed
+//
+//   switch (command) {
+//   case UserCommandType::SubmitJob: {
+//     auto [valid, serverReply] = ValidateTaskToken(msg);
+//     if (!valid) {
+//       return serverReply;
+//     }
+//
+//     // create an hash for this job
+//     std::string job_hash;
+//     picosha2::hash256_hex_string(msg.dump(), job_hash);
+//     json job = msg["job"];
+//     job["hash"] = job_hash;
+//     job["task"] = msg["task"];
+//
+//     auto result = m_director->AddNewJob(std::move(job));
+//     // note: don't use job after this line!
+//
+//     reply = result == Director::OperationResult::Success ? fmt::format("Job received, generated hash: {}", job_hash)
+//                                                          : "Job submission failed.";
+//   } break;
+//   case UserCommandType::CreateTask: {
+//     auto [result, token] = m_director->CreateTask(msg["task"]);
+//     reply = result == Director::OperationResult::Success ? fmt::format("Task {} created. Token: {}", msg["task"],
+//     token)
+//                                                          : fmt::format("Failed to create task \"{}\"", msg["task"]);
+//   } break;
+//   case UserCommandType::CleanTask: {
+//     auto [valid, serverReply] = ValidateTaskToken(msg);
+//     if (!valid) {
+//       return serverReply;
+//     }
+//
+//     auto result = m_director->CleanTask(msg["task"]);
+//     reply = result == Director::OperationResult::Success ? fmt::format("Task \"{}\" cleaned", msg["task"])
+//                                                          : fmt::format("Failed to clean task \"{}\"", msg["task"]);
+//   } break;
+//   case UserCommandType::DeclareTaskDependency: {
+//     auto [valid, serverReply] = ValidateTaskToken(msg);
+//     if (!valid) {
+//       return serverReply;
+//     }
+//
+//     auto result = m_director->AddTaskDependency(msg["task"], msg["dependsOn"]);
+//     reply = result == Director::OperationResult::Success
+//                 ? fmt::format("Task \"{}\" now depends on task {}", msg["task"], msg["dependsOn"])
+//                 : fmt::format("Failed to add task dependency");
+//   } break;
+//   default:
+//     reply = fmt::format("Command \"{}\" is not in the list of available commands", msg["command"]);
+//     break;
+//   }
+//
+//   return reply;
+// }
+
+std::string Server::HandleCommand(PilotCommandType command, const json &msg) {
   std::string reply;
 
   // NB: token validation has already been done during pilot registration
   switch (command) {
-  case PilotCommand::ClaimJob: {
+  case PilotCommandType::ClaimJob: {
     if (!msg.contains("pilotUuid")) {
       return R"(Invalid request. Missing "pilotUuid" key)";
     }
 
     reply = m_director->ClaimJob(msg).dump();
   } break;
-  case PilotCommand::UpdateJobStatus: {
+  case PilotCommandType::UpdateJobStatus: {
     if (!msg.contains("pilotUuid") || !msg.contains("status") || !msg.contains("hash") || !msg.contains("task")) {
       return R"(Invalid request. Missing "pilotUuid", "status", "hash", or "task" key)";
     }
@@ -132,7 +193,7 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
 
     reply = result == Director::OperationResult::Success ? "Ok" : "Failed to change job status";
   } break;
-  case PilotCommand::RegisterNewPilot: {
+  case PilotCommandType::RegisterNewPilot: {
     auto result = m_director->RegisterNewPilot(msg);
 
     json replyDoc;
@@ -145,12 +206,12 @@ std::string Server::HandleCommand(PilotCommand command, const json &msg) {
                 ? replyDoc.dump()
                 : fmt::format("Could not register pilot {}", msg["pilotUuid"]);
   } break;
-  case PilotCommand::UpdateHeartBeat: {
+  case PilotCommandType::UpdateHeartBeat: {
     auto result = m_director->UpdateHeartBeat(msg);
 
     reply = result == Director::OperationResult::Success ? "Ok" : "Failed to update heartbeat";
   } break;
-  case PilotCommand::DeleteHeartBeat: {
+  case PilotCommandType::DeleteHeartBeat: {
     auto result = m_director->DeleteHeartBeat(msg);
 
     reply = result == Director::OperationResult::Success ? "Ok" : "Failed to delete heartbeat";
@@ -173,7 +234,7 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
     return;
   }
 
-  if (parsedMessage["command"].empty()) {
+  if (!parsedMessage.contains("command")) {
     m_logger->error("No command in message. Sending back error...");
     m_endpoint.send(hdl, "Invalid message, missing \"command\" field", websocketpp::frame::opcode::text);
     return;
@@ -181,7 +242,7 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
 
   m_logger->trace("Received a valid message :)");
 
-  std::string reply = HandleCommand(m_commandLUT[parsedMessage["command"]], parsedMessage);
+  std::string reply = HandleCommand(toUserCommand(parsedMessage));
 
   m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
@@ -207,7 +268,8 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
 
   m_logger->trace("Received a valid message :)");
 
-  std::string reply = HandleCommand(m_pilot_commandLUT[parsedMessage["command"]], parsedMessage);
+  //  std::string reply = HandleCommand(m_pilot_commandLUT[parsedMessage["command"]], parsedMessage);
+  std::string reply{};
 
   m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
@@ -272,5 +334,39 @@ void Server::Stop() {
   m_pilot_endpoint.stop();
   m_pilot_endpoint.stop_listening();
   m_isRunning = false;
+}
+
+UserCommand Server::toUserCommand(const json &msg) {
+  auto command = msg["command"].get<std::string_view>();
+  auto cmdTypeP = m_commandLUT.find(command);
+
+  if (cmdTypeP == end(m_commandLUT))
+    return UCommand<InvalidCommand>{fmt::format("Command {} not supported", command)};
+
+  std::string errorMessage{};
+
+  switch (cmdTypeP->second) {
+  case UserCommandType::CreateTask:
+    if (ValidateJsonCommand<CreateTask>(msg))
+      return UCommand<CreateTask>{msg["task"]};
+
+    // handle invalid fields:
+    errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CreateTask::requiredFields);
+    break;
+  case UserCommandType::CleanTask:
+    if (ValidateJsonCommand<CleanTask>(msg))
+      return UCommand<CleanTask>{msg["task"], msg["token"]};
+    break;
+  case UserCommandType::DeclareTaskDependency:
+    if (ValidateJsonCommand<DeclareTaskDependency>(msg))
+      return UCommand<DeclareTaskDependency>{msg["task"], msg["dependsOn"], msg["token"]};
+    break;
+  case UserCommandType::SubmitJob:
+    if (ValidateJsonCommand<SubmitJob>(msg))
+      return UCommand<SubmitJob>{msg["job"], msg["task"], msg["token"]};
+    break;
+  };
+
+  return UCommand<InvalidCommand>{errorMessage};
 }
 } // namespace PMS::Orchestrator

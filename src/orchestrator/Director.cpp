@@ -95,7 +95,7 @@ Director::NewPilotResult Director::RegisterNewPilot(const json &msg) {
   query["user"] = msg["user"];
   query["tasks"] = json::array({});
   for (const auto &task : msg["tasks"]) {
-    if (ValidateTaskToken(task["name"], task["token"])) {
+    if (ValidateTaskToken(task["name"].get<std::string_view>(), task["token"].get<std::string_view>())) {
       query["tasks"].push_back(task["name"]);
       result.validTasks.push_back(task["name"]);
     } else {
@@ -395,12 +395,12 @@ void Director::DBSync() {
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
-bool Director::ValidateTaskToken(const std::string &task, const std::string &token) const {
-  if (m_tasks.find(task) == end(m_tasks)) {
-    return false;
+bool Director::ValidateTaskToken(std::string_view task, std::string_view token) const {
+  if (auto taskIt = m_tasks.find(std::string{task}); taskIt != end(m_tasks)) {
+    return taskIt->second.token == token;
   }
 
-  return m_tasks.at(task).token == token;
+  return false;
 }
 
 std::vector<std::string> Director::GetPilotTasks(const std::string &uuid) {

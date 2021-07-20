@@ -57,7 +57,7 @@ public:
   CreateTaskResult CreateTask(const std::string &task);
   OperationResult CleanTask(const std::string &task);
 
-  bool ValidateTaskToken(const std::string &task, const std::string &token) const;
+  bool ValidateTaskToken(std::string_view task, std::string_view token) const;
 
 private:
   void JobInsert();
