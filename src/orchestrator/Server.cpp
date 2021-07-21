@@ -307,7 +307,7 @@ UserCommand Server::toUserCommand(const json &msg) {
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
     break;
-  };
+  }
 
   return OrchCommand<InvalidCommand>{errorMessage};
 }
@@ -362,7 +362,7 @@ PilotCommand Server::toPilotCommand(const json &msg) {
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", DeleteHeartBeat::requiredFields);
     break;
-  };
+  }
 
   return OrchCommand<InvalidCommand>{errorMessage};
 }

@@ -38,7 +38,7 @@ Client::~Client() {
 }
 
 std::string Client::Send(const json &msg) { return Send(msg, m_serverUri); }
-std::string Client::Send(const json &msg, const std::string &uri) {
+std::string Client::Send(const json &msg, std::string_view uri) {
   Connection connection{m_endpoint, uri};
   return connection.Send(msg.dump());
 }
@@ -46,7 +46,7 @@ std::string Client::Send(const json &msg, const std::string &uri) {
 std::unique_ptr<Connection> Client::PersistentConnection() {
   return std::make_unique<Connection>(m_endpoint, m_serverUri);
 }
-std::unique_ptr<Connection> Client::PersistentConnection(const std::string &uri) {
+std::unique_ptr<Connection> Client::PersistentConnection(std::string_view uri) {
   return std::make_unique<Connection>(m_endpoint, uri);
 }
 

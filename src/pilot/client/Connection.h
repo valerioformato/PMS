@@ -1,6 +1,10 @@
 #ifndef PMS_PILOT_CONNECTION_H
 #define PMS_PILOT_CONNECTION_H
 
+// c++ headers
+#include <string_view>
+
+//external dependencies
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls_client.hpp>
 
@@ -12,7 +16,7 @@ class Connection {
 public:
   enum class State { Connecting, Open, Failed, Closed };
 
-  Connection(std::shared_ptr<WSclient> endpoint, const std::string &uri);
+  Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri);
   ~Connection();
 
   Connection(const Connection &) = delete;
@@ -22,9 +26,9 @@ public:
   void on_close(WSclient *c, websocketpp::connection_hdl hdl);
   void on_message(websocketpp::connection_hdl, WSclient::message_ptr msg);
 
-  websocketpp::connection_hdl get_hdl() const { return m_connection->get_handle(); }
+  [[nodiscard]] websocketpp::connection_hdl get_hdl() const { return m_connection->get_handle(); }
 
-  State get_status() const { return m_status; }
+  [[nodiscard]] State get_status() const { return m_status; }
 
   std::string Send(const std::string &message);
 

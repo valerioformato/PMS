@@ -4,6 +4,7 @@
 // c++ headers
 #include <map>
 #include <memory>
+#include <string_view>
 #include <thread>
 #include <utility>
 
@@ -27,10 +28,10 @@ public:
   ~Client();
 
   std::unique_ptr<Connection> PersistentConnection();
-  std::unique_ptr<Connection> PersistentConnection(const std::string &uri);
+  std::unique_ptr<Connection> PersistentConnection(std::string_view uri);
 
   std::string Send(const json &msg);
-  std::string Send(const json &msg, const std::string &uri);
+  std::string Send(const json &msg, std::string_view uri);
 
   // std::string Send(Connection &connection, const json &msg);
 
