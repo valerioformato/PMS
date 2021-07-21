@@ -5,10 +5,9 @@
 #include <string>
 #include <vector>
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 struct Config {
-  Config(std::string fileName);
+  explicit Config(const std::string &fileName);
 
   std::string user;
   std::vector<std::pair<std::string, std::string>> tasks;
@@ -16,7 +15,6 @@ struct Config {
   unsigned int serverPort = 9003;
   std::vector<std::string> tokens;
 };
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot
 
 #endif

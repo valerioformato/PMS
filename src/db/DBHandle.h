@@ -16,15 +16,14 @@
 // our headers
 #include "common/Job.h"
 
-namespace PMS {
-namespace DB {
+namespace PMS::DB {
 class DBHandle {
 public:
   DBHandle(mongocxx::pool &pool, std::string dbname) : m_poolEntry{pool.acquire()}, m_dbname{std::move(dbname)} {}
 
   mongocxx::collection operator[](bsoncxx::string::view_or_value name) const { return (*m_poolEntry)[m_dbname][name]; };
 
-  bool UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) const;
+  [[nodiscard]] bool UpdateJobStatus(std::string_view hash, std::string_view task, JobStatus status) const;
 
   void SetupDBCollections();
 
@@ -32,7 +31,6 @@ private:
   mongocxx::pool::entry m_poolEntry;
   std::string m_dbname;
 };
-} // namespace DB
-} // namespace PMS
+} // namespace PMS::DB
 
 #endif

@@ -8,15 +8,14 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace DB {
-bool DBHandle::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) const {
+namespace PMS::DB {
+bool DBHandle::UpdateJobStatus(std::string_view hash, std::string_view task, JobStatus status) const {
   json jobFilter;
   jobFilter["task"] = task;
   jobFilter["hash"] = hash;
 
   json jobUpdateAction;
-  jobUpdateAction["$set"]["status"] = JobStatusNames[status];
+  jobUpdateAction["$set"]["status"] = magic_enum::enum_name(status);
   jobUpdateAction["$currentDate"]["lastUpdate"] = true;
 
   switch (status) {
@@ -31,9 +30,8 @@ bool DBHandle::UpdateJobStatus(const std::string &hash, const std::string &task,
     break;
   }
 
-  return this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction))
-             ? true
-             : false;
+  return static_cast<bool>(
+      this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction)));
 }
 
 void DBHandle::SetupDBCollections() {
@@ -59,5 +57,4 @@ void DBHandle::SetupDBCollections() {
     (*m_poolEntry)[m_dbname]["tasks"].create_index(make_document(kvp("name", 1)), index_options);
   }
 }
-} // namespace DB
-} // namespace PMS
+} // namespace PMS::DB

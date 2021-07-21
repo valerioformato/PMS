@@ -1,8 +1,8 @@
 // c++ headers
 #include <fstream>
+#include <filesystem>
 
 // external dependencies
-#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 // our headers
@@ -10,10 +10,9 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace Orchestrator {
-Config::Config(const std::string& fileName) {
-  std::ifstream infile(fileName);
+namespace PMS::Orchestrator {
+Config::Config(std::string_view fileName) {
+  std::ifstream infile{std::filesystem::path{fileName}};
   json configJson;
   infile >> configJson;
 
@@ -35,5 +34,4 @@ Config::Config(const std::string& fileName) {
 
   listeningPort = configJson["listeningPort"];
 }
-} // namespace Orchestrator
-} // namespace PMS
+} // namespace PMS::Orchestrator

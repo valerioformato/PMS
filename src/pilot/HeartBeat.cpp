@@ -4,13 +4,11 @@
 #include <spdlog/spdlog.h>
 
 // our headers
-#include "common/JsonUtils.h"
 #include "pilot/HeartBeat.h"
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 HeartBeat::~HeartBeat() {
   spdlog::debug("Stopping HeartBeat");
   m_exitSignal.set_value();
@@ -47,5 +45,4 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
   }
 }
 
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot

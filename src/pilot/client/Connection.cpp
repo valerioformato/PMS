@@ -1,27 +1,28 @@
 #include <functional>
+#include <utility>
 
 #include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
 #include "pilot/client/Connection.h"
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 
-Connection::Connection(std::shared_ptr<WSclient> endpoint, const std::string &uri)
-    : m_endpoint{endpoint}, m_connection{nullptr}, m_status{State::Connecting}, m_uri{uri}, m_server("N/A") {
+Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
+    : m_endpoint{std::move(endpoint)}, m_connection{nullptr}, m_status{State::Connecting}, m_server("N/A") {
 
   std::error_code ec;
-  m_connection = m_endpoint->get_connection(uri, ec);
+  m_connection = m_endpoint->get_connection(std::string{uri}, ec);
 
   if (ec)
     spdlog::error("{}", ec.message());
 
-  m_connection->set_open_handler(std::bind(&Connection::on_open, this, m_endpoint.get(), std::placeholders::_1));
-  m_connection->set_fail_handler(std::bind(&Connection::on_fail, this, m_endpoint.get(), std::placeholders::_1));
-  m_connection->set_close_handler(std::bind(&Connection::on_close, this, m_endpoint.get(), std::placeholders::_1));
-  m_connection->set_message_handler(
-      std::bind(&Connection::on_message, this, std::placeholders::_1, std::placeholders::_2));
+  m_connection->set_open_handler([this](auto &&PH1) { on_open(m_endpoint.get(), std::forward<decltype(PH1)>(PH1)); });
+  m_connection->set_fail_handler([this](auto &&PH1) { on_fail(m_endpoint.get(), std::forward<decltype(PH1)>(PH1)); });
+  m_connection->set_close_handler([this](auto &&PH1) { on_close(m_endpoint.get(), std::forward<decltype(PH1)>(PH1)); });
+  m_connection->set_message_handler([this](auto &&PH1, auto &&PH2) {
+    on_message(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+  });
 
   m_endpoint->connect(m_connection);
   std::unique_lock<std::mutex> lk(cv_m);
@@ -80,5 +81,4 @@ std::string Connection::Send(const std::string &message) {
   return m_in_flight_message.get_future().get();
 }
 
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot

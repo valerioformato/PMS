@@ -1,8 +1,8 @@
 // c++ headers
 #include <fstream>
+#include <filesystem>
 
 // external dependencies
-#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 // our headers
@@ -10,10 +10,9 @@
 
 using json = nlohmann::json;
 
-namespace PMS {
-namespace Pilot {
-Config::Config(std::string fileName) {
-  std::ifstream infile(fileName);
+namespace PMS::Pilot {
+Config::Config(const std::string &fileName) {
+  std::ifstream infile{std::filesystem::path{fileName}};
   json configJson;
   infile >> configJson;
 
@@ -28,5 +27,4 @@ Config::Config(std::string fileName) {
   dummy = configJson["tasks"];
   std::for_each(dummy.begin(), dummy.end(), [this](auto doc) { tasks.emplace_back(doc["name"], doc["token"]); });
 }
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot

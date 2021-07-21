@@ -16,21 +16,19 @@
 // our headers
 #include "DBHandle.h"
 
-namespace PMS {
-namespace DB {
+namespace PMS::DB {
 class PoolHandle {
 public:
-  PoolHandle(const std::string &dbhost, const std::string &dbname);
-  PoolHandle(const std::string &dbhost, const std::string &dbname, const std::string &dbuser, const std::string &dbpwd);
+  PoolHandle(std::string_view dbhost, std::string_view dbname);
+  PoolHandle(std::string_view dbhost, std::string_view dbname, std::string_view dbuser, std::string_view dbpwd);
 
   ::PMS::DB::DBHandle DBHandle() { return ::PMS::DB::DBHandle{m_pool, m_dbName}; }
-  mongocxx::instance &Instance() { return m_mongo_instance; }
+  static mongocxx::instance &Instance() { return m_mongo_instance; }
 
 private:
   static mongocxx::instance m_mongo_instance;
   mongocxx::pool m_pool;
   std::string m_dbName;
 };
-} // namespace DB
-} // namespace PMS
+} // namespace PMS::DB
 #endif

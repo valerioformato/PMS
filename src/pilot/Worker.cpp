@@ -1,29 +1,27 @@
 // c++ headers
+#include <filesystem>
 #include <thread>
 
 // external headers
 #include <boost/process.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <bsoncxx/string/to_string.hpp>
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <fmt/os.h>
-#include <fmt/ostream.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 // our headers
 #include "common/Job.h"
-#include "common/JsonUtils.h"
 #include "pilot/HeartBeat.h"
 #include "pilot/Worker.h"
 
 using json = nlohmann::json;
 namespace bp = boost::process;
+namespace fs = std::filesystem;
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 
 bool Worker::Register() {
   // generate a pilot uuid
@@ -71,13 +69,13 @@ void Worker::Start(unsigned long int maxJobs) {
       spdlog::trace("Job: {}", job.dump(2));
 
       // prepare a sandbox directory for the job
-      boost::filesystem::path wdPath{fmt::format("job_{}", std::string(job["hash"]))};
-      boost::filesystem::create_directory(wdPath);
+      fs::path wdPath{fmt::format("job_{}", std::string(job["hash"]))};
+      fs::create_directory(wdPath);
 
       // make the shell script executable
-      boost::filesystem::path shellScriptPath = wdPath / "pilot_task.sh";
+      fs::path shellScriptPath = wdPath / "pilot_task.sh";
       auto shellScript = fmt::output_file(shellScriptPath.string());
-      boost::filesystem::permissions(shellScriptPath, boost::filesystem::owner_all | boost::filesystem::group_read);
+      fs::permissions(shellScriptPath, fs::perms::owner_all | fs::perms::group_read);
 
       shellScript.print("#! /bin/bash\n");
 
@@ -93,11 +91,11 @@ void Worker::Start(unsigned long int maxJobs) {
       }
 
       jobSTDIO finalIO;
-      if (job["stdout"] != "")
+      if (job.contains("stdout") && job["stdout"] != "")
         finalIO.stdout = job["stdout"];
-      if (job["stderr"] != "")
+      if (job.contains("stderr") && job["stderr"] != "")
         finalIO.stderr = job["stderr"];
-      if (job["stdin"] != "")
+      if (job.contains("stdin") && job["stdin"] != "")
         finalIO.stdin = job["stdin"];
 
       // local IO to the working directory, will copy later to the final location
@@ -108,7 +106,7 @@ void Worker::Start(unsigned long int maxJobs) {
         EnvInfoType envType = GetEnvType(job["env"]["type"]);
         switch (envType) {
         case EnvInfoType::Script:
-          shellScript.print(". {}\n", boost::filesystem::canonical(job["env"]["file"]).string());
+          shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
           break;
         case EnvInfoType::NONE:
           spdlog::error("Invalid env type {} is not supported", job["env"]["type"]);
@@ -117,16 +115,15 @@ void Worker::Start(unsigned long int maxJobs) {
         }
       }
 
-      boost::filesystem::path exePath{executable};
+      fs::path exePath{executable};
       spdlog::trace("{} ({}, {}, {})", exePath.string(), finalIO.stdin, finalIO.stdout, finalIO.stderr);
 
       spdlog::info("Worker: Spawning process");
       std::string executableWithArgs;
       if (arguments.empty()) {
-        executableWithArgs = fmt::format("{}", boost::filesystem::canonical(exePath).string());
+        executableWithArgs = fmt::format("{}", fs::canonical(exePath).string());
       } else {
-        executableWithArgs =
-            fmt::format("{} {}", boost::filesystem::canonical(exePath).string(), fmt::join(arguments, " "));
+        executableWithArgs = fmt::format("{} {}", fs::canonical(exePath).string(), fmt::join(arguments, " "));
       }
       spdlog::info("Worker:  - {}", executableWithArgs);
 
@@ -136,9 +133,9 @@ void Worker::Start(unsigned long int maxJobs) {
       shellScript.close();
 
       std::error_code procError;
-      bp::child proc(bp::search_path("sh"), shellScriptPath.filename(), bp::std_out > localIO.stdout,
-                     bp::std_err > localIO.stderr, bp::std_in < localIO.stdin, bp::start_dir(wdPath), bp::shell,
-                     procError);
+      bp::child proc(bp::search_path("sh"), shellScriptPath.filename().string(), bp::std_out > localIO.stdout,
+                     bp::std_err > localIO.stderr, bp::std_in < localIO.stdin, bp::start_dir(wdPath.string()),
+                     bp::shell, procError);
 
       // set status to "Running"
       UpdateJobStatus(job["hash"], job["task"], JobStatus::Running);
@@ -155,7 +152,7 @@ void Worker::Start(unsigned long int maxJobs) {
       }
 
       // remove temporary sandbox directory
-      boost::filesystem::remove_all(wdPath);
+      fs::remove_all(wdPath);
 
       lastJobFinished = std::chrono::system_clock::now();
 
@@ -196,11 +193,10 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   request["pilotUuid"] = boost::uuids::to_string(m_uuid);
   request["hash"] = hash;
   request["task"] = task;
-  request["status"] = JobStatusNames[status];
+  request["status"] = magic_enum::enum_name(status);
   auto reply = m_wsClient->Send(request);
 
   return reply == "Ok";
 }
 
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot

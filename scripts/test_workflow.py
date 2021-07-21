@@ -10,7 +10,6 @@ def getNextJob():
     global nJobs
     nJobs += 1
     return {
-        "task": "sometask",
         "dataset": "some_dataset",
         "user": "vformato",
         "executable": "testScript.sh",
@@ -39,7 +38,7 @@ async def send_to_orchestrator(websocket, msg):
     return response
 
 
-token = "424e7a05-fd7d-46ed-a1d0-d4dcc3364c87"
+token = "0141644c-5b31-4a0e-a069-c6d55e21542f"
 
 
 async def hello():
@@ -48,6 +47,10 @@ async def hello():
     taskName = "sometask"
 
     async with websockets.connect(uri) as websocket:
+        print("Invalid command...")
+        myReq = {"command": "puppamilafava", "task": taskName, "token": token}
+        await send_to_orchestrator(websocket, myReq)
+
         print("Cleaning the task...")
         myReq = {"command": "cleanTask", "task": taskName, "token": token}
         await send_to_orchestrator(websocket, myReq)

@@ -14,8 +14,7 @@
 // our headers
 #include "pilot/client/Client.h"
 
-namespace PMS {
-namespace Pilot {
+namespace PMS::Pilot {
 class HeartBeat {
 public:
   HeartBeat(boost::uuids::uuid uuid, std::shared_ptr<Client> wsClient)
@@ -31,6 +30,5 @@ private:
 
   void updateHB(std::future<void> exitSignal);
 };
-} // namespace Pilot
-} // namespace PMS
+} // namespace PMS::Pilot
 #endif
