@@ -362,7 +362,7 @@ void Director::UpdatePilots() {
     bsoncxx::document::value getPilotsQuery = bsoncxx::builder::basic::make_document(
         bsoncxx::builder::basic::kvp("lastHeartBeat", [](bsoncxx::builder::basic::sub_document sub_doc) {
           sub_doc.append(bsoncxx::builder::basic::kvp(
-              "$gt", bsoncxx::types::b_date(std::chrono::system_clock::now() - gracePeriod)));
+              "$lt", bsoncxx::types::b_date(std::chrono::system_clock::now() - gracePeriod)));
         }));
 
     auto queryResult = handle["pilots"].find(getPilotsQuery.view());

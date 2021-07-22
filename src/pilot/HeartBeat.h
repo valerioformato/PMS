@@ -22,11 +22,14 @@ public:
                                                                                 m_exitSignal.get_future()} {}
   ~HeartBeat();
 
+  [[nodiscard]] bool IsAlive() { return m_alive; }
+
 private:
   boost::uuids::uuid m_uuid;
   std::shared_ptr<Client> m_wsClient;
   std::promise<void> m_exitSignal;
   std::thread m_thread;
+  bool m_alive = false;
 
   void updateHB(std::future<void> exitSignal);
 };

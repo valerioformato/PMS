@@ -4,7 +4,7 @@
 // c++ headers
 #include <string_view>
 
-//external dependencies
+// external dependencies
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls_client.hpp>
 
@@ -31,6 +31,11 @@ public:
   [[nodiscard]] State get_status() const { return m_status; }
 
   std::string Send(const std::string &message);
+
+  class FailedConnectionException : public websocketpp::exception {
+  public:
+    FailedConnectionException(const std::string &what_arg) : websocketpp::exception{what_arg} {};
+  };
 
 private:
   std::shared_ptr<WSclient> m_endpoint;

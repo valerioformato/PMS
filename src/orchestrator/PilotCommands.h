@@ -12,6 +12,8 @@
 // external dependencies
 #include <nlohmann/json.hpp>
 
+#include "common/Job.h"
+
 namespace PMS::Orchestrator {
 
 using namespace std::string_view_literals;

@@ -330,9 +330,11 @@ PilotCommand Server::toPilotCommand(const json &msg) {
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ClaimJob::requiredFields);
     break;
   case PilotCommandType::UpdateJobStatus:
-    if (ValidateJsonCommand<UpdateJobStatus>(msg) && magic_enum::enum_cast<JobStatus>(msg["status"]).has_value())
-      return OrchCommand<UpdateJobStatus>{magic_enum::enum_cast<JobStatus>(msg["status"]).value(), msg["pilotUuid"],
-                                          msg["hash"], msg["task"]};
+    if (ValidateJsonCommand<UpdateJobStatus>(msg) &&
+        magic_enum::enum_cast<JobStatus>(msg["status"].get<std::string_view>()).has_value())
+      return OrchCommand<UpdateJobStatus>{
+          magic_enum::enum_cast<JobStatus>(msg["status"].get<std::string_view>()).value(), msg["pilotUuid"],
+          msg["hash"], msg["task"]};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", UpdateJobStatus::requiredFields);
