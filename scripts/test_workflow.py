@@ -38,7 +38,7 @@ async def send_to_orchestrator(websocket, msg):
     return response
 
 
-token = "0141644c-5b31-4a0e-a069-c6d55e21542f"
+token = "d06dfaba-9e30-412d-8d9a-eb765351a19b"
 
 
 async def hello():

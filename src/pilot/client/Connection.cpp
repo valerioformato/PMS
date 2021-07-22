@@ -2,6 +2,7 @@
 #include <utility>
 
 #include <fmt/format.h>
+#include <magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
 #include "pilot/client/Connection.h"
@@ -29,7 +30,10 @@ Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
   cv.wait(lk);
 }
 
-Connection::~Connection() { m_endpoint->close(get_hdl(), websocketpp::close::status::normal, ""); }
+Connection::~Connection() {
+  if (m_status == State::Open)
+    m_endpoint->close(get_hdl(), websocketpp::close::status::normal, "");
+}
 
 void Connection::on_open(WSclient *c, websocketpp::connection_hdl hdl) {
   m_status = State::Open;
@@ -74,8 +78,15 @@ std::string Connection::Send(const std::string &message) {
   m_endpoint->send(get_hdl(), message, websocketpp::frame::opcode::text, ec);
 
   if (ec) {
-    m_in_flight_message.set_exception(
-        std::make_exception_ptr(std::runtime_error(fmt::format("Error sending message: {}", ec.message()))));
+    switch (m_status) {
+    case State::Failed:
+      m_in_flight_message.set_exception(std::make_exception_ptr(FailedConnectionException{"Connection failed"}));
+      break;
+    default:
+      m_in_flight_message.set_exception(
+          std::make_exception_ptr(std::runtime_error(fmt::format("Error sending message: {}", ec.message()))));
+      break;
+    }
   }
 
   return m_in_flight_message.get_future().get();

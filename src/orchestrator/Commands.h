@@ -5,8 +5,12 @@
 #ifndef PMS_COMMANDS_H
 #define PMS_COMMANDS_H
 
+#include <nlohmann/json.hpp>
+
 #include "orchestrator/PilotCommands.h"
 #include "orchestrator/UserCommands.h"
+
+using json = nlohmann::json;
 
 namespace PMS::Orchestrator {
 template <typename Command> struct OrchCommand { Command cmd; };

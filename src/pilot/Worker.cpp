@@ -36,7 +36,14 @@ bool Worker::Register() {
     req["tasks"].emplace_back(json::object({{"name", task.first}, {"token", task.second}}));
   }
 
-  json reply = json::parse(m_wsClient->Send(req));
+  json reply;
+  try {
+    reply = json::parse(m_wsClient->Send(req));
+  } catch (const Connection::FailedConnectionException &e) {
+    spdlog::error("Failed connection to server...");
+    return false;
+  }
+
   fmt::print("{}\n", reply.dump(2));
   return reply["validTasks"].size() > 0;
 }
@@ -62,7 +69,13 @@ void Worker::Start(unsigned long int maxJobs) {
     request["command"] = "p_claimJob";
     request["pilotUuid"] = boost::uuids::to_string(m_uuid);
 
-    auto job = json::parse(m_wsClient->Send(request));
+    json job;
+    try {
+      job = json::parse(m_wsClient->Send(request));
+    } catch (const Connection::FailedConnectionException &e) {
+      if (!hb.IsAlive())
+        break;
+    }
 
     if (!job.empty()) {
       spdlog::info("Worker: got a new job");

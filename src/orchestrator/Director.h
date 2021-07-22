@@ -65,6 +65,7 @@ private:
   void JobInsert();
   void JobTransfer();
   void UpdateTasks();
+  void UpdatePilots();
   void DBSync();
 
   std::vector<std::string> GetPilotTasks(std::string_view uuid);

@@ -1,3 +1,6 @@
+// c++ headers
+#include <string_view>
+
 // external headers
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>

@@ -4,6 +4,7 @@
 // c++ headers
 #include <future>
 #include <memory>
+#include <string_view>
 #include <thread>
 
 // external dependencies
@@ -11,8 +12,8 @@
 #include <websocketpp/server.hpp>
 
 // our headers
-#include "orchestrator/Director.h"
 #include "orchestrator/Commands.h"
+#include "orchestrator/Director.h"
 
 using WSserver = websocketpp::server<websocketpp::config::asio>;
 
@@ -36,12 +37,12 @@ private:
 
   enum class UserCommandType { SubmitJob, CreateTask, CleanTask, DeclareTaskDependency };
   std::string HandleCommand(UserCommand &&command);
-  static UserCommand toUserCommand(const json& msg);
+  static UserCommand toUserCommand(const json &msg);
   static std::unordered_map<std::string_view, UserCommandType> m_commandLUT;
 
   enum class PilotCommandType { ClaimJob, UpdateJobStatus, RegisterNewPilot, UpdateHeartBeat, DeleteHeartBeat };
   std::string HandleCommand(PilotCommand &&command);
-  static PilotCommand toPilotCommand(const json& msg);
+  static PilotCommand toPilotCommand(const json &msg);
   static std::unordered_map<std::string_view, PilotCommandType> m_pilot_commandLUT;
 
   std::shared_ptr<spdlog::logger> m_logger;

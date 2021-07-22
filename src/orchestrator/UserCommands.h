@@ -12,6 +12,7 @@
 // external dependencies
 #include <nlohmann/json.hpp>
 
+using json = nlohmann::json;
 namespace PMS::Orchestrator {
 
 using namespace std::string_view_literals;

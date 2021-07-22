@@ -19,6 +19,7 @@ namespace PMS::Orchestrator {
 void Director::Start() {
   m_backPoolHandle->DBHandle().SetupDBCollections();
 
+  m_threads.emplace_back(&Director::UpdatePilots, this);
   m_threads.emplace_back(&Director::UpdateTasks, this);
   m_threads.emplace_back(&Director::JobInsert, this);
   m_threads.emplace_back(&Director::JobTransfer, this);
@@ -290,10 +291,6 @@ void Director::UpdateTasks() {
   do {
     m_logger->debug("Updating tasks");
 
-    // the pipeline must be re-created from scratch
-    // TODO: rework to query the "tasks" collection
-    mongocxx::pipeline aggregationPipeline;
-
     // get list of all tasks
     auto tasksResult = handle["tasks"].find({});
 
@@ -349,6 +346,53 @@ void Director::UpdateTasks() {
 }
 
 using time_point = std::chrono::system_clock::time_point;
+
+void Director::UpdatePilots() {
+  static constexpr auto coolDown = std::chrono::seconds(60);
+
+  static std::chrono::system_clock::duration gracePeriod = std::chrono::hours{1};
+
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  do {
+    // this is why we prefer using nlohmann json wherever possible...
+    // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
+    // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
+    // no possible issues or strange mis-conversions when this data is handled by the DB.
+    bsoncxx::document::value getPilotsQuery = bsoncxx::builder::basic::make_document(
+        bsoncxx::builder::basic::kvp("lastHeartBeat", [](bsoncxx::builder::basic::sub_document sub_doc) {
+          sub_doc.append(bsoncxx::builder::basic::kvp(
+              "$lt", bsoncxx::types::b_date(std::chrono::system_clock::now() - gracePeriod)));
+        }));
+
+    auto queryResult = handle["pilots"].find(getPilotsQuery.view());
+    for (const auto &_pilot : queryResult) {
+      json pilot = JsonUtils::bson2json(_pilot);
+      m_logger->debug("Removing dead pilot {}", pilot["uuid"]);
+
+      json deleteQuery;
+      deleteQuery["uuid"] = pilot["uuid"];
+
+      handle["pilots"].delete_one(JsonUtils::json2bson(deleteQuery));
+
+      json jobQuery;
+      jobQuery["pilotUuid"] = pilot["uuid"];
+      jobQuery["status"] = magic_enum::enum_name(JobStatus::Running);
+
+      auto queryResult = handle["jobs"].find_one(JsonUtils::json2bson(jobQuery));
+      if (queryResult) {
+        json job = JsonUtils::bson2json(queryResult.value());
+        auto result = handle.UpdateJobStatus(job["hash"].get<std::string_view>(), job["task"].get<std::string_view>(),
+                                             JobStatus::Error);
+
+        if (!result) {
+          m_logger->warn("Couldn't update status for job {}, claimed by dead pilot {}", job["hash"], pilot["uuid"]);
+        }
+      }
+    }
+
+  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
+}
 
 void Director::DBSync() {
   static constexpr auto coolDown = std::chrono::seconds(60);
