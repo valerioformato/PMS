@@ -377,6 +377,7 @@ void Director::UpdatePilots() {
 
       json jobQuery;
       jobQuery["pilotUuid"] = pilot["uuid"];
+      jobQuery["status"] = magic_enum::enum_name(JobStatus::Running);
 
       auto queryResult = handle["jobs"].find_one(JsonUtils::json2bson(jobQuery));
       if (queryResult) {
