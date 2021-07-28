@@ -7,13 +7,13 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # https://github.com/Neargye/magic_enum.git
 # === magic_enum ===
 FetchContent_Declare(
-        mamgic_enum
+        magic_enum
         GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
         GIT_TAG v0.7.3)
-FetchContent_GetProperties(mamgic_enum)
-if(NOT mamgic_enum_POPULATED)
-  FetchContent_Populate(mamgic_enum)
-  add_subdirectory(${mamgic_enum_SOURCE_DIR} ${mamgic_enum_BINARY_DIR} EXCLUDE_FROM_ALL)
+FetchContent_GetProperties(magic_enum)
+if(NOT magic_enum_POPULATED)
+  FetchContent_Populate(magic_enum)
+  add_subdirectory(${magic_enum_SOURCE_DIR} ${magic_enum_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
 # === fmt ===
@@ -83,21 +83,11 @@ add_library(PMSWebsockets INTERFACE)
 target_include_directories(PMSWebsockets INTERFACE ${websocketpp_SOURCE_DIR})
 target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost::regex)
 
-
-# === XRootD ===
-FetchContent_Declare(xrootd
-GIT_REPOSITORY https://github.com/xrootd/xrootd.git
-  GIT_TAG v5.3.0)
-FetchContent_GetProperties(xrootd)
-if(NOT xrootd_POPULATED)
-  FetchContent_Populate(xrootd)
-  add_subdirectory(${xrootd_SOURCE_DIR} ${xrootd_BINARY_DIR} EXCLUDE_FROM_ALL)
-endif()
-# add interface library with all xrootd dependencies
-add_library(PMSxrootd INTERFACE)
-target_include_directories(PMSxrootd INTERFACE ${xrootd_SOURCE_DIR})
-target_link_libraries(PMSxrootd INTERFACE XrdCl XrdAppUtils XrdUtils)
-
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake/Modules)
+find_package(XROOTD REQUIRED)
+add_library(PMSXrootd INTERFACE)
+target_include_directories(PMSXrootd INTERFACE ${XROOTD_INCLUDE_DIR})
+target_link_libraries(PMSXrootd INTERFACE ${XROOTD_LIBRARIES})
 
 find_package(bsoncxx REQUIRED)
 find_package(mongocxx REQUIRED 3.6.0)
