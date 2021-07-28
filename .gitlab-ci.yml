@@ -8,7 +8,7 @@ stages:
   script:
       - mkdir build
       - cd build
-      - cmake -GNinja -DCMAKE_PREFIX_PATH=/PMS/software/install/mongo-cxx-driver:/PMS/software/install/xrootd ../
+      - cmake -GNinja -DCMAKE_PREFIX_PATH=/PMS/software/install/mongo-cxx-driver;/PMS/software/install/xrootd ../
       - ninja
   needs: []
 
