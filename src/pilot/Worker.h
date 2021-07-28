@@ -4,6 +4,7 @@
 // c++ headers
 #include <map>
 #include <memory>
+#include <string_view>
 #include <thread>
 #include <utility>
 
@@ -12,10 +13,12 @@
 #include <nlohmann/json.hpp>
 
 // our headers
+#include "common/Job.h"
 #include "pilot/PilotConfig.h"
 #include "pilot/client/Client.h"
 
 using json = nlohmann::json;
+using namespace std::string_view_literals;
 
 namespace PMS::Pilot {
 class Worker {
@@ -29,10 +32,22 @@ public:
 
 private:
   enum class EnvInfoType { NONE, Script, List };
-  std::map<EnvInfoType, std::string> m_envInfoNames = {{EnvInfoType::Script, "script"}, {EnvInfoType::List, "list"}};
+  std::map<EnvInfoType, std::string_view> m_envInfoNames = {{EnvInfoType::Script, "script"sv},
+                                                            {EnvInfoType::List, "list"sv}};
   EnvInfoType GetEnvType(const std::string &envName);
 
   bool UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status);
+
+  enum class FileTransferType { Inbound, Outbound };
+  enum class FileTransferProtocol { local, xrootd };
+  struct FileTransferInfo {
+    FileTransferType type;
+    FileTransferProtocol protocol;
+    std::string fileName;
+    std::string remotePath;
+  };
+  bool FileTransfer(FileTransferInfo ftInfo);
+  std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, const json &);
 
   struct jobSTDIO {
     std::string stdin;

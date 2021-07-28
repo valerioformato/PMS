@@ -9,6 +9,7 @@
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <fmt/os.h>
+#include <magic_enum.hpp>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -128,6 +129,20 @@ void Worker::Start(unsigned long int maxJobs) {
         }
       }
 
+      // check for inbound file transfers
+      if (job.contains("input")) {
+        auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"]);
+        for (const auto &ftJob : fts) {
+          spdlog::info("Attempting to transfer {} from {} ({} protocol)", ftJob.fileName, ftJob.remotePath,
+                       magic_enum::enum_name(ftJob.protocol));
+          if (FileTransfer(ftJob)) {
+            spdlog::info("Transfer succeeded");
+          } else {
+            spdlog::error("Transfer failed");
+          }
+        }
+      }
+
       fs::path exePath{executable};
       spdlog::trace("{} ({}, {}, {})", exePath.string(), finalIO.stdin, finalIO.stdout, finalIO.stderr);
 
@@ -156,12 +171,25 @@ void Worker::Start(unsigned long int maxJobs) {
       proc.wait();
 
       if (procError) {
-        spdlog::trace("procerr: {} ({})", procError.message(), procError.value());
         spdlog::error("Worker: Job exited with an error: {}", procError.message());
         UpdateJobStatus(job["hash"], job["task"], JobStatus::Error);
       } else {
         spdlog::info("Worker: Job done");
         UpdateJobStatus(job["hash"], job["task"], JobStatus::Done);
+
+        // check for outbound file transfers
+        if (job.contains("output")) {
+          auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["output"]);
+          for (const auto &ftJob : fts) {
+            spdlog::info("Attempting to transfer {} to {} ({} protocol)", ftJob.fileName, ftJob.remotePath,
+                         magic_enum::enum_name(ftJob.protocol));
+            if (FileTransfer(ftJob)) {
+              spdlog::info("Transfer succeeded");
+            } else {
+              spdlog::error("Transfer failed");
+            }
+          }
+        }
       }
 
       // remove temporary sandbox directory
