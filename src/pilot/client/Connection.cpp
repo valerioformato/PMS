@@ -42,7 +42,7 @@ void Connection::on_open(WSclient *c, websocketpp::connection_hdl hdl) {
 
   WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
   m_server = con->get_response_header("Server");
-  spdlog::debug("Connection opened with server version {}", m_server);
+  spdlog::trace("Connection opened with server version {}", m_server);
 }
 
 void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
@@ -61,7 +61,7 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
   m_status = State::Closed;
   WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
 
-  spdlog::debug("close code: {} ({}), close reason: {}", con->get_remote_close_code(),
+  spdlog::trace("close code: {} ({}), close reason: {}", con->get_remote_close_code(),
                 websocketpp::close::status::get_string(con->get_remote_close_code()), con->get_remote_close_reason());
 }
 

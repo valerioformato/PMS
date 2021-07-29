@@ -29,9 +29,9 @@ def getNextJob():
         "input": {
             "files": [
                 {
-                    "protocol": "xrootd",
+                    "protocol": "local",
                     "file": "pippo.txt",
-                    "source": "root://serverino.pippo.com///gpfs/sarcazzo"
+                    "source": "/Users/vformato/Workdir/devel/PMS/source/PMS/scripts/test"
                 }
             ]
         },
@@ -39,8 +39,8 @@ def getNextJob():
             "files": [
                 {
                     "protocol": "local",
-                    "file": "pippo.txt",
-                    "destination": "/gpfs/sarcazzo"
+                    "file": f"pippo{nJobs}.txt",
+                    "destination": "/Users/vformato/Workdir/devel/PMS/source/PMS/scripts/test"
                 }
             ]
         },

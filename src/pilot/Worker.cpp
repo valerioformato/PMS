@@ -137,7 +137,7 @@ void Worker::Start(unsigned long int maxJobs) {
 
       // check for inbound file transfers
       if (job.contains("input")) {
-        auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"]);
+        auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"], wdPath.string());
         for (const auto &ftJob : fts) {
           spdlog::info("Attempting to transfer {} from {} ({} protocol)", ftJob.fileName, ftJob.remotePath,
                        magic_enum::enum_name(ftJob.protocol));
@@ -188,7 +188,7 @@ void Worker::Start(unsigned long int maxJobs) {
 
         // check for outbound file transfers
         if (job.contains("output")) {
-          auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"]);
+          auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
           for (const auto &ftJob : fts) {
             spdlog::info("Attempting to transfer {} to {} ({} protocol)", ftJob.fileName, ftJob.remotePath,
                          magic_enum::enum_name(ftJob.protocol));

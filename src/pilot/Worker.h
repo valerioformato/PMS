@@ -45,9 +45,12 @@ private:
     FileTransferProtocol protocol;
     std::string fileName;
     std::string remotePath;
+    std::string currentPath;
   };
-  bool FileTransfer(FileTransferInfo ftInfo);
-  std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, const json &);
+  bool FileTransfer(const FileTransferInfo &ftInfo);
+  static std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, const json &, std::string_view);
+  static bool LocalFileTransfer(const FileTransferInfo &ftInfo);
+
 
   struct jobSTDIO {
     std::string stdin;
