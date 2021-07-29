@@ -21,10 +21,7 @@ Config::Config(const std::string &fileName) {
   if (configJson.contains("serverPort"))
     serverPort = configJson["serverPort"];
 
-  auto dummy = configJson["tokens"];
-  std::copy(dummy.begin(), dummy.end(), std::back_inserter(tokens));
-
-  dummy = configJson["tasks"];
+  auto dummy = configJson["tasks"];
   std::for_each(dummy.begin(), dummy.end(), [this](auto doc) { tasks.emplace_back(doc["name"], doc["token"]); });
 }
 } // namespace PMS::Pilot

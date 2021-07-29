@@ -10,11 +10,11 @@ set(CMAKE_SKIP_BUILD_RPATH FALSE)
 # when building, don't use the install RPATH already (but later on when installing)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
-if(NOT DEFINED CMAKE_INSTALL_RPATH)
-  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-else()
-  message(WARNING "Manually specified install rpath: ${CMAKE_INSTALL_RPATH}")
-endif()
+if (NOT DEFINED CMAKE_INSTALL_RPATH)
+    set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+else ()
+    message(WARNING "Manually specified install rpath: ${CMAKE_INSTALL_RPATH}")
+endif ()
 
 # add the automatically determined parts of the RPATH which point to directories outside the build tree to the install
 # RPATH
@@ -28,10 +28,25 @@ set(CMAKE_CXX_STANDARD 17)
 # -------------------------- Begin project --------------------------
 # -------------------------------------------------------------------
 
-if(DEFINED ASAN)
-  add_compile_options(-fsanitize=address -fsanitize=leak)
-  add_link_options(-fsanitize=address -fsanitize=leak)
-endif()
+option(ASAN "Enable Address sanitizer" OFF)
+option(TSAN "Enable Thread sanitizer" OFF)
+
+if (ASAN)
+    message(STATUS "Enabling Address sanitizer")
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+
+    if (NOT APPLE)
+        add_compile_options(-fsanitize=leak)
+        add_link_options(-fsanitize=leak)
+    endif ()
+endif ()
+
+if (TSAN)
+    message(STATUS "Enabling Thread sanitizer")
+    add_compile_options(-fsanitize=thread)
+    add_link_options(-fsanitize=thread)
+endif ()
 
 add_compile_options(-Wall -Wextra)
 

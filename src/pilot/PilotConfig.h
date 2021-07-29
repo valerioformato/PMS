@@ -13,7 +13,6 @@ struct Config {
   std::vector<std::pair<std::string, std::string>> tasks;
   std::string server;
   unsigned int serverPort = 9003;
-  std::vector<std::string> tokens;
 };
 } // namespace PMS::Pilot
 

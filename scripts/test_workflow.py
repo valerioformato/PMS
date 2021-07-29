@@ -26,6 +26,24 @@ def getNextJob():
             "cnaf",
             "cern"
         ],
+        "input": {
+            "files": [
+                {
+                    "protocol": "xrootd",
+                    "file": "pippo.txt",
+                    "source": "root://serverino.pippo.com///gpfs/sarcazzo"
+                }
+            ]
+        },
+        "output": {
+            "files": [
+                {
+                    "protocol": "local",
+                    "file": "pippo.txt",
+                    "destination": "/gpfs/sarcazzo"
+                }
+            ]
+        },
         "jobName": "thisIsATestJobForOutput"
     }
 
@@ -38,7 +56,7 @@ async def send_to_orchestrator(websocket, msg):
     return response
 
 
-token = "d06dfaba-9e30-412d-8d9a-eb765351a19b"
+token = "f85a1e5c-580a-4768-9c88-686a1c813615"
 
 
 async def hello():
@@ -70,6 +88,7 @@ async def hello():
 
             print("Sending job...")
             await send_to_orchestrator(websocket, myReq)
+
 
 asyncio.run(hello())
 

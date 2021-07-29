@@ -10,8 +10,7 @@
 namespace PMS::Pilot {
 
 Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
-    : m_endpoint{std::move(endpoint)}, m_connection{nullptr}, m_status{State::Connecting}, m_server("N/A") {
-
+    : m_status{State::Connecting}, m_endpoint{std::move(endpoint)}, m_connection{nullptr}, m_server("N/A") {
   std::error_code ec;
   m_connection = m_endpoint->get_connection(std::string{uri}, ec);
 

@@ -15,10 +15,14 @@ namespace PMS::Pilot {
 bool Worker::FileTransfer(FileTransferInfo ftInfo) {
   switch (ftInfo.protocol) {
   case FileTransferProtocol::local:
+    spdlog::debug("Will attempt local file transfer");
     break;
   case FileTransferProtocol::xrootd:
+    spdlog::debug("Will attempt XRootD file transfer");
     break;
   }
+
+  return true;
 }
 
 std::vector<Worker::FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType type, const json &request) {
@@ -55,7 +59,7 @@ std::vector<Worker::FileTransferInfo> Worker::ParseFileTransferRequest(FileTrans
       }
     }
 
-    auto protocol = magic_enum::enum_cast<FileTransferProtocol>(doc["protocol"]);
+    auto protocol = magic_enum::enum_cast<FileTransferProtocol>(doc["protocol"].get<std::string_view>());
     if (!protocol.has_value()) {
       spdlog::error("Invalid file transfer protocol: {}", doc["protocol"]);
     }

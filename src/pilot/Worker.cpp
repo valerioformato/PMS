@@ -116,11 +116,17 @@ void Worker::Start(unsigned long int maxJobs) {
       jobSTDIO localIO{finalIO.stdin.empty() ? "/dev/null" : finalIO.stdin,
                        fmt::format("{}/stdout.txt", wdPath.string()), fmt::format("{}/stderr.txt", wdPath.string())};
 
+      // TODO: factorize env preparation in helper function
       if (!job["env"].empty()) {
         EnvInfoType envType = GetEnvType(job["env"]["type"]);
         switch (envType) {
         case EnvInfoType::Script:
-          shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
+          try {
+            shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
+          } catch (const fs::filesystem_error &e) {
+            spdlog::error("{}", e.what());
+            continue;
+          }
           break;
         case EnvInfoType::NONE:
           spdlog::error("Invalid env type {} is not supported", job["env"]["type"]);
@@ -144,6 +150,9 @@ void Worker::Start(unsigned long int maxJobs) {
       }
 
       fs::path exePath{executable};
+      if(!fs::exists(exePath)){
+        spdlog::error("Cannot find file {}", exePath.string());
+      }
       spdlog::trace("{} ({}, {}, {})", exePath.string(), finalIO.stdin, finalIO.stdout, finalIO.stderr);
 
       spdlog::info("Worker: Spawning process");
@@ -179,7 +188,7 @@ void Worker::Start(unsigned long int maxJobs) {
 
         // check for outbound file transfers
         if (job.contains("output")) {
-          auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["output"]);
+          auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"]);
           for (const auto &ftJob : fts) {
             spdlog::info("Attempting to transfer {} to {} ({} protocol)", ftJob.fileName, ftJob.remotePath,
                          magic_enum::enum_name(ftJob.protocol));
