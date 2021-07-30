@@ -16,6 +16,7 @@
 #include "common/Job.h"
 #include "pilot/PilotConfig.h"
 #include "pilot/client/Client.h"
+#include "pilot/filetransfer/FileTransferQueue.h"
 
 using json = nlohmann::json;
 using namespace std::string_view_literals;
@@ -38,19 +39,7 @@ private:
 
   bool UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status);
 
-  enum class FileTransferType { Inbound, Outbound };
-  enum class FileTransferProtocol { local, xrootd };
-  struct FileTransferInfo {
-    FileTransferType type;
-    FileTransferProtocol protocol;
-    std::string fileName;
-    std::string remotePath;
-    std::string currentPath;
-  };
-  bool FileTransfer(const FileTransferInfo &ftInfo);
   static std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, const json &, std::string_view);
-  static bool LocalFileTransfer(const FileTransferInfo &ftInfo);
-
 
   struct jobSTDIO {
     std::string stdin;

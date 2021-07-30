@@ -139,18 +139,12 @@ void Worker::Start(unsigned long int maxJobs) {
       if (job.contains("input")) {
         auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"], wdPath.string());
         for (const auto &ftJob : fts) {
-          spdlog::info("Attempting to transfer {} from {} ({} protocol)", ftJob.fileName, ftJob.remotePath,
-                       magic_enum::enum_name(ftJob.protocol));
-          if (FileTransfer(ftJob)) {
-            spdlog::info("Transfer succeeded");
-          } else {
-            spdlog::error("Transfer failed");
-          }
+          // TODO: do it :)
         }
       }
 
       fs::path exePath{executable};
-      if(!fs::exists(exePath)){
+      if (!fs::exists(exePath)) {
         spdlog::error("Cannot find file {}", exePath.string());
       }
       spdlog::trace("{} ({}, {}, {})", exePath.string(), finalIO.stdin, finalIO.stdout, finalIO.stderr);
@@ -190,13 +184,7 @@ void Worker::Start(unsigned long int maxJobs) {
         if (job.contains("output")) {
           auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
           for (const auto &ftJob : fts) {
-            spdlog::info("Attempting to transfer {} to {} ({} protocol)", ftJob.fileName, ftJob.remotePath,
-                         magic_enum::enum_name(ftJob.protocol));
-            if (FileTransfer(ftJob)) {
-              spdlog::info("Transfer succeeded");
-            } else {
-              spdlog::error("Transfer failed");
-            }
+            // TODO: do it :)
           }
         }
       }
@@ -247,6 +235,57 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   auto reply = m_wsClient->Send(request);
 
   return reply == "Ok";
+}
+
+std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType type, const json &request,
+                                                               std::string_view currentPath) {
+  std::vector<FileTransferInfo> result;
+
+  if (!request.contains("files")) {
+    spdlog::error(R"(No "files" field present in file transfer request.)");
+    return result;
+  }
+
+  constexpr static std::array requiredFields{"file"sv, "protocol"sv};
+  std::vector<std::string_view> additionalFields;
+  switch (type) {
+  case FileTransferType::Inbound:
+    additionalFields = {"source"};
+    break;
+  case FileTransferType::Outbound:
+    additionalFields = {"destination"};
+    break;
+  }
+
+  // TODO: Check if there are wildcards in the request and "expand" them accordingly
+  // i.e. only if they refer to a local filesystem
+  for (const auto &doc : request["files"]) {
+    for (const auto field : requiredFields) {
+      if (!doc.contains(field)) {
+        spdlog::error("Missing file transfer field: \"{}\"", field);
+        continue;
+      }
+    }
+
+    for (const auto field : additionalFields) {
+      if (!doc.contains(field)) {
+        spdlog::error("Missing file transfer field: \"{}\"", field);
+        continue;
+      }
+    }
+
+    auto protocol = magic_enum::enum_cast<FileTransferProtocol>(doc["protocol"].get<std::string_view>());
+    if (!protocol.has_value()) {
+      spdlog::error("Invalid file transfer protocol: {}", doc["protocol"]);
+    }
+
+    // cannot rely on emplace_back + aggregate initialization here until c++20
+    result.push_back(FileTransferInfo{type, protocol.value(), doc["file"],
+                                      type == FileTransferType::Inbound ? doc["source"] : doc["destination"],
+                                      std::string{currentPath}});
+  }
+
+  return result;
 }
 
 } // namespace PMS::Pilot

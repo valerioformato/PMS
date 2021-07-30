@@ -5,7 +5,8 @@ set(PMSPilot_src
     Worker.cpp
     client/Client.cpp
     client/Connection.cpp
-        FileTransfer.cpp)
+    filetransfer/FileTransferQueue.cpp
+    )
 
 add_executable(PMSPilot ${PMSPilot_src})
 target_include_directories(PMSPilot SYSTEM PRIVATE ${Boost_INCLUDE_DIR})
