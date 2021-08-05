@@ -127,6 +127,7 @@ if(XROOTD_FOUND)
     endif ()
 
     # libXrdClient (old client; will be dropped at some point)
+    if(${xrdversnum} LESS 500000000)
     find_library(XROOTD_XrdClient_LIBRARY
        NAMES XrdClient
        HINTS ${searchpath}
@@ -136,6 +137,8 @@ if(XROOTD_FOUND)
     else ()
        set(XROOTD_NOOLDCLNT TRUE)
     endif ()
+    endif ()
+
 
     # libXrdCl
     if(${xrdversnum} GREATER 300030000)
@@ -145,6 +148,7 @@ if(XROOTD_FOUND)
           PATH_SUFFIXES lib)
        if (XROOTD_XrdCl_LIBRARY)
           list(APPEND XROOTD_LIBRARIES ${XROOTD_XrdCl_LIBRARY})
+          get_filename_component(XROOTD_LIB_DIR ${XROOTD_XrdCl_LIBRARY} DIRECTORY)
        endif ()
     endif ()
 
@@ -154,7 +158,8 @@ if(XROOTD_FOUND)
     set(XROOTD_FOUND TRUE)
     if(NOT XROOTD_FIND_QUIETLY )
       message(STATUS "             include_dirs: ${XROOTD_INCLUDE_DIR}")
-      message(STATUS "             libraries: ${XROOTD_LIBRARIES}")
+      message(STATUS "             lib_dirs: ${XROOTD_LIB_DIR}")
+    # message(STATUS "             libraries: ${XROOTD_LIBRARIES}")
     endif()
   else ()
     set(XROOTD_FOUND FALSE)
@@ -162,6 +167,7 @@ if(XROOTD_FOUND)
 endif()
 
 mark_as_advanced(XROOTD_INCLUDE_DIR
+                 XROOTD_LIB_DIR
                  XROOTD_XrdMain_LIBRARY
                  XROOTD_XrdUtils_LIBRARY
                  XROOTD_XrdClient_LIBRARY

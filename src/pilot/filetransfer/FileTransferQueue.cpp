@@ -35,16 +35,6 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
   return true;
 }
 
-bool FileTransferQueue::XRootDFileTransfer(const FileTransferInfo &ftInfo) {
-#ifndef ENABLE_XROOTD
-  spdlog::error("XRootD file transfer not enabled.");
-  return false;
-#else
-  // TODO: Run xrdcp in a process
-  return true;
-#endif
-}
-
 void FileTransferQueue::Process() {
   // put all local file transfers first
   auto lastLocalJobIt = std::partition(begin(m_queue), end(m_queue),
@@ -53,8 +43,11 @@ void FileTransferQueue::Process() {
   // run the local file transfers
   std::for_each(begin(m_queue), lastLocalJobIt, [](const auto &ft) { LocalFileTransfer(ft); });
 
+#ifdef ENABLE_XROOTD
   // run XRootD file transfers
-  std::for_each(lastLocalJobIt, end(m_queue), [](const auto &ft) { XRootDFileTransfer(ft); });
+  std::for_each(lastLocalJobIt, end(m_queue), [this](const auto &ft) { AddXRootDFileTransfer(ft); });
+  RunXRootDFileTransfer();
+#endif
 }
 
 } // namespace PMS::Pilot

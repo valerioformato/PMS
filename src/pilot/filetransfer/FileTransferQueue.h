@@ -5,6 +5,11 @@
 #include <string>
 #include <vector>
 
+// external dependencies
+#ifdef ENABLE_XROOTD
+#include <XrdCl/XrdClCopyProcess.hh>
+#endif
+
 namespace PMS::Pilot {
 
 enum class FileTransferType { Inbound, Outbound };
@@ -29,7 +34,12 @@ private:
   std::vector<FileTransferInfo> m_queue;
 
   static bool LocalFileTransfer(const FileTransferInfo &ftInfo);
-  static bool XRootDFileTransfer(const FileTransferInfo &ftInfo);
+#ifdef ENABLE_XROOTD
+  std::vector<XrdCl::PropertyList *> m_results;
+  XrdCl::CopyProcess m_xrdProcess;
+  bool AddXRootDFileTransfer(const FileTransferInfo &ftInfo);
+  bool RunXRootDFileTransfer();
+#endif
 };
 } // namespace PMS::Pilot
 

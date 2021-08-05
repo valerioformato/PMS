@@ -90,7 +90,12 @@ if(XROOTD_FOUND)
   message(STATUS "Enabling support for XRootD file transfer")
   target_compile_definitions(PMSXrootd INTERFACE ENABLE_XROOTD)
   target_include_directories(PMSXrootd INTERFACE ${XROOTD_INCLUDE_DIR})
-  target_link_libraries(PMSXrootd INTERFACE ${XROOTD_LIBRARIES})
+  target_link_directories(PMSXrootd INTERFACE ${XROOTD_LIB_DIR})
+  if(NOT APPLE)
+    # we force the use of RPATH instead of RUNPATH so that all XRootD libraries will be found automatically
+    target_link_options(PMSXrootd INTERFACE -Wl,--disable-new-dtags)
+  endif()
+  target_link_libraries(PMSXrootd INTERFACE XrdCl)
 endif()
 
 find_package(bsoncxx REQUIRED)

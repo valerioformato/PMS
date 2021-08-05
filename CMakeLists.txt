@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-# Ntuples (for) AMS-Italy Analysis
+# Pilot Management System
 project(PMS)
 
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
