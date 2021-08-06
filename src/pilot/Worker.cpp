@@ -143,6 +143,7 @@ void Worker::Start(unsigned long int maxJobs) {
           ftQueue.Add(ftJob);
         }
         ftQueue.Process();
+        spdlog::trace("Inbound tranfers completed?");
       }
 
       fs::path exePath{executable};
@@ -262,7 +263,6 @@ std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType 
   }
 
   // TODO: Check if there are wildcards in the request and "expand" them accordingly
-  // i.e. only if they refer to a local filesystem
   for (const auto &doc : request["files"]) {
     for (const auto field : requiredFields) {
       if (!doc.contains(field)) {
@@ -271,22 +271,33 @@ std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType 
       }
     }
 
-    for (const auto field : additionalFields) {
+    for (const auto &field : additionalFields) {
       if (!doc.contains(field)) {
         spdlog::error("Missing file transfer field: \"{}\"", field);
         continue;
       }
     }
 
+    std::string fileName = doc["file"];
+    bool hasWildcard = fileName.find("*") != std::string::npos;
+    if (hasWildcard)
+      FileTransferQueue::ProcessWildcards(fileName);
+
     auto protocol = magic_enum::enum_cast<FileTransferProtocol>(doc["protocol"].get<std::string_view>());
     if (!protocol.has_value()) {
       spdlog::error("Invalid file transfer protocol: {}", doc["protocol"]);
     }
 
-    // cannot rely on emplace_back + aggregate initialization here until c++20
-    result.push_back(FileTransferInfo{type, protocol.value(), doc["file"],
-                                      type == FileTransferType::Inbound ? doc["source"] : doc["destination"],
-                                      std::string{currentPath}});
+    std::string remotePath = type == FileTransferType::Inbound ? doc["source"] : doc["destination"];
+
+    FileTransferInfo ftInfo{type, protocol.value(), fileName, remotePath, std::string{currentPath}};
+    if (hasWildcard) {
+      for (const auto &expFile : FileTransferQueue::ExpandWildcard(ftInfo)) {
+        result.push_back(FileTransferInfo{type, protocol.value(), expFile, remotePath, std::string{currentPath}});
+      }
+    } else {
+      result.push_back(ftInfo);
+    }
   }
 
   return result;

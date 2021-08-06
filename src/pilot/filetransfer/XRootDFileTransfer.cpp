@@ -6,6 +6,7 @@
 #include <XrdCl/XrdClConstants.hh>
 #include <XrdCl/XrdClFileSystem.hh>
 #include <filesystem>
+#include <fmt/ranges.h>
 #include <magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
@@ -159,14 +160,18 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
     XrdCl::StatInfo *statInfo = nullptr;
 
     XrdCl::XRootDStatus st = fs->Stat(source.GetPath(), statInfo);
-    if (st.IsOK() && statInfo->TestFlags(XrdCl::StatInfo::IsDir)) {
-      remoteSrcIsDir = true;
-      // Recursively index the remote directory
-      std::string url = source.GetURL();
-      sourceFiles = IndexRemote(fs.get(), url);
-      if (sourceFiles.empty()) {
-        spdlog::error("Error indexing remote directory.");
-        return false;
+    if (st.IsOK()) {
+      if (statInfo->TestFlags(XrdCl::StatInfo::IsDir)) {
+        remoteSrcIsDir = true;
+        // Recursively index the remote directory
+        std::string url = source.GetURL();
+        sourceFiles = IndexRemote(fs.get(), url);
+        if (sourceFiles.empty()) {
+          spdlog::error("Error indexing remote directory.");
+          return false;
+        }
+      } else {
+        sourceFiles.push_back(std::string{sourceFile});
       }
     }
 
@@ -174,6 +179,8 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
   } else {
     sourceFiles.push_back(std::string{sourceFile});
   }
+
+  spdlog::trace("dest: {}, sourceFiles: {}", dest, sourceFiles);
 
   for (auto &sfile : sourceFiles) {
     // Create a job for every source
@@ -279,6 +286,22 @@ bool FileTransferQueue::RunXRootDFileTransfer() {
 
   CleanUpResults(m_results);
   return true;
+}
+
+std::vector<std::string> FileTransferQueue::IndexXRootDRemote(std::string_view dir) {
+  XrdCl::URL source{std::string{dir}};
+  auto fs = std::make_unique<XrdCl::FileSystem>(source);
+  XrdCl::StatInfo *statInfo = nullptr;
+  XrdCl::XRootDStatus st = fs->Stat(source.GetPath(), statInfo);
+  std::vector<std::string> result;
+  if (st.IsOK() && statInfo->TestFlags(XrdCl::StatInfo::IsDir)) {
+    result = IndexRemote(fs.get(), source.GetURL());
+  }
+  std::for_each(begin(result), end(result), [](std::string &fname) { fname = fs::path{fname}.filename().string(); });
+
+  delete statInfo;
+
+  return result;
 }
 
 } // namespace PMS::Pilot

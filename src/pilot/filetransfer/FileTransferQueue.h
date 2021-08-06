@@ -2,6 +2,7 @@
 #define PMS_PILOT_FILETRANSFERQUEUE_H
 
 // c++ headers
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -30,13 +31,20 @@ public:
 
   void Process();
 
+  static void ProcessWildcards(std::string &fileName);
+  static std::vector<std::string> ExpandWildcard(const FileTransferInfo &ftInfo);
+
 private:
   std::vector<FileTransferInfo> m_queue;
+
+  static std::vector<std::string> GlobFS(std::string_view dir, const std::regex &matcher);
+  static std::vector<std::string> GlobXRootD(std::string_view dir, const std::regex &matcher);
 
   static bool LocalFileTransfer(const FileTransferInfo &ftInfo);
 #ifdef ENABLE_XROOTD
   std::vector<XrdCl::PropertyList *> m_results;
   XrdCl::CopyProcess m_xrdProcess;
+  static std::vector<std::string> IndexXRootDRemote(std::string_view dir);
   bool AddXRootDFileTransfer(const FileTransferInfo &ftInfo);
   bool RunXRootDFileTransfer();
 #endif

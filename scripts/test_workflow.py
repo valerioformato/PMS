@@ -39,7 +39,7 @@ def getNextJob():
             "files": [
                 {
                     "protocol": "xrootd",
-                    "file": f"pippo{nJobs}.txt",
+                    "file": f"pippo{nJobs}-*.txt",
                     "destination": "root://eosuser.cern.ch///eos/user/v/vformato/test_pilot/output"
                 }
             ]
@@ -56,7 +56,7 @@ async def send_to_orchestrator(websocket, msg):
     return response
 
 
-token = "d91552a4-5f24-4608-8af3-7ca14e40cc6b"
+token = "1d9cb243-2176-4ab8-b370-872ad4d6e91a"
 
 
 async def hello():

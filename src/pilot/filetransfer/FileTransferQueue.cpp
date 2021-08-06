@@ -3,6 +3,7 @@
 #include <filesystem>
 
 // external dependencies
+#include <regex>
 #include <spdlog/spdlog.h>
 
 // our headers
@@ -52,6 +53,77 @@ void FileTransferQueue::Process() {
   if (!result) {
     spdlog::error("XRootD transfer failed, check previous messages");
   }
+#endif
+}
+
+void FileTransferQueue::ProcessWildcards(std::string &fileName) {
+  // replace all '.' with escaped dots
+  auto dotPos = fileName.find(".");
+  while (dotPos != std::string_view::npos) {
+    fileName.replace(dotPos, 1, R"(\.)");
+    dotPos = fileName.find(".", dotPos + 2);
+  }
+
+  auto wildcardPos = fileName.find("*");
+  while (wildcardPos != std::string_view::npos) {
+    fileName.replace(wildcardPos, 1, R"(.*)");
+    wildcardPos = fileName.find("*", wildcardPos + 2);
+  }
+}
+
+std::vector<std::string> FileTransferQueue::ExpandWildcard(const FileTransferInfo &ftInfo) {
+  std::regex matcher{ftInfo.fileName};
+
+  // inbound, xrootd: glob remote dir
+  // inbound, local: glob local dir
+  // outbound, *: glob current dir
+  std::string_view dir;
+  switch (ftInfo.type) {
+  case FileTransferType::Outbound:
+    dir = ftInfo.currentPath;
+    return GlobFS(dir, matcher);
+  case FileTransferType::Inbound:
+    dir = ftInfo.remotePath;
+    switch (ftInfo.protocol) {
+    case FileTransferProtocol::local:
+      return GlobFS(dir, matcher);
+    case FileTransferProtocol::xrootd:
+      return GlobXRootD(dir, matcher);
+    }
+  }
+
+  return {};
+}
+
+std::vector<std::string> FileTransferQueue::GlobFS(std::string_view dir, const std::regex &matcher) {
+  std::vector<std::string> result;
+
+  for (const auto &dirEntry : fs::directory_iterator{fs::path{dir}}) {
+    std::smatch match;
+    std::string fname = dirEntry.path().filename().string();
+    if (std::regex_match(fname, match, matcher)) {
+      result.push_back(match.str());
+    }
+  }
+
+  return result;
+}
+
+std::vector<std::string> FileTransferQueue::GlobXRootD(std::string_view dir, const std::regex &matcher) {
+#ifndef ENABLE_XROOTD
+  spdlog::error("XRootD support is not enabled");
+  return {}
+#else
+  std::vector<std::string> result;
+
+  for (const auto &dirEntry : IndexXRootDRemote(dir)) {
+    std::smatch match;
+    if (std::regex_match(dirEntry, match, matcher)) {
+      result.push_back(match.str());
+    }
+  }
+
+  return result;
 #endif
 }
 
