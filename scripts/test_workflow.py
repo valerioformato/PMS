@@ -29,18 +29,18 @@ def getNextJob():
         "input": {
             "files": [
                 {
-                    "protocol": "local",
+                    "protocol": "xrootd",
                     "file": "pippo.txt",
-                    "source": "/Users/vformato/Workdir/devel/PMS/source/PMS/scripts/test"
+                    "source": "root://eosuser.cern.ch///eos/user/v/vformato/test_pilot/input"
                 }
             ]
         },
         "output": {
             "files": [
                 {
-                    "protocol": "local",
+                    "protocol": "xrootd",
                     "file": f"pippo{nJobs}.txt",
-                    "destination": "/Users/vformato/Workdir/devel/PMS/source/PMS/scripts/test"
+                    "destination": "root://eosuser.cern.ch///eos/user/v/vformato/test_pilot/output"
                 }
             ]
         },
@@ -56,7 +56,7 @@ async def send_to_orchestrator(websocket, msg):
     return response
 
 
-token = "f85a1e5c-580a-4768-9c88-686a1c813615"
+token = "d91552a4-5f24-4608-8af3-7ca14e40cc6b"
 
 
 async def hello():

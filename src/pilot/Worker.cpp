@@ -137,10 +137,12 @@ void Worker::Start(unsigned long int maxJobs) {
 
       // check for inbound file transfers
       if (job.contains("input")) {
+        FileTransferQueue ftQueue;
         auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"], wdPath.string());
         for (const auto &ftJob : fts) {
-          // TODO: do it :)
+          ftQueue.Add(ftJob);
         }
+        ftQueue.Process();
       }
 
       fs::path exePath{executable};
@@ -182,10 +184,12 @@ void Worker::Start(unsigned long int maxJobs) {
 
         // check for outbound file transfers
         if (job.contains("output")) {
+          FileTransferQueue ftQueue;
           auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
           for (const auto &ftJob : fts) {
-            // TODO: do it :)
+            ftQueue.Add(ftJob);
           }
+          ftQueue.Process();
         }
       }
 

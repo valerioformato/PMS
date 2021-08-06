@@ -25,6 +25,8 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
     break;
   }
 
+  spdlog::debug("Attempting to copy {} to {}", from.string(), to.string());
+
   try {
     fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
   } catch (const fs::filesystem_error &e) {
@@ -46,7 +48,10 @@ void FileTransferQueue::Process() {
 #ifdef ENABLE_XROOTD
   // run XRootD file transfers
   std::for_each(lastLocalJobIt, end(m_queue), [this](const auto &ft) { AddXRootDFileTransfer(ft); });
-  RunXRootDFileTransfer();
+  auto result = RunXRootDFileTransfer();
+  if (!result) {
+    spdlog::error("XRootD transfer failed, check previous messages");
+  }
 #endif
 }
 

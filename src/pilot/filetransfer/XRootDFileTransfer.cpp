@@ -35,7 +35,7 @@ static XrdProtocol getProtocol(std::string_view fileName) {
   return protocol;
 };
 
-static std::vector<std::string> IndexRemote(XrdCl::FileSystem *fs, std::string basePath, uint16_t dirOffset) {
+static std::vector<std::string> IndexRemote(XrdCl::FileSystem *fs, std::string basePath) {
   XrdCl::DirectoryList *dirList = 0;
   XrdCl::XRootDStatus st =
       fs->DirList(XrdCl::URL{basePath}.GetPath(),
@@ -70,7 +70,7 @@ static XrdCl::PropertyList getDefaultProperties(std::string_view sfile, std::str
   properties.Set("dynamicSource", false);
   properties.Set("thirdParty", "none");
   properties.Set("checkSumMode", "end2end");
-  properties.Set("checkSumType", "crc32");
+  properties.Set("checkSumType", "adler32");
   properties.Set("checkSumPreset", "");
   properties.Set("chunkSize", XrdCl::DefaultCPChunkSize);
   properties.Set("parallelChunks", XrdCl::DefaultCPParallelChunks);
@@ -90,28 +90,30 @@ static XrdCl::PropertyList getDefaultProperties(std::string_view sfile, std::str
 }
 
 bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
-  std::string_view sourceFile, destFile;
+  std::string sourceFile, destFile;
   switch (ftInfo.type) {
   case FileTransferType::Inbound:
-    sourceFile = ftInfo.remotePath;
-    destFile = ftInfo.fileName;
+    sourceFile = ftInfo.remotePath + (ftInfo.remotePath.back() == '/' ? "" : "/") + ftInfo.fileName;
+    destFile = ftInfo.currentPath + (ftInfo.currentPath.back() == '/' ? "" : "/") + ftInfo.fileName;
     break;
   case FileTransferType::Outbound:
-    sourceFile = ftInfo.fileName;
-    destFile = ftInfo.remotePath;
+    sourceFile = ftInfo.currentPath + (ftInfo.currentPath.back() == '/' ? "" : "/") + ftInfo.fileName;
+    destFile = ftInfo.remotePath + (ftInfo.remotePath.back() == '/' ? "" : "/") + ftInfo.fileName;
     break;
   }
+
+  spdlog::debug("Queueing xrootd copy: {} to {}", sourceFile, destFile);
 
   auto sourceProtocol = getProtocol(sourceFile);
   // xrootd strips away all trailing slashes except one
   while (sourceFile.rfind("//") == sourceFile.length() - 2) {
-    sourceFile.remove_suffix(1);
+    sourceFile.pop_back();
   }
 
   auto destProtocol = getProtocol(destFile);
   // xrootd strips away all trailing slashes except one
   while (destFile.rfind("//") == destFile.length() - 2) {
-    destFile.remove_suffix(1);
+    destFile.pop_back();
   }
 
   // Build the URLs
@@ -132,7 +134,6 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
   dest += destFile;
 
   bool targetIsDir = false;
-  bool targetExists = false;
   auto destPath = fs::path{dest};
   if (fs::is_directory(destPath)) {
     targetIsDir = true;
@@ -141,10 +142,8 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
     XrdCl::FileSystem fs{target};
     XrdCl::StatInfo *statInfo = nullptr;
     XrdCl::XRootDStatus st = fs.Stat(target.GetPath(), statInfo);
-    if (st.IsOK()) {
-      if (statInfo->TestFlags(XrdCl::StatInfo::IsDir))
-        targetIsDir = true;
-      targetExists = true;
+    if (st.IsOK() && statInfo->TestFlags(XrdCl::StatInfo::IsDir)) {
+      targetIsDir = true;
     } else if (st.errNo == kXR_NotFound) {
       targetIsDir = (dest.back() == '/');
     }
@@ -164,7 +163,7 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
       remoteSrcIsDir = true;
       // Recursively index the remote directory
       std::string url = source.GetURL();
-      sourceFiles = IndexRemote(fs.get(), url, url.size());
+      sourceFiles = IndexRemote(fs.get(), url);
       if (sourceFiles.empty()) {
         spdlog::error("Error indexing remote directory.");
         return false;
