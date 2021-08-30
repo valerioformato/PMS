@@ -114,7 +114,7 @@ std::vector<std::string> FileTransferQueue::GlobFS(std::string_view dir, const s
 std::vector<std::string> FileTransferQueue::GlobXRootD(std::string_view dir, const std::regex &matcher) {
 #ifndef ENABLE_XROOTD
   spdlog::error("XRootD support is not enabled");
-  return {}
+  return {};
 #else
   std::vector<std::string> result;
 
