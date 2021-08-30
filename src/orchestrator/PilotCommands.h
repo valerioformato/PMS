@@ -37,6 +37,7 @@ struct RegisterNewPilot {
   std::string uuid;
   std::string user;
   std::vector<std::pair<std::string, std::string>> tasks;
+  std::vector<std::string> tags;
 
   constexpr static std::array requiredFields{"pilotUuid"sv, "user"sv, "tasks"sv};
 };

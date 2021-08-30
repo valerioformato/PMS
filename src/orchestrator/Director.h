@@ -46,7 +46,8 @@ public:
     std::vector<std::string> invalidTasks;
   };
   NewPilotResult RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
-                                  const std::vector<std::pair<std::string, std::string>> &tasks);
+                                  const std::vector<std::pair<std::string, std::string>> &tasks,
+                                  const std::vector<std::string> &tags);
   OperationResult UpdateHeartBeat(std::string_view pilotUuid);
   OperationResult DeleteHeartBeat(std::string_view pilotUuid);
 
@@ -68,7 +69,11 @@ private:
   void UpdatePilots();
   void DBSync();
 
-  std::vector<std::string> GetPilotTasks(std::string_view uuid);
+  struct PilotInfo {
+    std::vector<std::string> tasks;
+    std::vector<std::string> tags;
+  };
+  PilotInfo GetPilotInfo(std::string_view uuid);
 
   std::shared_ptr<spdlog::logger> m_logger;
 

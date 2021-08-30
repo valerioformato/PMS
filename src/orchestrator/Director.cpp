@@ -16,6 +16,7 @@
 using json = nlohmann::json;
 
 namespace PMS::Orchestrator {
+
 void Director::Start() {
   m_backPoolHandle->DBHandle().SetupDBCollections();
 
@@ -46,12 +47,12 @@ Director::OperationResult Director::AddNewJob(json &&job) {
 json Director::ClaimJob(std::string_view pilotUuid) {
   auto handle = m_frontPoolHandle->DBHandle();
 
-  auto tasks = GetPilotTasks(pilotUuid);
-  m_logger->trace("Pilot {} allowed tasks: {}", pilotUuid, tasks);
+  auto pilotInfo = GetPilotInfo(pilotUuid);
 
   json filter;
   filter["status"] = magic_enum::enum_name(JobStatus::Pending);
-  filter["task"]["$in"] = tasks;
+  filter["task"]["$in"] = pilotInfo.tasks;
+  filter["tags"]["$all"] = pilotInfo.tags;
 
   json updateAction;
   updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Claimed);
@@ -73,7 +74,7 @@ Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, 
                                                     std::string_view task, JobStatus status) {
   auto handle = m_frontPoolHandle->DBHandle();
 
-  auto pilotTasks = GetPilotTasks(pilotUuid);
+  auto pilotTasks = GetPilotInfo(pilotUuid).tasks;
   if (std::find(begin(pilotTasks), end(pilotTasks), task) == end(pilotTasks))
     return OperationResult::DatabaseError;
 
@@ -81,7 +82,8 @@ Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, 
 }
 
 Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
-                                                    const std::vector<std::pair<std::string, std::string>> &tasks) {
+                                                    const std::vector<std::pair<std::string, std::string>> &tasks,
+                                                    const std::vector<std::string> &tags) {
   NewPilotResult result{OperationResult::Success, {}, {}};
 
   auto handle = m_frontPoolHandle->DBHandle();
@@ -98,6 +100,7 @@ Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, 
       result.invalidTasks.push_back(taskName);
     }
   }
+  query["tags"] = tags;
 
   auto query_result = handle["pilots"].insert_one(JsonUtils::json2bson(query));
   return bool(query_result) ? result : NewPilotResult{OperationResult::DatabaseError, {}, {}};
@@ -442,16 +445,17 @@ bool Director::ValidateTaskToken(std::string_view task, std::string_view token) 
   return false;
 }
 
-std::vector<std::string> Director::GetPilotTasks(std::string_view uuid) {
+Director::PilotInfo Director::GetPilotInfo(std::string_view uuid) {
   auto handle = m_frontPoolHandle->DBHandle();
-  std::vector<std::string> result;
+  PilotInfo result;
 
   json query;
   query["uuid"] = uuid;
-  auto query_result = handle["pilots"].find_one(JsonUtils::json2bson(query));
-  if (query_result) {
+
+  if (auto query_result = handle["pilots"].find_one(JsonUtils::json2bson(query)); query_result) {
     json dummy = JsonUtils::bson2json(query_result.value());
-    std::copy(dummy["tasks"].begin(), dummy["tasks"].end(), std::back_inserter(result));
+    std::copy(dummy["tasks"].begin(), dummy["tasks"].end(), std::back_inserter(result.tasks));
+    std::copy(dummy["tags"].begin(), dummy["tags"].end(), std::back_inserter(result.tags));
   }
 
   return result;

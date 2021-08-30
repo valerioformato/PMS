@@ -1,6 +1,6 @@
 // c++ headers
-#include <fstream>
 #include <filesystem>
+#include <fstream>
 
 // external dependencies
 #include <nlohmann/json.hpp>
@@ -23,5 +23,8 @@ Config::Config(const std::string &fileName) {
 
   auto dummy = configJson["tasks"];
   std::for_each(dummy.begin(), dummy.end(), [this](auto doc) { tasks.emplace_back(doc["name"], doc["token"]); });
+
+  dummy = configJson["tags"];
+  std::copy(dummy.begin(), dummy.end(), std::back_inserter(tags));
 }
 } // namespace PMS::Pilot
