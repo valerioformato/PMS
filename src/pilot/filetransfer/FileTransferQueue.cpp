@@ -39,16 +39,18 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
 }
 
 void FileTransferQueue::Process() {
-  // put all local file transfers first
-  auto lastLocalJobIt = std::partition(begin(m_queue), end(m_queue),
-                                       [](const auto &ft) { return ft.protocol == FileTransferProtocol::local; });
-
   // run the local file transfers
-  std::for_each(begin(m_queue), lastLocalJobIt, [](const auto &ft) { LocalFileTransfer(ft); });
+  std::for_each(begin(m_queue), end(m_queue), [](const auto &ft) {
+    if (ft.protocol == FileTransferProtocol::local)
+      LocalFileTransfer(ft);
+  });
 
 #ifdef ENABLE_XROOTD
   // run XRootD file transfers
-  std::for_each(lastLocalJobIt, end(m_queue), [this](const auto &ft) { AddXRootDFileTransfer(ft); });
+  std::for_each(begin(m_queue), end(m_queue), [this](const auto &ft) {
+    if (ft.protocol == FileTransferProtocol::xrootd)
+      AddXRootDFileTransfer(ft);
+  });
   auto result = RunXRootDFileTransfer();
   if (!result) {
     spdlog::error("XRootD transfer failed, check previous messages");

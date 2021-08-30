@@ -180,8 +180,6 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
     sourceFiles.push_back(std::string{sourceFile});
   }
 
-  spdlog::trace("dest: {}, sourceFiles: {}", dest, sourceFiles);
-
   for (auto &sfile : sourceFiles) {
     // Create a job for every source
     XrdCl::PropertyList *results = new XrdCl::PropertyList;
@@ -230,7 +228,6 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
     auto properties = getDefaultProperties(sfile, target, targetIsDir);
 
     XrdCl::XRootDStatus st = m_xrdProcess.AddJob(properties, results);
-    std::cout << "Job for file " << sfile << " added\n";
     if (!st.IsOK()) {
       spdlog::error("AddJob {} -> {}: {}", sfile, target, st.ToStr());
     }
