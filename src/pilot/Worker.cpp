@@ -36,6 +36,8 @@ bool Worker::Register() {
   for (const auto &task : m_config.tasks) {
     req["tasks"].emplace_back(json::object({{"name", task.first}, {"token", task.second}}));
   }
+  if (!m_config.tags.empty())
+    req["tags"] = m_config.tags;
 
   json reply;
   try {
@@ -69,6 +71,7 @@ void Worker::Start(unsigned long int maxJobs) {
     json request;
     request["command"] = "p_claimJob";
     request["pilotUuid"] = boost::uuids::to_string(m_uuid);
+    spdlog::trace("{}", request.dump(2));
 
     json job;
     try {

@@ -11,6 +11,7 @@ struct Config {
 
   std::string user;
   std::vector<std::pair<std::string, std::string>> tasks;
+  std::vector<std::string> tags;
   std::string server;
   unsigned int serverPort = 9003;
 };

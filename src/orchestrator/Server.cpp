@@ -124,7 +124,7 @@ std::string Server::HandleCommand(PilotCommand &&command) {
           },
           [this](const OrchCommand<RegisterNewPilot> &pcmd) {
             const auto &[result, validTasks, invalidTasks] =
-                m_director->RegisterNewPilot(pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks);
+                m_director->RegisterNewPilot(pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks, pcmd.cmd.tags);
 
             json replyDoc;
             replyDoc["validTasks"] = json::array({});
@@ -345,7 +345,11 @@ PilotCommand Server::toPilotCommand(const json &msg) {
       for (const auto &task : msg["tasks"]) {
         tasks.emplace_back(task["name"], task["token"]);
       }
-      return OrchCommand<RegisterNewPilot>{msg["pilotUuid"], msg["user"], std::move(tasks)};
+      std::vector<std::string> tags;
+      if (msg.contains("tags")) {
+        std::copy(msg["tags"].begin(), msg["tags"].end(), std::back_inserter(tags));
+      }
+      return OrchCommand<RegisterNewPilot>{msg["pilotUuid"], msg["user"], std::move(tasks), std::move(tags)};
     }
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", RegisterNewPilot::requiredFields);
