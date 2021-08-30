@@ -9,6 +9,7 @@
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <fmt/os.h>
+#include <magic_enum.hpp>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -115,11 +116,17 @@ void Worker::Start(unsigned long int maxJobs) {
       jobSTDIO localIO{finalIO.stdin.empty() ? "/dev/null" : finalIO.stdin,
                        fmt::format("{}/stdout.txt", wdPath.string()), fmt::format("{}/stderr.txt", wdPath.string())};
 
+      // TODO: factorize env preparation in helper function
       if (!job["env"].empty()) {
         EnvInfoType envType = GetEnvType(job["env"]["type"]);
         switch (envType) {
         case EnvInfoType::Script:
-          shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
+          try {
+            shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
+          } catch (const fs::filesystem_error &e) {
+            spdlog::error("{}", e.what());
+            continue;
+          }
           break;
         case EnvInfoType::NONE:
           spdlog::error("Invalid env type {} is not supported", job["env"]["type"]);
@@ -128,7 +135,21 @@ void Worker::Start(unsigned long int maxJobs) {
         }
       }
 
+      // check for inbound file transfers
+      if (job.contains("input")) {
+        FileTransferQueue ftQueue;
+        auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"], wdPath.string());
+        for (const auto &ftJob : fts) {
+          ftQueue.Add(ftJob);
+        }
+        ftQueue.Process();
+        spdlog::trace("Inbound tranfers completed?");
+      }
+
       fs::path exePath{executable};
+      if (!fs::exists(exePath)) {
+        spdlog::error("Cannot find file {}", exePath.string());
+      }
       spdlog::trace("{} ({}, {}, {})", exePath.string(), finalIO.stdin, finalIO.stdout, finalIO.stderr);
 
       spdlog::info("Worker: Spawning process");
@@ -156,12 +177,21 @@ void Worker::Start(unsigned long int maxJobs) {
       proc.wait();
 
       if (procError) {
-        spdlog::trace("procerr: {} ({})", procError.message(), procError.value());
         spdlog::error("Worker: Job exited with an error: {}", procError.message());
         UpdateJobStatus(job["hash"], job["task"], JobStatus::Error);
       } else {
         spdlog::info("Worker: Job done");
         UpdateJobStatus(job["hash"], job["task"], JobStatus::Done);
+
+        // check for outbound file transfers
+        if (job.contains("output")) {
+          FileTransferQueue ftQueue;
+          auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
+          for (const auto &ftJob : fts) {
+            ftQueue.Add(ftJob);
+          }
+          ftQueue.Process();
+        }
       }
 
       // remove temporary sandbox directory
@@ -210,6 +240,67 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   auto reply = m_wsClient->Send(request);
 
   return reply == "Ok";
+}
+
+std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType type, const json &request,
+                                                               std::string_view currentPath) {
+  std::vector<FileTransferInfo> result;
+
+  if (!request.contains("files")) {
+    spdlog::error(R"(No "files" field present in file transfer request.)");
+    return result;
+  }
+
+  constexpr static std::array requiredFields{"file"sv, "protocol"sv};
+  std::vector<std::string_view> additionalFields;
+  switch (type) {
+  case FileTransferType::Inbound:
+    additionalFields = {"source"};
+    break;
+  case FileTransferType::Outbound:
+    additionalFields = {"destination"};
+    break;
+  }
+
+  // TODO: Check if there are wildcards in the request and "expand" them accordingly
+  for (const auto &doc : request["files"]) {
+    for (const auto field : requiredFields) {
+      if (!doc.contains(field)) {
+        spdlog::error("Missing file transfer field: \"{}\"", field);
+        continue;
+      }
+    }
+
+    for (const auto &field : additionalFields) {
+      if (!doc.contains(field)) {
+        spdlog::error("Missing file transfer field: \"{}\"", field);
+        continue;
+      }
+    }
+
+    std::string fileName = doc["file"];
+    bool hasWildcard = fileName.find("*") != std::string::npos;
+    if (hasWildcard)
+      FileTransferQueue::ProcessWildcards(fileName);
+
+    auto protocol = magic_enum::enum_cast<FileTransferProtocol>(doc["protocol"].get<std::string_view>());
+    if (!protocol.has_value()) {
+      spdlog::error("Invalid file transfer protocol: {}", doc["protocol"]);
+    }
+
+    std::string remotePath = type == FileTransferType::Inbound ? doc["source"] : doc["destination"];
+
+    FileTransferInfo ftInfo{type, protocol.value(), fileName, remotePath, std::string{currentPath}};
+    if (hasWildcard) {
+      for (const auto &expFile : FileTransferQueue::ExpandWildcard(ftInfo)) {
+        result.push_back(FileTransferInfo{type, protocol.value(), expFile, remotePath, std::string{currentPath}});
+      }
+    } else {
+      result.push_back(ftInfo);
+    }
+  }
+
+  return result;
 }
 
 } // namespace PMS::Pilot
