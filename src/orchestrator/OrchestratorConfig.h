@@ -22,10 +22,10 @@ struct Config {
 
   std::string front_dbhost;
   std::string front_dbname;
-  std::string front_dbuser;
+  // std::string front_dbuser;
 
-  DB::CredType front_dbcredtype;
-  std::string front_dbcredentials;
+  // DB::CredType front_dbcredtype;
+  // std::string front_dbcredentials;
 
   unsigned int listeningPort = 0;
 };

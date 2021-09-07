@@ -72,19 +72,9 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Orchestrator::Config config{configFileName};
 
-  spdlog::info("Connecting to frontend DB: {}@{}/{}", config.front_dbuser, config.front_dbhost, config.front_dbname);
-  std::shared_ptr<PMS::DB::PoolHandle> frontPoolHandle;
-  switch (config.front_dbcredtype) {
-  case DB::CredType::PWD:
-    frontPoolHandle = std::make_shared<PMS::DB::PoolHandle>(config.front_dbhost, config.front_dbname,
-                                                            config.front_dbuser, config.front_dbcredentials);
-    break;
-  case DB::CredType::X509:
-    // TODO: Figure out how X509 credentials propagate
-    throw std::runtime_error("X509 credentials not supported yet");
-  default:
-    break;
-  }
+  spdlog::info("Connecting to frontend DB: {}/{}", config.front_dbhost, config.front_dbname);
+  std::shared_ptr<PMS::DB::PoolHandle> frontPoolHandle =
+      std::make_shared<PMS::DB::PoolHandle>(config.front_dbhost, config.front_dbname);
 
   spdlog::info("Connecting to backend DB: {}/{}", config.back_dbhost, config.back_dbname);
   std::shared_ptr<PMS::DB::PoolHandle> backPoolHandle =

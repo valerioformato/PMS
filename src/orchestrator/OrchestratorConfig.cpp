@@ -1,6 +1,6 @@
 // c++ headers
-#include <fstream>
 #include <filesystem>
+#include <fstream>
 
 // external dependencies
 #include <nlohmann/json.hpp>
@@ -21,16 +21,16 @@ Config::Config(std::string_view fileName) {
 
   front_dbhost = configJson["front_dbhost"];
   front_dbname = configJson["front_dbname"];
-  front_dbuser = configJson["front_dbuser"];
+  // front_dbuser = configJson["front_dbuser"];
 
-  if (configJson["front_dbcredtype"] == "password") {
-    front_dbcredtype = DB::CredType::PWD;
-  } else if (configJson["front_dbcredtype"] == "X509") {
-    front_dbcredtype = DB::CredType::X509;
-  } else {
-    front_dbcredtype = DB::CredType::None;
-  }
-  front_dbcredentials = configJson["front_dbcredentials"];
+  // if (configJson["front_dbcredtype"] == "password") {
+  //   front_dbcredtype = DB::CredType::PWD;
+  // } else if (configJson["front_dbcredtype"] == "X509") {
+  //   front_dbcredtype = DB::CredType::X509;
+  // } else {
+  //   front_dbcredtype = DB::CredType::None;
+  // }
+  // front_dbcredentials = configJson["front_dbcredentials"];
 
   listeningPort = configJson["listeningPort"];
 }
