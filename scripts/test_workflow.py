@@ -60,7 +60,7 @@ token = "1d9cb243-2176-4ab8-b370-872ad4d6e91a"
 
 
 async def hello():
-    uri = "ws://localhost:9002"
+    uri = "ws://90.147.102.88/server"
 
     taskName = "sometask"
 
@@ -69,14 +69,14 @@ async def hello():
         myReq = {"command": "puppamilafava", "task": taskName, "token": token}
         await send_to_orchestrator(websocket, myReq)
 
-        print("Cleaning the task...")
-        myReq = {"command": "cleanTask", "task": taskName, "token": token}
-        await send_to_orchestrator(websocket, myReq)
+        # print("Cleaning the task...")
+        # myReq = {"command": "cleanTask", "task": taskName, "token": token}
+        # await send_to_orchestrator(websocket, myReq)
 
-        print("Creating a new task...")
-        myReq = {"command": "createTask", "task": taskName}
-        resp = await send_to_orchestrator(websocket, myReq)
-        newToken = resp.split(" ")[-1]
+        # print("Creating a new task...")
+        # myReq = {"command": "createTask", "task": taskName}
+        # resp = await send_to_orchestrator(websocket, myReq)
+        # newToken = resp.split(" ")[-1]
 
         print(f"task {taskName} created with token {newToken}")
 
@@ -87,7 +87,7 @@ async def hello():
                      "task": taskName, "token": newToken}
 
             print("Sending job...")
-            await send_to_orchestrator(websocket, myReq)
+            # await send_to_orchestrator(websocket, myReq)
 
 
 asyncio.run(hello())

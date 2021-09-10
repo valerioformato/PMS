@@ -42,9 +42,9 @@ private:
   static std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, const json &, std::string_view);
 
   struct jobSTDIO {
-    std::string stdin;
-    std::string stdout;
-    std::string stderr;
+    std::string stdin = "/dev/null";
+    std::string stdout = "/dev/null";
+    std::string stderr = "/dev/null";
   };
 
   std::thread m_thread;

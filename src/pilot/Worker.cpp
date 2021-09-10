@@ -107,17 +107,13 @@ void Worker::Start(unsigned long int maxJobs) {
         break;
       }
 
-      jobSTDIO finalIO;
+      jobSTDIO jobIO;
       if (job.contains("stdout") && job["stdout"] != "")
-        finalIO.stdout = job["stdout"];
+        jobIO.stdout = job["stdout"];
       if (job.contains("stderr") && job["stderr"] != "")
-        finalIO.stderr = job["stderr"];
+        jobIO.stderr = job["stderr"];
       if (job.contains("stdin") && job["stdin"] != "")
-        finalIO.stdin = job["stdin"];
-
-      // local IO to the working directory, will copy later to the final location
-      jobSTDIO localIO{finalIO.stdin.empty() ? "/dev/null" : finalIO.stdin,
-                       fmt::format("{}/stdout.txt", wdPath.string()), fmt::format("{}/stderr.txt", wdPath.string())};
+        jobIO.stdin = job["stdin"];
 
       // TODO: factorize env preparation in helper function
       if (!job["env"].empty()) {
@@ -153,7 +149,7 @@ void Worker::Start(unsigned long int maxJobs) {
       if (!fs::exists(exePath)) {
         spdlog::error("Cannot find file {}", exePath.string());
       }
-      spdlog::trace("{} ({}, {}, {})", exePath.string(), finalIO.stdin, finalIO.stdout, finalIO.stderr);
+      spdlog::trace("{} ({}, {}, {})", exePath.string(), jobIO.stdin, jobIO.stdout, jobIO.stderr);
 
       spdlog::info("Worker: Spawning process");
       std::string executableWithArgs;
@@ -170,9 +166,9 @@ void Worker::Start(unsigned long int maxJobs) {
       shellScript.close();
 
       std::error_code procError;
-      bp::child proc(bp::search_path("sh"), shellScriptPath.filename().string(), bp::std_out > localIO.stdout,
-                     bp::std_err > localIO.stderr, bp::std_in < localIO.stdin, bp::start_dir(wdPath.string()),
-                     bp::shell, procError);
+      bp::child proc(bp::search_path("sh"), shellScriptPath.filename().string(), bp::std_out > jobIO.stdout,
+                     bp::std_err > jobIO.stderr, bp::std_in < jobIO.stdin, bp::start_dir(wdPath.string()), bp::shell,
+                     procError);
 
       // set status to "Running"
       UpdateJobStatus(job["hash"], job["task"], JobStatus::Running);
@@ -265,7 +261,6 @@ std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType 
     break;
   }
 
-  // TODO: Check if there are wildcards in the request and "expand" them accordingly
   for (const auto &doc : request["files"]) {
     for (const auto field : requiredFields) {
       if (!doc.contains(field)) {
