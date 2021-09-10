@@ -109,11 +109,11 @@ void Worker::Start(unsigned long int maxJobs) {
 
       jobSTDIO jobIO;
       if (job.contains("stdout") && job["stdout"] != "")
-        jobIO.stdout = job["stdout"];
+        jobIO.stdout = fmt::format("{}/{}", wdPath.string(), job["stdout"]);
       if (job.contains("stderr") && job["stderr"] != "")
-        jobIO.stderr = job["stderr"];
+        jobIO.stderr = fmt::format("{}/{}", wdPath.string(), job["stderr"]);
       if (job.contains("stdin") && job["stdin"] != "")
-        jobIO.stdin = job["stdin"];
+        jobIO.stdin = fmt::format("{}/{}", wdPath.string(), job["stdin"]);
 
       // TODO: factorize env preparation in helper function
       if (!job["env"].empty()) {
