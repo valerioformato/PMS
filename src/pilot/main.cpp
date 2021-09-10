@@ -47,7 +47,7 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Pilot::Config config{configFileName};
 
-  std::string serverUri = fmt::format("ws://{}:{}", config.server, config.serverPort);
+  std::string serverUri = fmt::format("ws://{}", config.server);
   spdlog::info("Connecting to Server: {}", serverUri);
   auto wsClient = std::make_shared<PMS::Pilot::Client>(serverUri);
 

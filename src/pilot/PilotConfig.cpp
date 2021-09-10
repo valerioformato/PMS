@@ -18,8 +18,6 @@ Config::Config(const std::string &fileName) {
 
   user = configJson["user"];
   server = configJson["server"];
-  if (configJson.contains("serverPort"))
-    serverPort = configJson["serverPort"];
 
   auto dummy = configJson["tasks"];
   std::for_each(dummy.begin(), dummy.end(), [this](auto doc) { tasks.emplace_back(doc["name"], doc["token"]); });
