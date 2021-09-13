@@ -476,7 +476,7 @@ std::string Director::Summary(const std::string &user) {
   aggregationPipeline.match(JsonUtils::json2bson(matchingArgs));
 
   json groupingArgs;
-  groupingArgs["_id"] = "task";
+  groupingArgs["_id"] = "$task";
   aggregationPipeline.group(JsonUtils::json2bson(groupingArgs));
 
   auto tasksQueryResult = handle["jobs"].aggregate(aggregationPipeline);
