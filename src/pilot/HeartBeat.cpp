@@ -17,6 +17,8 @@ HeartBeat::~HeartBeat() {
 }
 
 void HeartBeat::updateHB(std::future<void> exitSignal) {
+  constexpr static auto coolDown = std::chrono::seconds(15);
+
   spdlog::debug("Starting HeartBeat");
   m_alive = true;
 
@@ -47,7 +49,7 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
       }
     }
 
-  } while (exitSignal.wait_for(std::chrono::seconds(1)) == std::future_status::timeout);
+  } while (exitSignal.wait_for(coolDown) == std::future_status::timeout);
 
   json deleteMsg;
   deleteMsg["command"] = "p_deleteHeartBeat";
