@@ -31,6 +31,7 @@ std::unordered_map<std::string_view, Server::UserCommandType> Server::m_commandL
     // user available commands
     {"submitJob"sv, UserCommandType::SubmitJob},
     {"createTask"sv, UserCommandType::CreateTask},
+    {"clearTask"sv, UserCommandType::ClearTask},
     {"cleanTask"sv, UserCommandType::CleanTask},
     {"declareTaskDependency"sv, UserCommandType::DeclareTaskDependency},
 };
@@ -64,13 +65,25 @@ std::string Server::HandleCommand(UserCommand &&command) {
                                      : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
                         },
                         // Remove an existing task
+                        [this](const OrchCommand<ClearTask> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
+
+                          auto result = m_director->ClearTask(ucmd.cmd.task);
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
+                                     : fmt::format("Failed to clear task \"{}\"", ucmd.cmd.task);
+                        },
+                        // Remove jobs from an existing task
                         [this](const OrchCommand<CleanTask> &ucmd) {
                           auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
                           if (!valid) {
                             return serverReply;
                           }
 
-                          auto result = m_director->CleanTask(ucmd.cmd.task);
+                          auto result = m_director->ClearTask(ucmd.cmd.task, false);
                           return result == Director::OperationResult::Success
                                      ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
                                      : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
@@ -284,6 +297,13 @@ UserCommand Server::toUserCommand(const json &msg) {
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CreateTask::requiredFields);
+    break;
+  case UserCommandType::ClearTask:
+    if (ValidateJsonCommand<ClearTask>(msg))
+      return OrchCommand<ClearTask>{msg["task"], msg["token"]};
+
+    // handle invalid fields:
+    errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ClearTask::requiredFields);
     break;
   case UserCommandType::CleanTask:
     if (ValidateJsonCommand<CleanTask>(msg))

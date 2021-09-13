@@ -58,7 +58,7 @@ public:
     std::string token;
   };
   CreateTaskResult CreateTask(const std::string &task);
-  OperationResult CleanTask(const std::string &task);
+  OperationResult ClearTask(const std::string &task, bool deleteTask = true);
 
   bool ValidateTaskToken(std::string_view task, std::string_view token) const;
 

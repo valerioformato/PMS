@@ -20,7 +20,7 @@ struct InvalidCommand {
 };
 
 using UserCommand = std::variant<OrchCommand<InvalidCommand>, OrchCommand<SubmitJob>, OrchCommand<CreateTask>,
-                                 OrchCommand<CleanTask>, OrchCommand<DeclareTaskDependency>>;
+                                 OrchCommand<ClearTask>, OrchCommand<CleanTask>, OrchCommand<DeclareTaskDependency>>;
 
 using PilotCommand =
     std::variant<OrchCommand<InvalidCommand>, OrchCommand<ClaimJob>, OrchCommand<UpdateJobStatus>,

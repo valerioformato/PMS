@@ -31,6 +31,13 @@ struct CreateTask {
   constexpr static std::array requiredFields{"task"sv};
 };
 
+struct ClearTask {
+  std::string task;
+  std::string token;
+
+  constexpr static std::array requiredFields{"task"sv, "token"sv};
+};
+
 struct CleanTask {
   std::string task;
   std::string token;

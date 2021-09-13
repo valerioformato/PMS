@@ -179,7 +179,7 @@ Director::CreateTaskResult Director::CreateTask(const std::string &task) {
   return {OperationResult::Success, token};
 }
 
-Director::OperationResult Director::CleanTask(const std::string &task) {
+Director::OperationResult Director::ClearTask(const std::string &task, bool deleteTask) {
   auto bHandle = m_backPoolHandle->DBHandle();
   auto fHandle = m_frontPoolHandle->DBHandle();
 
@@ -191,11 +191,14 @@ Director::OperationResult Director::CleanTask(const std::string &task) {
     bHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery));
     fHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery));
 
-    json taskDeleteQuery;
-    taskDeleteQuery["name"] = task;
+    if(deleteTask) {
+      json taskDeleteQuery;
+      taskDeleteQuery["name"] = task;
 
-    bHandle["tasks"].delete_many(JsonUtils::json2bson(taskDeleteQuery));
-    m_tasks.erase(task);
+      bHandle["tasks"].delete_many(JsonUtils::json2bson(taskDeleteQuery));
+      m_tasks.erase(task);
+      m_logger->debug("Task {} deleted", task);
+    }
   } catch (const std::exception &e) {
     m_logger->error("Server query failed with error {}", e.what());
     return OperationResult::DatabaseError;
