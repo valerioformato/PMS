@@ -43,8 +43,11 @@ Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
 }
 
 Connection::~Connection() {
-  if (m_status == State::Open)
+  if (m_status == State::Open) {
     m_endpoint->close(get_hdl(), websocketpp::close::status::normal, "");
+    std::unique_lock<std::mutex> lk(cv_m);
+    cv.wait(lk);
+  }
 }
 
 void Connection::on_open(WSclient *c, websocketpp::connection_hdl hdl) {
@@ -71,6 +74,10 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
 
 void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
   m_status = State::Closed;
+
+  std::lock_guard<std::mutex> lk(cv_m);
+  cv.notify_all();
+
   WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
 
   spdlog::trace("close code: {} ({}), close reason: {}", con->get_remote_close_code(),
