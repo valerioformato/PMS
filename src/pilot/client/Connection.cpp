@@ -16,20 +16,6 @@ Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
   std::error_code ec;
   m_connection = m_endpoint->get_connection(std::string{uri}, ec);
 
-  unsigned int nRetries = 0;
-  while (ec && nRetries < nMaxRetries) {
-    spdlog::error("{}", ec.message());
-
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-    spdlog::warn("Retrying connection... ({} of {})", nRetries, nMaxRetries);
-    m_connection = m_endpoint->get_connection(std::string{uri}, ec);
-  }
-
-  if (ec) {
-    m_status = State::Failed;
-    return;
-  }
-
   m_connection->set_open_handler([this](auto &&PH1) { on_open(m_endpoint.get(), std::forward<decltype(PH1)>(PH1)); });
   m_connection->set_fail_handler([this](auto &&PH1) { on_fail(m_endpoint.get(), std::forward<decltype(PH1)>(PH1)); });
   m_connection->set_close_handler([this](auto &&PH1) { on_close(m_endpoint.get(), std::forward<decltype(PH1)>(PH1)); });
@@ -40,6 +26,8 @@ Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
   m_endpoint->connect(m_connection);
   std::unique_lock<std::mutex> lk(cv_m);
   cv.wait(lk);
+
+  //TODO: handle here failed connections
 }
 
 Connection::~Connection() {
