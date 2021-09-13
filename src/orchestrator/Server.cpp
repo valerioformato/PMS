@@ -34,6 +34,7 @@ std::unordered_map<std::string_view, Server::UserCommandType> Server::m_commandL
     {"clearTask"sv, UserCommandType::ClearTask},
     {"cleanTask"sv, UserCommandType::CleanTask},
     {"declareTaskDependency"sv, UserCommandType::DeclareTaskDependency},
+    {"summary"sv, UserCommandType::Summary},
 };
 
 std::unordered_map<std::string_view, Server::PilotCommandType> Server::m_pilot_commandLUT{
@@ -120,6 +121,8 @@ std::string Server::HandleCommand(UserCommand &&command) {
                                      ? fmt::format("Job received, generated hash: {}", job_hash)
                                      : fmt::format("Job submission failed.");
                         },
+                        // Get user summary
+                        [this](const OrchCommand<Summary> &ucmd) { return m_director->Summary(ucmd.cmd.user); },
                         // Handle errors
                         [](const OrchCommand<InvalidCommand> &ucmd) { return ucmd.cmd.errorMessage; },
                     },
@@ -326,6 +329,13 @@ UserCommand Server::toUserCommand(const json &msg) {
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
+    break;
+  case UserCommandType::Summary:
+    if (ValidateJsonCommand<Summary>(msg))
+      return OrchCommand<Summary>{msg["user"]};
+
+    // handle invalid fields:
+    errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", Summary::requiredFields);
     break;
   }
 

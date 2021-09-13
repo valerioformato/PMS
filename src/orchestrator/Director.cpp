@@ -191,7 +191,7 @@ Director::OperationResult Director::ClearTask(const std::string &task, bool dele
     bHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery));
     fHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery));
 
-    if(deleteTask) {
+    if (deleteTask) {
       json taskDeleteQuery;
       taskDeleteQuery["name"] = task;
 
@@ -385,9 +385,9 @@ void Director::UpdatePilots() {
       jobQuery["pilotUuid"] = pilot["uuid"];
       jobQuery["status"] = magic_enum::enum_name(JobStatus::Running);
 
-      auto queryResult = handle["jobs"].find_one(JsonUtils::json2bson(jobQuery));
-      if (queryResult) {
-        json job = JsonUtils::bson2json(queryResult.value());
+      auto queryJResult = handle["jobs"].find_one(JsonUtils::json2bson(jobQuery));
+      if (queryJResult) {
+        json job = JsonUtils::bson2json(queryJResult.value());
         auto result = handle.UpdateJobStatus(job["hash"].get<std::string_view>(), job["task"].get<std::string_view>(),
                                              JobStatus::Error);
 
@@ -462,6 +462,44 @@ Director::PilotInfo Director::GetPilotInfo(std::string_view uuid) {
   }
 
   return result;
+}
+
+std::string Director::Summary(const std::string &user) {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  json summary = json::array({});
+
+  mongocxx::pipeline aggregationPipeline;
+
+  json matchingArgs;
+  matchingArgs["user"] = user;
+  aggregationPipeline.match(JsonUtils::json2bson(matchingArgs));
+
+  json groupingArgs;
+  groupingArgs["_id"] = "task";
+  aggregationPipeline.group(JsonUtils::json2bson(groupingArgs));
+
+  auto tasksQueryResult = handle["jobs"].aggregate(aggregationPipeline);
+  for (auto item : tasksQueryResult) {
+    json result = JsonUtils::bson2json(item);
+    auto taskName = result["_id"];
+
+    if (m_tasks.find(taskName) == end(m_tasks)) {
+      continue;
+    }
+
+    Task task = m_tasks[taskName];
+
+    json taskSummary;
+    taskSummary["taskname"] = task.name;
+    taskSummary["jobs"]["Done"] = task.doneJobs;
+    taskSummary["jobs"]["Error"] = task.failedJobs;
+    taskSummary["jobs"]["Total"] = task.totJobs;
+
+    summary.push_back(taskSummary);
+  }
+
+  return summary.dump();
 }
 
 } // namespace PMS::Orchestrator

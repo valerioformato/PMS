@@ -52,5 +52,12 @@ struct DeclareTaskDependency {
 
   constexpr static std::array requiredFields{"task"sv, "dependsOn"sv, "token"sv};
 };
+
+struct Summary {
+  std::string user;
+
+  constexpr static std::array requiredFields{"user"sv};
+};
+
 } // namespace PMS::Orchestrator
 #endif // PMS_USERCOMMANDS_H

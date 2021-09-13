@@ -60,6 +60,8 @@ public:
   CreateTaskResult CreateTask(const std::string &task);
   OperationResult ClearTask(const std::string &task, bool deleteTask = true);
 
+  std::string Summary(const std::string &user);
+
   bool ValidateTaskToken(std::string_view task, std::string_view token) const;
 
 private:
