@@ -65,7 +65,6 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
   cv.notify_all();
 
   WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
-  m_server = con->get_response_header("Server");
   m_error_reason = con->get_ec().message();
   spdlog::error("Connection failed: {}", m_error_reason);
 }

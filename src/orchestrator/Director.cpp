@@ -19,6 +19,7 @@ namespace PMS::Orchestrator {
 
 void Director::Start() {
   m_backPoolHandle->DBHandle().SetupDBCollections();
+  m_frontPoolHandle->DBHandle().SetupDBCollections();
 
   m_threads.emplace_back(&Director::UpdatePilots, this);
   m_threads.emplace_back(&Director::UpdateTasks, this);

@@ -40,6 +40,7 @@ Client::~Client() {
 std::string Client::Send(const json &msg) { return Send(msg, m_serverUri); }
 std::string Client::Send(const json &msg, std::string_view uri) {
   Connection connection{m_endpoint, uri};
+  spdlog::trace("Client sending message to uri {}\n{}", uri, msg.dump());
   return connection.Send(msg.dump());
 }
 
