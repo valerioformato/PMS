@@ -232,6 +232,8 @@ void Worker::Start(unsigned long int maxJobs) {
 
       auto delta = std::chrono::system_clock::now() - lastJobFinished;
       if (delta > maxWaitTime) {
+        spdlog::trace("Worker: no jobs for {:%M:%S}... Exiting now.",
+                      std::chrono::duration_cast<std::chrono::seconds>(maxWaitTime));
         exit = true;
       } else {
         spdlog::trace("Worker: no jobs, been waiting for {:%M:%S}...",
