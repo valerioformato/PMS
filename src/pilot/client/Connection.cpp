@@ -11,11 +11,24 @@ namespace PMS::Pilot {
 
 Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
     : m_status{State::Connecting}, m_endpoint{std::move(endpoint)}, m_connection{nullptr}, m_server("N/A") {
+  constexpr static unsigned int nMaxRetries = 10;
+
   std::error_code ec;
   m_connection = m_endpoint->get_connection(std::string{uri}, ec);
 
-  if (ec)
+  unsigned int nRetries = 0;
+  while (ec && nRetries < nMaxRetries) {
     spdlog::error("{}", ec.message());
+
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    spdlog::warn("Retrying connection... ({} of {})", nRetries, nMaxRetries);
+    m_connection = m_endpoint->get_connection(std::string{uri}, ec);
+  }
+
+  if (ec) {
+    m_status = State::Failed;
+    return;
+  }
 
   m_connection->set_open_handler([this](auto &&PH1) { on_open(m_endpoint.get(), std::forward<decltype(PH1)>(PH1)); });
   m_connection->set_fail_handler([this](auto &&PH1) { on_fail(m_endpoint.get(), std::forward<decltype(PH1)>(PH1)); });

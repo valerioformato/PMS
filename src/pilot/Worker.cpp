@@ -65,6 +65,8 @@ void Worker::Start(unsigned long int maxJobs) {
 
   auto lastJobFinished = std::chrono::system_clock::now();
 
+  std::vector<json> abandonedJobs;
+
   // main loop
   while (true) {
 
@@ -79,6 +81,13 @@ void Worker::Start(unsigned long int maxJobs) {
     } catch (const Connection::FailedConnectionException &e) {
       if (!hb.IsAlive())
         break;
+    }
+
+    // Here we check if we had abandoned jobs that have not been updated on the server and we process them
+    if (!abandonedJobs.empty()) {
+      std::for_each(begin(abandonedJobs), end(abandonedJobs),
+                    [this](json &job) { UpdateJobStatus(job["hash"], job["task"], JobStatus::Error); });
+      abandonedJobs.clear();
     }
 
     if (!job.empty()) {
@@ -171,16 +180,33 @@ void Worker::Start(unsigned long int maxJobs) {
                      procError);
 
       // set status to "Running"
-      UpdateJobStatus(job["hash"], job["task"], JobStatus::Running);
+      if (!UpdateJobStatus(job["hash"], job["task"], JobStatus::Running)) {
+        spdlog::error("Can't reach server while trying to set job as Running.");
+        // NOTE(vformato):  in this case we do nothing. We hope that while the process runs the connection is recovered.
+      }
 
       proc.wait();
 
       if (procError) {
         spdlog::error("Worker: Job exited with an error: {}", procError.message());
-        UpdateJobStatus(job["hash"], job["task"], JobStatus::Error);
+        if (!UpdateJobStatus(job["hash"], job["task"], JobStatus::Error)) {
+          spdlog::error("Can't reach server while trying to set job as Error. Abandoning job...");
+
+          // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "abandoned"
+          // jobs, and we'll communicate to the server as soon as the connection becomes available...
+          abandonedJobs.push_back(job);
+          continue;
+        }
       } else {
         spdlog::info("Worker: Job done");
-        UpdateJobStatus(job["hash"], job["task"], JobStatus::Done);
+        if (!UpdateJobStatus(job["hash"], job["task"], JobStatus::Done)) {
+          spdlog::error("Can't reach server while trying to set job as Done. Abandoning job...");
+
+          // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "abandoned"
+          // jobs, and we'll communicate to the server as soon as the connection becomes available...
+          abandonedJobs.push_back(job);
+          continue;
+        }
 
         // check for outbound file transfers
         if (job.contains("output")) {
