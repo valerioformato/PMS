@@ -56,8 +56,7 @@ void Connection::on_open(WSclient *c, websocketpp::connection_hdl hdl) {
   cv.notify_all();
 
   WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
-  m_server = con->get_response_header("Server");
-  spdlog::trace("Connection opened with server version {}", m_server);
+  spdlog::trace("Connection opened with server version");
 }
 
 void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {

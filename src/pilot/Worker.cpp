@@ -41,7 +41,7 @@ bool Worker::Register() {
 
   json reply;
   try {
-    reply = json::parse(m_wsConnection->Send(req));
+    reply = json::parse(m_wsConnection->Send(req.dump()));
   } catch (const Connection::FailedConnectionException &e) {
     spdlog::error("Failed connection to server...");
     return false;
@@ -77,7 +77,7 @@ void Worker::Start(unsigned long int maxJobs) {
 
     json job;
     try {
-      job = json::parse(m_wsConnection->Send(request));
+      job = json::parse(m_wsConnection->Send(request.dump()));
     } catch (const Connection::FailedConnectionException &e) {
       if (!hb.IsAlive())
         break;
@@ -264,7 +264,7 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   request["hash"] = hash;
   request["task"] = task;
   request["status"] = magic_enum::enum_name(status);
-  auto reply = m_wsConnection->Send(request);
+  auto reply = m_wsConnection->Send(request.dump());
 
   return reply == "Ok";
 }
