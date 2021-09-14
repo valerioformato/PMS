@@ -11,8 +11,6 @@ namespace PMS::Pilot {
 
 Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
     : m_status{State::Connecting}, m_endpoint{std::move(endpoint)}, m_connection{nullptr} {
-  constexpr static unsigned int nMaxRetries = 10;
-
   std::error_code ec;
   m_connection = m_endpoint->get_connection(std::string{uri}, ec);
 
@@ -26,19 +24,6 @@ Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
   m_endpoint->connect(m_connection);
   std::unique_lock<std::mutex> lk(cv_m);
   cv.wait(lk);
-
-  //TODO: handle here failed connections
-  unsigned int nTries = 0;
-  while(m_status == State::Failed && ++nTries < nMaxRetries){
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-
-    m_endpoint->connect(m_connection);
-    cv.wait(lk);
-  }
-
-  if(m_status == State::Failed){
-    spdlog::error("Couldn't establish connection after trying {} times. Aborting...", nMaxRetries);
-  }
 }
 
 Connection::~Connection() {
@@ -47,6 +32,19 @@ Connection::~Connection() {
     std::unique_lock<std::mutex> lk(cv_m);
     cv.wait(lk);
   }
+}
+
+Connection::Connection(Connection &&rhs) noexcept
+    : m_status{rhs.m_status}, m_endpoint{std::move(rhs.m_endpoint)}, m_connection{rhs.m_connection} {
+  rhs.m_connection = nullptr;
+}
+
+Connection &Connection::operator=(Connection &&rhs) noexcept {
+  m_status = rhs.m_status;
+  m_connection = rhs.m_connection;
+  m_endpoint = std::move(rhs.m_endpoint);
+
+  rhs.m_connection = nullptr;
 }
 
 void Connection::on_open(WSclient *c, websocketpp::connection_hdl hdl) {

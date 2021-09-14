@@ -40,7 +40,8 @@ private:
   std::shared_ptr<WSclient> m_endpoint;
 
   std::thread m_thread;
-  // std::vector<std::shared_ptr<Connection>> m_connList;
+
+  constexpr static unsigned int nMaxTries = 10;
 };
 
 } // namespace PMS::Pilot

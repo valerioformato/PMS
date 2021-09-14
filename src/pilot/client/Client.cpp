@@ -40,15 +40,38 @@ Client::~Client() {
 std::string Client::Send(const json &msg) { return Send(msg, m_serverUri); }
 std::string Client::Send(const json &msg, std::string_view uri) {
   Connection connection{m_endpoint, uri};
-  spdlog::trace("Client sending message to uri {}\n{}", uri, msg.dump());
+
+  unsigned int nTries = 0;
+  while (connection.get_status() == Connection::State::Failed && ++nTries < nMaxTries) {
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    spdlog::warn("Retrying... {}/{}", nTries, nMaxTries);
+    connection = Connection(m_endpoint, uri);
+  }
+
+  if (connection.get_status() == Connection::State::Failed) {
+    spdlog::error("Could not establish a connection after {} tries. Aborting...", nMaxTries);
+  }
+
+
   return connection.Send(msg.dump());
 }
 
-std::unique_ptr<Connection> Client::PersistentConnection() {
-  return std::make_unique<Connection>(m_endpoint, m_serverUri);
-}
+std::unique_ptr<Connection> Client::PersistentConnection() { return PersistentConnection(m_serverUri); }
 std::unique_ptr<Connection> Client::PersistentConnection(std::string_view uri) {
-  return std::make_unique<Connection>(m_endpoint, uri);
+  auto connPtr = std::make_unique<Connection>(m_endpoint, uri);
+
+  unsigned int nTries = 0;
+  while (connPtr->get_status() == Connection::State::Failed && ++nTries < nMaxTries) {
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    spdlog::warn("Retrying... {}/{}", nTries, nMaxTries);
+    connPtr = std::make_unique<Connection>(m_endpoint, uri);
+  }
+
+  if (connPtr->get_status() == Connection::State::Failed) {
+    spdlog::error("Could not establish a connection after {} tries. Aborting...", nMaxTries);
+  }
+
+  return connPtr;
 }
 
 } // namespace PMS::Pilot
