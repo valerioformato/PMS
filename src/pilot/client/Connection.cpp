@@ -28,6 +28,17 @@ Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
   cv.wait(lk);
 
   //TODO: handle here failed connections
+  unsigned int nTries = 0;
+  while(m_status == State::Failed && ++nTries < nMaxRetries){
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    m_endpoint->connect(m_connection);
+    cv.wait(lk);
+  }
+
+  if(m_status == State::Failed){
+    spdlog::error("Couldn't establish connection after trying {} times. Aborting...", nMaxRetries);
+  }
 }
 
 Connection::~Connection() {
