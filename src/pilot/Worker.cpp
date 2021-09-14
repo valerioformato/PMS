@@ -41,7 +41,7 @@ bool Worker::Register() {
 
   json reply;
   try {
-    reply = json::parse(m_wsClient->Send(req));
+    reply = json::parse(m_wsConnection->Send(req));
   } catch (const Connection::FailedConnectionException &e) {
     spdlog::error("Failed connection to server...");
     return false;
@@ -60,7 +60,7 @@ void Worker::Start(unsigned long int maxJobs) {
 
   constexpr auto maxWaitTime = std::chrono::minutes(10);
 
-  HeartBeat hb{m_uuid, m_wsClient};
+  HeartBeat hb{m_uuid, m_wsConnection};
   unsigned long int doneJobs = 0;
 
   auto lastJobFinished = std::chrono::system_clock::now();
@@ -77,7 +77,7 @@ void Worker::Start(unsigned long int maxJobs) {
 
     json job;
     try {
-      job = json::parse(m_wsClient->Send(request));
+      job = json::parse(m_wsConnection->Send(request));
     } catch (const Connection::FailedConnectionException &e) {
       if (!hb.IsAlive())
         break;
@@ -264,7 +264,7 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   request["hash"] = hash;
   request["task"] = task;
   request["status"] = magic_enum::enum_name(status);
-  auto reply = m_wsClient->Send(request);
+  auto reply = m_wsConnection->Send(request);
 
   return reply == "Ok";
 }

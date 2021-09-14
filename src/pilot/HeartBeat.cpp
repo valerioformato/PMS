@@ -28,14 +28,13 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
   updateMsg["command"] = "p_updateHeartBeat";
   updateMsg["uuid"] = boost::uuids::to_string(m_uuid);
 
-  auto connection = m_wsClient->PersistentConnection();
   std::chrono::system_clock::time_point firstFailedConnection;
   bool failedToConnect;
 
   do {
     spdlog::trace("Updating HeartBeat");
     try {
-      connection->Send(updateMsg.dump());
+      m_wsConnection->Send(updateMsg.dump());
       failedToConnect = false;
     } catch (...) {
       if (!failedToConnect) {
@@ -56,7 +55,7 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
   deleteMsg["uuid"] = boost::uuids::to_string(m_uuid);
   spdlog::trace("Removing pilot from DB");
   try {
-    connection->Send(deleteMsg.dump());
+    m_wsConnection->Send(deleteMsg.dump());
   } catch (...) {
   }
 }

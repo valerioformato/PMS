@@ -12,21 +12,21 @@
 #include <utility>
 
 // our headers
-#include "pilot/client/Client.h"
+#include "pilot/client/Connection.h"
 
 namespace PMS::Pilot {
 class HeartBeat {
 public:
-  HeartBeat(boost::uuids::uuid uuid, std::shared_ptr<Client> wsClient)
-      : m_uuid{uuid}, m_wsClient{std::move(wsClient)}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this,
+  HeartBeat(boost::uuids::uuid uuid, std::shared_ptr<Connection> wsConnection)
+      : m_uuid{uuid}, m_wsConnection{std::move(wsConnection)}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this,
                                                                                 m_exitSignal.get_future()} {}
   ~HeartBeat();
 
-  [[nodiscard]] bool IsAlive() { return m_alive; }
+  [[nodiscard]] bool IsAlive() const { return m_alive; }
 
 private:
   boost::uuids::uuid m_uuid;
-  std::shared_ptr<Client> m_wsClient;
+  std::shared_ptr<Connection> m_wsConnection;
   std::promise<void> m_exitSignal;
   std::thread m_thread;
   bool m_alive = false;

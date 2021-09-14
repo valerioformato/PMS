@@ -6,7 +6,6 @@
 #include <spdlog/spdlog.h>
 
 // our headers
-#include "db/PoolHandle.h"
 #include "pilot/PilotConfig.h"
 #include "pilot/Worker.h"
 #include "pilot/client/Client.h"

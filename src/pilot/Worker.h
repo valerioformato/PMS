@@ -25,7 +25,7 @@ namespace PMS::Pilot {
 class Worker {
 public:
   explicit Worker(Config config, std::shared_ptr<Client> wsClient)
-      : m_config{std::move(config)}, m_wsClient{std::move(wsClient)} {}
+      : m_config{std::move(config)}, m_wsConnection{wsClient->PersistentConnection()} {}
 
   bool Register();
 
@@ -49,7 +49,7 @@ private:
 
   std::thread m_thread;
   Config m_config;
-  std::shared_ptr<Client> m_wsClient;
+  std::shared_ptr<Connection> m_wsConnection;
 
   boost::uuids::uuid m_uuid{};
 };
