@@ -45,6 +45,8 @@ Connection &Connection::operator=(Connection &&rhs) noexcept {
   m_endpoint = std::move(rhs.m_endpoint);
 
   rhs.m_connection = nullptr;
+
+  return *this;
 }
 
 void Connection::on_open(WSclient *c, websocketpp::connection_hdl hdl) {
