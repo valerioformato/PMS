@@ -34,7 +34,7 @@ public:
 
   class FailedConnectionException : public websocketpp::exception {
   public:
-    FailedConnectionException(const std::string &what_arg) : websocketpp::exception{what_arg} {};
+    explicit FailedConnectionException(const std::string &what_arg) : websocketpp::exception{what_arg} {};
   };
 
 private:
@@ -43,6 +43,8 @@ private:
   WSclient::connection_ptr m_connection;
   std::string m_error_reason;
   std::promise<std::string> m_in_flight_message;
+
+  std::mutex m_sendMutex;
 
   std::mutex cv_m;
   std::condition_variable cv;

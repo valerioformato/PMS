@@ -88,6 +88,7 @@ void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr m
 }
 
 std::string Connection::Send(const std::string &message) {
+  std::lock_guard<std::mutex> slk(m_sendMutex);
   std::promise<std::string>{}.swap(m_in_flight_message);
 
   std::error_code ec;
