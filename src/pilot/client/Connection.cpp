@@ -52,15 +52,17 @@ Connection::~Connection() {
 void Connection::on_open(WSclient *c, websocketpp::connection_hdl hdl) {
   m_status = State::Open;
 
+  std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
 
   WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
-  spdlog::trace("Connection opened with server");
+  spdlog::trace("Connection opened with server version");
 }
 
 void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
   m_status = State::Failed;
 
+  std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
 
   WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
@@ -71,6 +73,7 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
 void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
   m_status = State::Closed;
 
+  std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
 
   WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
@@ -81,28 +84,28 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
 
 void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr msg) {
   spdlog::trace("Message received: {}", msg->get_payload());
-  m_in_flight_message = msg->get_payload();
-
-  cv.notify_one();
+  m_in_flight_message.set_value(msg->get_payload());
 }
 
 std::string Connection::Send(const std::string &message) {
+  std::promise<std::string>{}.swap(m_in_flight_message);
+
   std::error_code ec;
   m_endpoint->send(get_hdl(), message, websocketpp::frame::opcode::text, ec);
-
-  std::unique_lock<std::mutex> lk(cv_m);
-  cv.wait(lk);
 
   if (ec) {
     switch (m_status) {
     case State::Failed:
-      throw FailedConnectionException{"Connection failed"};
+      m_in_flight_message.set_exception(std::make_exception_ptr(FailedConnectionException{"Connection failed"}));
+      break;
     default:
-      throw std::runtime_error(fmt::format("Error sending message: {}", ec.message()));
+      m_in_flight_message.set_exception(
+          std::make_exception_ptr(std::runtime_error(fmt::format("Error sending message: {}", ec.message()))));
+      break;
     }
   }
 
-  return m_in_flight_message;
+  return m_in_flight_message.get_future().get();
 }
 
 } // namespace PMS::Pilot
