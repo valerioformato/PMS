@@ -10,7 +10,7 @@
 namespace PMS::Pilot {
 
 Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
-    : m_status{State::Connecting}, m_endpoint{std::move(endpoint)}, m_connection{nullptr}, m_server("N/A") {
+    : m_status{State::Connecting}, m_endpoint{std::move(endpoint)}, m_connection{nullptr} {
   constexpr static unsigned int nMaxRetries = 10;
 
   std::error_code ec;
