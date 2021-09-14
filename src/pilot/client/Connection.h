@@ -42,7 +42,7 @@ private:
   std::shared_ptr<WSclient> m_endpoint;
   WSclient::connection_ptr m_connection;
   std::string m_error_reason;
-  std::promise<std::string> m_in_flight_message;
+  std::string m_in_flight_message;
 
   std::mutex cv_m;
   std::condition_variable cv;
