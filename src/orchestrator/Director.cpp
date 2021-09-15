@@ -49,6 +49,13 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   auto handle = m_frontPoolHandle->DBHandle();
 
   auto pilotInfo = GetPilotInfo(pilotUuid);
+  bool done = true;
+  for (const auto &taskName : pilotInfo.tasks) {
+    const auto &task = m_tasks[taskName];
+    done &= !task.IsExhausted();
+  }
+  if (done)
+    return R"({"finished": true})"_json;
 
   json filter;
   filter["status"] = magic_enum::enum_name(JobStatus::Pending);
@@ -103,6 +110,8 @@ Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, 
   }
   query["tags"] = tags;
 
+  m_activePilots[std::string(pilotUuid)] = PilotInfo{result.validTasks, tags};
+
   auto query_result = handle["pilots"].insert_one(JsonUtils::json2bson(query));
   return bool(query_result) ? result : NewPilotResult{OperationResult::DatabaseError, {}, {}};
 }
@@ -127,6 +136,9 @@ Director::OperationResult Director::UpdateHeartBeat(std::string_view pilotUuid) 
 
 Director::OperationResult Director::DeleteHeartBeat(std::string_view pilotUuid) {
   auto handle = m_frontPoolHandle->DBHandle();
+
+  if (auto pilotIt = m_activePilots.find(std::string{pilotUuid}); pilotIt != end(m_activePilots))
+    m_activePilots.erase(pilotIt);
 
   json deleteFilter;
   deleteFilter["uuid"] = pilotUuid;
@@ -339,14 +351,15 @@ void Director::UpdateTasks() {
       countQuery["task"] = taskName;
       task.totJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
 
-      countQuery["status"] = magic_enum::enum_name(JobStatus::Done);
-      task.doneJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
+      for (auto status : magic_enum::enum_values<JobStatus>()) {
+        countQuery["status"] = magic_enum::enum_name(status);
+        task.jobs[status] = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
+      }
 
-      countQuery["status"] = magic_enum::enum_name(JobStatus::Error);
-      task.failedJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
-
-      m_logger->debug("Task {0} updated - {1} job{4} ({2} done, {3} failed)", task.name, task.totJobs, task.doneJobs,
-                      task.failedJobs, task.totJobs > 1 ? "s" : "");
+      m_logger->debug("Task {} updated - {} job{} ({} done, {} failed, {} running, {} claimed, {} pending)", task.name,
+                      task.totJobs, task.totJobs > 1 ? "s" : "", task.jobs[JobStatus::Done],
+                      task.jobs[JobStatus::Error], task.jobs[JobStatus::Running], task.jobs[JobStatus::Claimed],
+                      task.jobs[JobStatus::Pending]);
     }
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
@@ -396,6 +409,9 @@ void Director::UpdatePilots() {
           m_logger->warn("Couldn't update status for job {}, claimed by dead pilot {}", job["hash"], pilot["uuid"]);
         }
       }
+
+      if (auto pilotIt = m_activePilots.find(pilot["uuid"]); pilotIt != end(m_activePilots))
+        m_activePilots.erase(pilotIt);
     }
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
@@ -450,19 +466,25 @@ bool Director::ValidateTaskToken(std::string_view task, std::string_view token) 
 }
 
 Director::PilotInfo Director::GetPilotInfo(std::string_view uuid) {
-  auto handle = m_frontPoolHandle->DBHandle();
-  PilotInfo result;
+  if (auto uuidString = std::string{uuid}; m_activePilots.find(uuidString) != end(m_activePilots)) {
+    return m_activePilots[uuidString];
+  } else {
+    auto handle = m_frontPoolHandle->DBHandle();
+    PilotInfo result;
 
-  json query;
-  query["uuid"] = uuid;
+    json query;
+    query["uuid"] = uuid;
 
-  if (auto query_result = handle["pilots"].find_one(JsonUtils::json2bson(query)); query_result) {
-    json dummy = JsonUtils::bson2json(query_result.value());
-    std::copy(dummy["tasks"].begin(), dummy["tasks"].end(), std::back_inserter(result.tasks));
-    std::copy(dummy["tags"].begin(), dummy["tags"].end(), std::back_inserter(result.tags));
+    if (auto query_result = handle["pilots"].find_one(JsonUtils::json2bson(query)); query_result) {
+      json dummy = JsonUtils::bson2json(query_result.value());
+      std::copy(dummy["tasks"].begin(), dummy["tasks"].end(), std::back_inserter(result.tasks));
+      std::copy(dummy["tags"].begin(), dummy["tags"].end(), std::back_inserter(result.tags));
+    }
+
+    m_activePilots[uuidString] = result;
+
+    return result;
   }
-
-  return result;
 }
 
 std::string Director::Summary(const std::string &user) {
@@ -493,9 +515,9 @@ std::string Director::Summary(const std::string &user) {
 
     json taskSummary;
     taskSummary["taskname"] = task.name;
-    taskSummary["jobs"]["Done"] = task.doneJobs;
-    taskSummary["jobs"]["Error"] = task.failedJobs;
-    taskSummary["jobs"]["Total"] = task.totJobs;
+    for (auto status : magic_enum::enum_values<JobStatus>()) {
+      taskSummary[magic_enum::enum_name(status).data()] = task.jobs[status];
+    }
 
     summary.push_back(taskSummary);
   }

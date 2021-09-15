@@ -76,6 +76,7 @@ private:
     std::vector<std::string> tags;
   };
   PilotInfo GetPilotInfo(std::string_view uuid);
+  std::unordered_map<std::string, PilotInfo> m_activePilots;
 
   std::shared_ptr<spdlog::logger> m_logger;
 

@@ -56,9 +56,10 @@ void Worker::Start(unsigned long int maxJobs) {
   // TODO: implement mechanism to decide when a task is actually
   // finished
   bool exit = false;
-  // bool exit = true;
+  bool wait = false;
 
   constexpr auto maxWaitTime = std::chrono::minutes(10);
+  auto sleepTime = std::chrono::seconds(1);
 
   HeartBeat hb{m_uuid, m_wsConnection};
   unsigned long int doneJobs = 0;
@@ -90,7 +91,12 @@ void Worker::Start(unsigned long int maxJobs) {
       abandonedJobs.clear();
     }
 
-    if (!job.empty()) {
+    if(job.contains("finished")){
+      sleepTime = std::chrono::minutes(1);
+      wait = true;
+    }
+
+    if (!job.empty() && !wait) {
       spdlog::info("Worker: got a new job");
       spdlog::trace("Job: {}", job.dump(2));
 
@@ -151,7 +157,7 @@ void Worker::Start(unsigned long int maxJobs) {
           ftQueue.Add(ftJob);
         }
         ftQueue.Process();
-        spdlog::trace("Inbound tranfers completed?");
+        spdlog::trace("Inbound transfers completed?");
       }
 
       fs::path exePath{executable};
@@ -228,7 +234,7 @@ void Worker::Start(unsigned long int maxJobs) {
         exit = true;
 
     } else {
-      std::this_thread::sleep_for(std::chrono::seconds(1));
+      std::this_thread::sleep_for(sleepTime);
 
       auto delta = std::chrono::system_clock::now() - lastJobFinished;
       if (delta > maxWaitTime) {

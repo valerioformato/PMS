@@ -1,20 +1,22 @@
 #ifndef PMS_COMMON_ENUMARRAY_H
 #define PMS_COMMON_ENUMARRAY_H
 
-template <typename ContainedClass, typename Enum, unsigned int EnumSize>
-class EnumArray : public std::array<ContainedClass, EnumSize> {
+#include <magic_enum.hpp>
+
+template <typename ContainedClass, typename Enum>
+class EnumArray : public std::array<ContainedClass, magic_enum::enum_count<Enum>()> {
 public:
-  using BaseType = std::array<ContainedClass, EnumSize>;
+  using BaseType = std::array<ContainedClass, magic_enum::enum_count<Enum>()>;
 
   // constructors
   EnumArray() = default;
-  EnumArray(const EnumArray<ContainedClass, Enum, EnumSize> &c) : BaseType(c) {}
-  EnumArray(const std::array<ContainedClass, EnumSize> &values) : BaseType(values) {}
-  EnumArray(std::array<ContainedClass, EnumSize> &&values) : BaseType(values) {}
+  EnumArray(const EnumArray<ContainedClass, Enum> &c) : BaseType(c) {}
+  EnumArray(const std::array<ContainedClass, magic_enum::enum_count<Enum>()> &values) : BaseType(values) {}
+  EnumArray(std::array<ContainedClass, magic_enum::enum_count<Enum>()> &&values) : BaseType(values) {}
   template <typename... V> EnumArray(V &&...vals) : BaseType{{std::forward<V>(vals)...}} {};
 
   // assignment
-  EnumArray<ContainedClass, Enum, EnumSize> &operator=(const EnumArray<ContainedClass, Enum, EnumSize> &lhs) {
+  EnumArray<ContainedClass, Enum> &operator=(const EnumArray<ContainedClass, Enum> &lhs) {
     BaseType::operator=(lhs);
     return *this;
   }
