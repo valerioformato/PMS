@@ -52,8 +52,9 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   bool done = true;
   for (const auto &taskName : pilotInfo.tasks) {
     const auto &task = m_tasks[taskName];
-    done &= !task.IsExhausted();
+    done &= task.IsExhausted();
   }
+
   if (done)
     return R"({"finished": true})"_json;
 
