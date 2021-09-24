@@ -221,7 +221,7 @@ Director::OperationResult Director::ClearTask(const std::string &task, bool dele
 }
 
 void Director::JobInsert() {
-  static constexpr auto coolDown = std::chrono::milliseconds(1);
+  static constexpr auto coolDown = std::chrono::milliseconds(10);
 
   auto handle = m_backPoolHandle->DBHandle();
 
@@ -247,7 +247,7 @@ void Director::JobInsert() {
     }
 
     if (!toBeInserted.empty()) {
-      m_logger->debug("Inserting {} new jobs into backend DB", toBeInserted.size());
+      m_logger->trace("Inserting {} new jobs into backend DB", toBeInserted.size());
       handle["jobs"].insert_many(toBeInserted);
 
       toBeInserted.clear();
