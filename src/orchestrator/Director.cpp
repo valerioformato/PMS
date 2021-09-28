@@ -437,6 +437,7 @@ void Director::DBSync() {
         }));
 
     auto queryResult = fHandle["jobs"].find(getJobsQuery.view());
+    lastCheck = std::chrono::system_clock::now();
     m_logger->debug("Syncing DBs...");
 
     unsigned int nUpdatedJobs{0};
@@ -453,7 +454,6 @@ void Director::DBSync() {
       nUpdatedJobs++;
     }
 
-    lastCheck = std::chrono::system_clock::now();
     m_logger->debug("DBs synced: {} jobs updated in backend DB", nUpdatedJobs);
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
