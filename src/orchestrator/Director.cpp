@@ -436,9 +436,10 @@ void Director::DBSync() {
           sub_doc.append(bsoncxx::builder::basic::kvp("$gt", bsoncxx::types::b_date(lastCheck)));
         }));
 
+    m_logger->debug("Syncing DBs...");
     auto queryResult = fHandle["jobs"].find(getJobsQuery.view());
     lastCheck = std::chrono::system_clock::now();
-    m_logger->debug("Syncing DBs...");
+    m_logger->debug("...query done.");
 
     unsigned int nUpdatedJobs{0};
     for (const auto &_job : queryResult) {
