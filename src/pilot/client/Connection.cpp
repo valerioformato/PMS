@@ -21,6 +21,10 @@ Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
     on_message(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
   });
 
+  // manually increase open and close timeout
+  m_endpoint->set_open_handshake_timeout(60000l);
+  m_endpoint->set_close_handshake_timeout(60000l);
+
   m_endpoint->connect(m_connection);
   std::unique_lock<std::mutex> lk(cv_m);
   cv.wait(lk);
@@ -35,8 +39,7 @@ Connection::~Connection() {
 }
 
 Connection::Connection(Connection &&rhs) noexcept
-    : m_status{rhs.m_status}, m_endpoint{std::move(rhs.m_endpoint)}, m_connection{rhs.m_connection} {
-  rhs.m_connection = nullptr;
+    : m_status{rhs.m_status}, m_endpoint{std::move(rhs.m_endpoint)}, m_connection{std::move(rhs.m_connection)} {
 }
 
 Connection &Connection::operator=(Connection &&rhs) noexcept {
@@ -55,7 +58,7 @@ void Connection::on_open(WSclient *c, websocketpp::connection_hdl hdl) {
   std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
 
-  WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
+  WSclient::connection_ptr con = c->get_con_from_hdl(std::move(hdl));
   spdlog::trace("Connection opened with server version");
 }
 
@@ -65,7 +68,7 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
   std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
 
-  WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
+  WSclient::connection_ptr con = c->get_con_from_hdl(std::move(hdl));
   m_error_reason = con->get_ec().message();
   spdlog::error("Connection failed: {}", m_error_reason);
 }
@@ -76,7 +79,7 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
   std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
 
-  WSclient::connection_ptr con = c->get_con_from_hdl(hdl);
+  WSclient::connection_ptr con = c->get_con_from_hdl(std::move(hdl));
 
   spdlog::trace("close code: {} ({}), close reason: {}", con->get_remote_close_code(),
                 websocketpp::close::status::get_string(con->get_remote_close_code()), con->get_remote_close_reason());
