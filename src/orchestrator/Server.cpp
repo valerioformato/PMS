@@ -1,9 +1,11 @@
 // c++ headers
 #include <chrono>
+#include <thread>
 #include <vector>
 
 // external dependencies
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 #include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -171,7 +173,7 @@ std::string Server::HandleCommand(PilotCommand &&command) {
 }
 
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-  m_logger->trace("Received message {}", msg->get_payload());
+  m_logger->trace("[{}] Received message {}", std::this_thread::get_id(), msg->get_payload());
 
   json parsedMessage;
   try {
@@ -197,7 +199,7 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
 }
 
 void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-  m_logger->trace("Received pilot message {}", msg->get_payload());
+  m_logger->trace("[{}] Received pilot message {}", std::this_thread::get_id(), msg->get_payload());
 
   json parsedMessage;
   try {
@@ -256,10 +258,12 @@ void Server::Start() {
 
   // Set the default message handler to our own handler
   m_endpoint.set_message_handler([this](auto &&PH1, auto &&PH2) {
-    message_handler(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+    m_threadPool.AddTask(&Server::message_handler, this, std::forward<decltype(PH1)>(PH1),
+                         std::forward<decltype(PH2)>(PH2));
   });
   m_pilot_endpoint.set_message_handler([this](auto &&PH1, auto &&PH2) {
-    pilot_handler(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+    m_threadPool.AddTask(&Server::pilot_handler, this, std::forward<decltype(PH1)>(PH1),
+                         std::forward<decltype(PH2)>(PH2));
   });
 
   SetupEndpoint(m_endpoint, m_port);
