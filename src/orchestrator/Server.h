@@ -12,6 +12,7 @@
 #include <websocketpp/server.hpp>
 
 // our headers
+#include "common/ThreadPool.h"
 #include "orchestrator/Commands.h"
 #include "orchestrator/Director.h"
 
@@ -31,6 +32,8 @@ private:
   std::pair<bool, std::string> ValidateTaskToken(std::string_view task, std::string_view token) const;
 
   void SetupEndpoint(WSserver &endpoint, unsigned int port);
+
+  Thread::Pool m_threadPool;
 
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
   void pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
