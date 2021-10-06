@@ -5,6 +5,7 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <fmt/ranges.h>
+#include <mongocxx/bulk_write.hpp>
 #include <mongocxx/pipeline.hpp>
 #include <nlohmann/json.hpp>
 
@@ -26,6 +27,7 @@ void Director::Start() {
   m_threads.emplace_back(&Director::JobInsert, this);
   m_threads.emplace_back(&Director::JobTransfer, this);
   m_threads.emplace_back(&Director::DBSync, this);
+  m_threads.emplace_back(&Director::WriteJobUpdates, this);
 }
 
 void Director::Stop() {
@@ -81,13 +83,50 @@ json Director::ClaimJob(std::string_view pilotUuid) {
 
 Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, std::string_view hash,
                                                     std::string_view task, JobStatus status) {
-  auto handle = m_frontPoolHandle->DBHandle();
-
   auto pilotTasks = GetPilotInfo(pilotUuid).tasks;
   if (std::find(begin(pilotTasks), end(pilotTasks), task) == end(pilotTasks))
     return OperationResult::DatabaseError;
 
-  return handle.UpdateJobStatus(hash, task, status) ? OperationResult::Success : OperationResult::DatabaseError;
+  json jobFilter;
+  jobFilter["task"] = task;
+  jobFilter["hash"] = hash;
+
+  json jobUpdateAction;
+  jobUpdateAction["$set"]["status"] = magic_enum::enum_name(status);
+  jobUpdateAction["$currentDate"]["lastUpdate"] = true;
+
+  switch (status) {
+  case JobStatus::Running:
+    jobUpdateAction["$currentDate"]["startTime"] = true;
+    break;
+  case JobStatus::Error:
+  case JobStatus::Done:
+    jobUpdateAction["$currentDate"]["finishTime"] = true;
+    break;
+  default:
+    break;
+  }
+
+  {
+    std::lock_guard lock{m_jobUpdateRequests_mx};
+    m_jobUpdateRequests.push_back(
+        mongocxx::model::update_one{JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction)});
+  }
+
+  return OperationResult::Success;
+}
+
+void Director::WriteJobUpdates() {
+  static constexpr auto coolDown = std::chrono::milliseconds(100);
+
+  auto handle = m_frontPoolHandle->DBHandle();
+  do {
+    if (!m_jobUpdateRequests.empty()) {
+      std::lock_guard lock{m_jobUpdateRequests_mx};
+      handle["jobs"].bulk_write(m_jobUpdateRequests);
+      m_jobUpdateRequests.clear();
+    }
+  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
 Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
@@ -263,6 +302,8 @@ void Director::JobTransfer() {
   auto fHandle = m_frontPoolHandle->DBHandle();
 
   std::vector<bsoncxx::document::view_or_value> toBeInserted;
+  std::vector<mongocxx::model::write> writeOps;
+
   do {
     // collect jobs from each active task
     for (const auto &task : m_tasks) {
@@ -286,7 +327,7 @@ void Director::JobTransfer() {
       m_logger->debug("Inserting {} new jobs into frontend DB", toBeInserted.size());
       fHandle["jobs"].insert_many(toBeInserted);
 
-      for (const auto &jobIt : toBeInserted) {
+      std::transform(begin(toBeInserted), end(toBeInserted), std::back_inserter(writeOps), [](const auto &jobIt) {
         json job = JsonUtils::bson2json(jobIt);
 
         json updateFilter;
@@ -295,10 +336,13 @@ void Director::JobTransfer() {
         json updateAction;
         updateAction["$set"]["inFrontDB"] = true;
 
-        bHandle["jobs"].update_one(JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction));
-      }
+        return mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction)};
+      });
+
+      bHandle["jobs"].bulk_write(writeOps);
 
       toBeInserted.clear();
+      writeOps.clear();
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
@@ -403,12 +447,8 @@ void Director::UpdatePilots() {
       auto queryJResult = handle["jobs"].find_one(JsonUtils::json2bson(jobQuery));
       if (queryJResult) {
         json job = JsonUtils::bson2json(queryJResult.value());
-        auto result = handle.UpdateJobStatus(job["hash"].get<std::string_view>(), job["task"].get<std::string_view>(),
-                                             JobStatus::Error);
-
-        if (!result) {
-          m_logger->warn("Couldn't update status for job {}, claimed by dead pilot {}", job["hash"], pilot["uuid"]);
-        }
+        UpdateJobStatus(pilot["uuid"].get<std::string_view>(), job["hash"].get<std::string_view>(),
+                        job["task"].get<std::string_view>(), JobStatus::Error);
       }
 
       if (auto pilotIt = m_activePilots.find(pilot["uuid"]); pilotIt != end(m_activePilots))
@@ -441,8 +481,8 @@ void Director::DBSync() {
     lastCheck = std::chrono::system_clock::now();
     m_logger->debug("...query done.");
 
-    unsigned int nUpdatedJobs{0};
-    for (const auto &_job : queryResult) {
+    std::vector<mongocxx::model::write> writeOps;
+    std::transform(queryResult.begin(), queryResult.end(), std::back_inserter(writeOps), [](const auto &_job) {
       json job = JsonUtils::bson2json(_job);
 
       json jobQuery;
@@ -451,11 +491,12 @@ void Director::DBSync() {
       json jobUpdateAction;
       jobUpdateAction["$set"]["status"] = job["status"];
 
-      bHandle["jobs"].update_one(JsonUtils::json2bson(jobQuery), JsonUtils::json2bson(jobUpdateAction));
-      nUpdatedJobs++;
-    }
+      return mongocxx::model::update_one{JsonUtils::json2bson(jobQuery), JsonUtils::json2bson(jobUpdateAction)};
+    });
+    if (!writeOps.empty())
+      bHandle["jobs"].bulk_write(writeOps);
 
-    m_logger->debug("DBs synced: {} jobs updated in backend DB", nUpdatedJobs);
+    m_logger->debug("DBs synced: {} jobs updated in backend DB", writeOps.size());
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
