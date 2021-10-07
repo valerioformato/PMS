@@ -69,7 +69,7 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Claimed);
   updateAction["$set"]["pilotUuid"] = pilotUuid;
 
-  json projectionOpt = R"({_id:0, "job":1)"_json;
+  json projectionOpt = R"({_id:0, "job":1})"_json;
   mongocxx::options::find_one_and_update query_options;
   query_options.bypass_document_validation(true).projection(JsonUtils::json2bson(projectionOpt));
 
