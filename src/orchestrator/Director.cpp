@@ -166,6 +166,7 @@ void Director::WriteJobUpdates() {
                        })) /
                    (nSamples - 1);
       m_logger->debug("[WriteJobUpdates] Wrote on average {} jobs in {} +- {} ms", meanJobs, mean, stdev);
+      perfCounters.clear();
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
