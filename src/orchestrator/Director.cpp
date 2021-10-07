@@ -116,15 +116,56 @@ Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, 
   return OperationResult::Success;
 }
 
+struct WJU_PerfCounters {
+  WJU_PerfCounters(std::chrono::system_clock::duration time_, unsigned int jobWrites_)
+      : time{std::move(time_)}, jobWrites{jobWrites_} {}
+
+  std::chrono::system_clock::duration time;
+  unsigned int jobWrites;
+};
+
 void Director::WriteJobUpdates() {
   static constexpr auto coolDown = std::chrono::milliseconds(100);
+  static constexpr unsigned int nSamples = 100;
+  static std::vector<WJU_PerfCounters> perfCounters;
+  perfCounters.reserve(nSamples);
 
   auto handle = m_frontPoolHandle->DBHandle();
   do {
     if (!m_jobUpdateRequests.empty()) {
+      auto start = std::chrono::system_clock::now();
+
       std::lock_guard lock{m_jobUpdateRequests_mx};
       handle["jobs"].bulk_write(m_jobUpdateRequests);
+
+      auto end = std::chrono::system_clock::now();
+      perfCounters.emplace_back(end - start, m_jobUpdateRequests.size());
+
       m_jobUpdateRequests.clear();
+    }
+
+    // do some performance logging
+    if (perfCounters.size() == nSamples) {
+      auto meanJobs = std::accumulate(begin(perfCounters), end(perfCounters), 0.0,
+                                      [](const auto &curr, const auto &pfc) { return curr + pfc.jobWrites; }) /
+                      nSamples;
+
+      auto mean =
+          std::accumulate(begin(perfCounters), end(perfCounters), 0.0,
+                          [](const auto &curr, const auto &pfc) {
+                            return curr + std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count();
+                          }) /
+          nSamples;
+      auto stdev = std::sqrt(std::accumulate(
+                       begin(perfCounters), end(perfCounters), 0.0,
+                       [mean](const auto &curr, const auto &pfc) {
+                         return curr + (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() -
+                                        std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count()) *
+                                           (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() -
+                                            std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count());
+                       })) /
+                   (nSamples - 1);
+      m_logger->debug("[WriteJobUpdates] Wrote on average {} jobs in {} +- {} ms", meanJobs, mean, stdev);
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
