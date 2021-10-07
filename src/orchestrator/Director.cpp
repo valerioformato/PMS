@@ -69,13 +69,18 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Claimed);
   updateAction["$set"]["pilotUuid"] = pilotUuid;
 
-  auto query_result =
-      handle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
+  json projectionOpt = R"({_id:0, "job":1)"_json;
+  mongocxx::options::find_one_and_update query_options;
+  query_options.bypass_document_validation(true).projection(JsonUtils::json2bson(projectionOpt));
+
+  auto query_result = handle["jobs"].find_one_and_update(JsonUtils::json2bson(filter),
+                                                         JsonUtils::json2bson(updateAction), query_options);
 
   if (query_result) {
+    return JsonUtils::bson2json(query_result.value());
     // remove _id field before returning
-    return JsonUtils::bson2json(JsonUtils::filter(
-        query_result.value(), [](const bsoncxx::document::element &el) { return el.key().to_string() == "_id"; }));
+    // return JsonUtils::bson2json(JsonUtils::filter(
+    //     query_result.value(), [](const bsoncxx::document::element &el) { return el.key().to_string() == "_id"; }));
   } else {
     return {};
   }
