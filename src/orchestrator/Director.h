@@ -5,6 +5,7 @@
 #include <future>
 #include <queue>
 #include <thread>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -69,6 +70,7 @@ private:
   void JobTransfer();
   void UpdateTasks();
   void UpdatePilots();
+  void WriteJobUpdates();
   void DBSync();
 
   struct PilotInfo {
@@ -84,6 +86,9 @@ private:
   std::shared_ptr<DB::PoolHandle> m_backPoolHandle;
 
   ts_queue<json> m_incomingJobs;
+
+  std::mutex m_jobUpdateRequests_mx;
+  std::vector<mongocxx::model::write> m_jobUpdateRequests;
 
   std::unordered_map<std::string, Task> m_tasks;
 

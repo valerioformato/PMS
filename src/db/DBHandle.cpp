@@ -12,31 +12,6 @@
 using json = nlohmann::json;
 
 namespace PMS::DB {
-bool DBHandle::UpdateJobStatus(std::string_view hash, std::string_view task, JobStatus status) const {
-  json jobFilter;
-  jobFilter["task"] = task;
-  jobFilter["hash"] = hash;
-
-  json jobUpdateAction;
-  jobUpdateAction["$set"]["status"] = magic_enum::enum_name(status);
-  jobUpdateAction["$currentDate"]["lastUpdate"] = true;
-
-  switch (status) {
-  case JobStatus::Running:
-    jobUpdateAction["$currentDate"]["startTime"] = true;
-    break;
-  case JobStatus::Error:
-  case JobStatus::Done:
-    jobUpdateAction["$currentDate"]["finishTime"] = true;
-    break;
-  default:
-    break;
-  }
-
-  return static_cast<bool>(
-      this->operator[]("jobs").update_one(JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction)));
-}
-
 void DBHandle::SetupDBCollections() {
   using bsoncxx::builder::basic::kvp;
   using bsoncxx::builder::basic::make_document;
