@@ -69,7 +69,8 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Claimed);
   updateAction["$set"]["pilotUuid"] = pilotUuid;
 
-  json projectionOpt = R"({_id:0, "job":1)"_json;
+  // only keep fields that the pilot will actually need... This alleviates load on the DB
+  json projectionOpt = R"({_id:0, "dataset":0, "jobName":0, "status":0, "tags":0, "user":0})"_json;
   mongocxx::options::find_one_and_update query_options;
   query_options.bypass_document_validation(true).projection(JsonUtils::json2bson(projectionOpt));
 
@@ -78,9 +79,6 @@ json Director::ClaimJob(std::string_view pilotUuid) {
 
   if (query_result) {
     return JsonUtils::bson2json(query_result.value());
-    // remove _id field before returning
-    // return JsonUtils::bson2json(JsonUtils::filter(
-    //     query_result.value(), [](const bsoncxx::document::element &el) { return el.key().to_string() == "_id"; }));
   } else {
     return {};
   }
