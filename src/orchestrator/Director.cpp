@@ -70,7 +70,7 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   updateAction["$set"]["pilotUuid"] = pilotUuid;
 
   // only keep fields that the pilot will actually need... This alleviates load on the DB
-  json projectionOpt = R"({_id:0, "dataset":0, "jobName":0, "status":0, "tags":0, "user":0})"_json;
+  json projectionOpt = R"({"_id":0, "dataset":0, "jobName":0, "status":0, "tags":0, "user":0})"_json;
   mongocxx::options::find_one_and_update query_options;
   query_options.bypass_document_validation(true).projection(JsonUtils::json2bson(projectionOpt));
 
@@ -159,15 +159,14 @@ void Director::WriteJobUpdates() {
                             return curr + std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count();
                           }) /
           nSamples;
-      auto stdev = std::sqrt(std::accumulate(
-                       begin(perfCounters), end(perfCounters), 0.0,
-                       [mean](const auto &curr, const auto &pfc) {
-                         return curr + (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() -
-                                        std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count()) *
-                                           (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() -
-                                            std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count());
-                       })) /
-                   (nSamples - 1);
+      auto stdev =
+          std::sqrt(std::accumulate(
+              begin(perfCounters), end(perfCounters), 0.0,
+              [mean](const auto &curr, const auto &pfc) {
+                return curr + (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() - mean) *
+                                  (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() - mean);
+              })) /
+          (nSamples - 1);
       m_logger->debug("[WriteJobUpdates] Wrote on average {} jobs in {} +- {} ms", meanJobs, mean, stdev);
       perfCounters.clear();
     }
