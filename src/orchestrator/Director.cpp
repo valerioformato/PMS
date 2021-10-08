@@ -128,8 +128,8 @@ struct WJU_PerfCounters {
 };
 
 void Director::WriteJobUpdates() {
-  static constexpr auto coolDown = std::chrono::milliseconds(100);
-  static constexpr unsigned int nSamples = 100;
+  static constexpr auto coolDown = std::chrono::seconds(1);
+  static constexpr unsigned int nSamples = 60;
   static std::vector<WJU_PerfCounters> perfCounters;
   perfCounters.reserve(nSamples);
 
@@ -167,7 +167,7 @@ void Director::WriteJobUpdates() {
                                   (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() - mean);
               })) /
           (nSamples - 1);
-      m_logger->debug("[WriteJobUpdates] Wrote on average {} jobs in {} +- {} ms", meanJobs, mean, stdev);
+      m_logger->debug("[WriteJobUpdates] Wrote on average {} jobs in {:4.2f} +- {:4.2f} ms", meanJobs, mean, stdev);
       perfCounters.clear();
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
