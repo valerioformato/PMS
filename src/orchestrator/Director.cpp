@@ -121,7 +121,7 @@ Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, 
 
 struct WJU_PerfCounters {
   WJU_PerfCounters(std::chrono::system_clock::duration time_, unsigned int jobWrites_)
-      : time{std::move(time_)}, jobWrites{jobWrites_} {}
+      : time{time_}, jobWrites{jobWrites_} {}
 
   std::chrono::system_clock::duration time;
   unsigned int jobWrites;
@@ -167,7 +167,7 @@ void Director::WriteJobUpdates() {
                                   (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() - mean);
               })) /
           (nSamples - 1);
-      m_logger->debug("[WriteJobUpdates] Wrote on average {} jobs in {:4.2f} +- {:4.2f} ms", meanJobs, mean, stdev);
+      m_logger->debug("[WriteJobUpdates] Wrote on average {:4.2f} jobs in {:4.2f} +- {:4.2f} ms", meanJobs, mean, stdev);
       perfCounters.clear();
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);

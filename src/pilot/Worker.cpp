@@ -53,8 +53,10 @@ bool Worker::Register() {
 
 void Worker::Start(unsigned long int maxJobs) {
 
-  // TODO: implement mechanism to decide when a task is actually
-  // finished
+  if(maxJobs < std::numeric_limits< decltype(maxJobs)>::max()){
+    spdlog::debug("Starting worker for {} jobs...", maxJobs);
+  }
+
   bool exit = false;
   bool wait = false;
 

@@ -50,8 +50,9 @@ int main(int argc, const char **argv) {
   spdlog::info("Connecting to Server: {}", serverUri);
   auto wsClient = std::make_shared<PMS::Pilot::Client>(serverUri);
 
-  unsigned long int maxJobs =
-      args.find("MAXJOBS") == end(args) ? std::numeric_limits<unsigned long int>::max() : args["MAXJOBS"].asLong();
+  unsigned long int maxJobs = args.find("--maxJobs") == end(args)
+                                  ? std::numeric_limits<unsigned long int>::max()
+                                  : std::stol(args["--maxJobs"].asStringList()[0]);
 
   Pilot::Worker worker{config, wsClient};
   if (!worker.Register()) {
