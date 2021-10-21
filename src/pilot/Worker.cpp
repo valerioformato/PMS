@@ -89,7 +89,7 @@ void Worker::Start(unsigned long int maxJobs) {
     // Here we check if we had abandoned jobs that have not been updated on the server and we process them
     if (!abandonedJobs.empty()) {
       std::for_each(begin(abandonedJobs), end(abandonedJobs),
-                    [this](json &job) { UpdateJobStatus(job["hash"], job["task"], JobStatus::Error); });
+                    [this](const json &job) { UpdateJobStatus(job["hash"], job["task"], JobStatus::Error); });
       abandonedJobs.clear();
     }
 
@@ -111,7 +111,7 @@ void Worker::Start(unsigned long int maxJobs) {
       auto shellScript = fmt::output_file(shellScriptPath.string());
       fs::permissions(shellScriptPath, fs::perms::owner_all | fs::perms::group_read);
 
-      shellScript.print("#! /bin/bash\n");
+      shellScript.print("#! /bin/bash\n set -e\n");
 
       std::string executable;
       std::vector<std::string> arguments;
@@ -195,7 +195,9 @@ void Worker::Start(unsigned long int maxJobs) {
 
       proc.wait();
 
-      if (procError) {
+      spdlog::debug("Process exited with code {}", proc.exit_code());
+
+      if (procError || proc.exit_code()) {
         spdlog::error("Worker: Job exited with an error: {}", procError.message());
         if (!UpdateJobStatus(job["hash"], job["task"], JobStatus::Error)) {
           spdlog::error("Can't reach server while trying to set job as Error. Abandoning job...");
