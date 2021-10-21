@@ -292,11 +292,13 @@ UserCommand Server::toUserCommand(const json &msg) {
   auto command = msg["command"].get<std::string_view>();
   auto cmdTypeP = m_commandLUT.find(command);
 
-  if (cmdTypeP == end(m_commandLUT))
+  if (cmdTypeP == end(m_commandLUT)) {
+    if(command == "fava")
+      return OrchCommand<InvalidCommand>{"Duranti, faccia il serio..."};
     return OrchCommand<InvalidCommand>{fmt::format("Command {} not supported", command)};
+  }
 
   std::string errorMessage{};
-
   switch (cmdTypeP->second) {
   case UserCommandType::CreateTask:
     if (ValidateJsonCommand<CreateTask>(msg))
