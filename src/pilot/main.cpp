@@ -30,7 +30,7 @@ int main(int argc, const char **argv) {
   std::map<std::string, docopt::value> args = docopt::docopt(USAGE, {std::next(argv), std::next(argv, argc)},
                                                              true,         // show help if requested
                                                              "PMS 0.0.1"); // version string
-  
+
   switch (args["-v"].asLong()) {
   case 1:
     spdlog::set_level(spdlog::level::debug);
@@ -47,13 +47,12 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Pilot::Config config{configFileName};
 
+  unsigned long int maxJobs =
+      args["--maxJobs"] ? args["--maxJobs"].asLong() : std::numeric_limits<unsigned long int>::max();
+
   std::string serverUri = fmt::format("ws://{}", config.server);
   spdlog::info("Connecting to Server: {}", serverUri);
   auto wsClient = std::make_shared<PMS::Pilot::Client>(serverUri);
-
-  unsigned long int maxJobs = args.find("--maxJobs") == end(args)
-                                  ? std::numeric_limits<unsigned long int>::max()
-                                  : args["--maxJobs"].asLong();
 
   Pilot::Worker worker{config, wsClient};
   if (!worker.Register()) {

@@ -100,7 +100,7 @@ std::string Server::HandleCommand(UserCommand &&command) {
 
                           auto result = m_director->AddTaskDependency(ucmd.cmd.task, ucmd.cmd.dependsOn);
                           return result == Director::OperationResult::Success
-                                     ? fmt::format("Task \"{}\" now depends on task {}", ucmd.cmd.task,
+                                     ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task,
                                                    ucmd.cmd.dependsOn)
                                      : fmt::format("Failed to add task dependency");
                         },
