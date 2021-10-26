@@ -111,7 +111,7 @@ void Worker::Start(unsigned long int maxJobs) {
       auto shellScript = fmt::output_file(shellScriptPath.string());
       fs::permissions(shellScriptPath, fs::perms::owner_all | fs::perms::group_read);
 
-      shellScript.print("#! /bin/bash\n set -e\n");
+      shellScript.print("#! /bin/bash\n");
 
       std::string executable;
       std::vector<std::string> arguments;
@@ -177,6 +177,10 @@ void Worker::Start(unsigned long int maxJobs) {
       }
       spdlog::info("Worker:  - {}", executableWithArgs);
 
+      // set the shell to exit as soon as a command fails
+      shellScript.print("set -e\n");
+
+      // run the executable
       shellScript.print("{}\n", executableWithArgs);
 
       // close the script file before execution, or the child will silently fail
@@ -217,6 +221,7 @@ void Worker::Start(unsigned long int maxJobs) {
           abandonedJobs.push_back(job);
           continue;
         }
+      }
 
         // check for outbound file transfers
         if (job.contains("output")) {
@@ -227,7 +232,6 @@ void Worker::Start(unsigned long int maxJobs) {
           }
           ftQueue.Process();
         }
-      }
 
       // remove temporary sandbox directory
       fs::remove_all(wdPath);
