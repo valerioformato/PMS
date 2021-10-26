@@ -14,13 +14,14 @@ static constexpr auto USAGE =
     R"(PMS Pilot fish executable.
 
     Usage:
-          PMSPilot <configfile> [ -v | -vv ] [ -m MAXJOBS ]
+          PMSPilot <configfile> [-v | -vv] [-m MAXJOBS]
           PMSPilot --version
- Options:
-          -v...                         Enable debug output (verbose, trace)
-          -h --help                     Show this screen.
-          -m MAXJOBS --maxJobs=MAXJOBS  Number of jobs to run before shutdown
-          --version                     Show version.
+
+    Options:
+          -v...                           Enable debug output (verbose, trace)
+          -h --help                       Show this screen.
+          -m MAXJOBS, --maxJobs=MAXJOBS   Number of jobs to run before shutdown
+          --version                       Show version.
 )";
 
 using namespace PMS;
@@ -29,7 +30,7 @@ int main(int argc, const char **argv) {
   std::map<std::string, docopt::value> args = docopt::docopt(USAGE, {std::next(argv), std::next(argv, argc)},
                                                              true,         // show help if requested
                                                              "PMS 0.0.1"); // version string
-
+  
   switch (args["-v"].asLong()) {
   case 1:
     spdlog::set_level(spdlog::level::debug);
@@ -52,7 +53,7 @@ int main(int argc, const char **argv) {
 
   unsigned long int maxJobs = args.find("--maxJobs") == end(args)
                                   ? std::numeric_limits<unsigned long int>::max()
-                                  : std::stol(args["--maxJobs"].asStringList()[0]);
+                                  : args["--maxJobs"].asLong();
 
   Pilot::Worker worker{config, wsClient};
   if (!worker.Register()) {
