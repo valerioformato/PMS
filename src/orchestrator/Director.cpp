@@ -61,13 +61,15 @@ json Director::ClaimJob(std::string_view pilotUuid) {
     return R"({"finished": true})"_json;
 
   json filter;
-  filter["status"] = magic_enum::enum_name(JobStatus::Pending);
+  filter["status"]["$in"] =
+      std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Pending), magic_enum::enum_name(JobStatus::Error)};
   filter["task"]["$in"] = pilotInfo.tasks;
   filter["tags"]["$all"] = pilotInfo.tags;
 
   json updateAction;
   updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Claimed);
   updateAction["$set"]["pilotUuid"] = pilotUuid;
+  updateAction["$inc"]["retries"] = 1;
 
   // only keep fields that the pilot will actually need... This alleviates load on the DB
   json projectionOpt = R"({"_id":0, "dataset":0, "jobName":0, "status":0, "tags":0, "user":0})"_json;
@@ -167,7 +169,8 @@ void Director::WriteJobUpdates() {
                                   (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() - mean);
               })) /
           (nSamples - 1);
-      m_logger->debug("[WriteJobUpdates] Wrote on average {:4.2f} jobs in {:4.2f} +- {:4.2f} ms", meanJobs, mean, stdev);
+      m_logger->debug("[WriteJobUpdates] Wrote on average {:4.2f} jobs in {:4.2f} +- {:4.2f} ms", meanJobs, mean,
+                      stdev);
       perfCounters.clear();
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
