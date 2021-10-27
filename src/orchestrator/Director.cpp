@@ -262,6 +262,14 @@ Director::OperationResult Director::AddTaskDependency(const std::string &task, c
 
   thisTask.dependencies.push_back(dependsOn);
 
+  auto handle = m_backPoolHandle->DBHandle();
+
+  json filter;
+  filter["name"] = task;
+  json updateAction;
+  updateAction["$push"]["dependencies"] = dependsOn;
+  handle["tasks"].update_one(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
+
   return OperationResult::Success;
 }
 
@@ -430,6 +438,7 @@ void Director::UpdateTasks() {
 
         task.name = tmpdoc["name"];
         task.token = tmpdoc["token"];
+        std::copy(tmpdoc["dependencies"].begin(), tmpdoc["dependencies"].end(), std::back_inserter(task.dependencies));
       }
 
       if (task.dependencies.empty()) {
