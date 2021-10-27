@@ -19,7 +19,7 @@ struct Task {
 
   [[nodiscard]] bool IsFinished() const { return (totJobs > 0 && jobs[JobStatus::Done] == totJobs); }
   [[nodiscard]] bool IsActive() const {
-    return (totJobs > 0) && ((jobs[JobStatus::Done] + jobs[JobStatus::Error]) != totJobs);
+    return (totJobs > 0) && ((jobs[JobStatus::Done] + jobs[JobStatus::Failed]) != totJobs);
   }
   [[nodiscard]] bool IsExhausted() const { return (totJobs > 0 && jobs[JobStatus::Pending] == 0); }
 };

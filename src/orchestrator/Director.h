@@ -95,6 +95,8 @@ private:
   std::promise<void> m_exitSignal;
   std::shared_future<void> m_exitSignalFuture{m_exitSignal.get_future()};
   std::vector<std::thread> m_threads;
+
+  static constexpr unsigned int m_maxRetries = 3;
 };
 
 } // namespace PMS::Orchestrator

@@ -53,17 +53,21 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   auto pilotInfo = GetPilotInfo(pilotUuid);
   bool done = true;
   for (const auto &taskName : pilotInfo.tasks) {
-    const auto &task = m_tasks[taskName];
-    done &= task.IsExhausted();
+    done &= m_tasks[taskName].IsExhausted();
   }
 
   if (done)
     return R"({"finished": true})"_json;
 
+  // NOTE(vformato): check which tasks are currently active, we'll only add those to the query
+  std::vector<std::string_view> activeTasks;
+  std::copy_if(begin(pilotInfo.tasks), end(pilotInfo.tasks), std::back_inserter(activeTasks),
+               [this](const auto &taskName) { return m_tasks[taskName].IsActive(); });
+
   json filter;
   filter["status"]["$in"] =
       std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Pending), magic_enum::enum_name(JobStatus::Error)};
-  filter["task"]["$in"] = pilotInfo.tasks;
+  filter["task"]["$in"] = activeTasks;
   filter["tags"]["$all"] = pilotInfo.tags;
 
   json updateAction;
@@ -71,7 +75,7 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   updateAction["$set"]["pilotUuid"] = pilotUuid;
   updateAction["$inc"]["retries"] = 1;
 
-  // only keep fields that the pilot will actually need... This alleviates load on the DB
+  // NOTE(vformato): only keep fields that the pilot will actually need... This alleviates load on the DB
   json projectionOpt = R"({"_id":0, "dataset":0, "jobName":0, "status":0, "tags":0, "user":0})"_json;
   mongocxx::options::find_one_and_update query_options;
   query_options.bypass_document_validation(true).projection(JsonUtils::json2bson(projectionOpt));
@@ -148,6 +152,14 @@ void Director::WriteJobUpdates() {
 
       m_jobUpdateRequests.clear();
     }
+
+    json filter;
+    filter["status"] = magic_enum::enum_name(JobStatus::Error);
+    filter["retries"]["$gte"] = m_maxRetries;
+
+    json updateAction;
+    updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Failed);
+    handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
 
     // do some performance logging
     if (perfCounters.size() == nSamples) {
