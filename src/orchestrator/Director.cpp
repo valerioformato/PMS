@@ -460,10 +460,11 @@ void Director::UpdateTasks() {
         task.jobs[status] = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
       }
 
-      m_logger->debug("Task {} updated - {} job{} ({} done, {} failed, {} running, {} claimed, {} pending)", task.name,
-                      task.totJobs, task.totJobs > 1 ? "s" : "", task.jobs[JobStatus::Done],
-                      task.jobs[JobStatus::Error], task.jobs[JobStatus::Running], task.jobs[JobStatus::Claimed],
-                      task.jobs[JobStatus::Pending]);
+      m_logger->debug(
+          "Task {} updated - {} job{} ({} done, {} failed, {} running, {} claimed, {} pending) - status: {}{}{}",
+          task.name, task.totJobs, task.totJobs > 1 ? "s" : "", task.jobs[JobStatus::Done], task.jobs[JobStatus::Error],
+          task.jobs[JobStatus::Running], task.jobs[JobStatus::Claimed], task.jobs[JobStatus::Pending],
+          task.IsActive() ? "A" : "", task.IsExhausted() ? "E" : "", task.IsFinished() ? "F" : "");
     }
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
