@@ -28,6 +28,9 @@ build-ubuntu20.04:
 dockerize-ubuntu20.04:
   stage: dockerize
   image: docker:stable
+  needs: ["build-ubuntu20.04"]
+  tags:
+    - docker
   only:
     - master
   variables:
