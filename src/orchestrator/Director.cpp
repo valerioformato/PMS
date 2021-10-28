@@ -464,16 +464,16 @@ void Director::UpdateTasks() {
       countQuery["task"] = taskName;
       task.totJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
 
+      std::vector<std::string> statusSummary;
       for (auto status : magic_enum::enum_values<JobStatus>()) {
         countQuery["status"] = magic_enum::enum_name(status);
         task.jobs[status] = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
+        statusSummary.push_back(fmt::format("{} {}", task.jobs[status], magic_enum::enum_name(status)));
       }
 
-      m_logger->debug(
-          "Task {} updated - {} job{} ({} done, {} failed, {} running, {} claimed, {} pending) - status: {}{}{}",
-          task.name, task.totJobs, task.totJobs > 1 ? "s" : "", task.jobs[JobStatus::Done], task.jobs[JobStatus::Error],
-          task.jobs[JobStatus::Running], task.jobs[JobStatus::Claimed], task.jobs[JobStatus::Pending],
-          task.IsActive() ? "A" : "", task.IsExhausted() ? "E" : "", task.IsFinished() ? "F" : "");
+      m_logger->debug("Task {} updated - {} job{} ({}) - status: {}{}{}", task.name, task.totJobs,
+                      task.totJobs > 1 ? "s" : "", fmt::join(statusSummary, ", "), task.IsActive() ? "A" : "",
+                      task.IsExhausted() ? "E" : "", task.IsFinished() ? "F" : "");
     }
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
