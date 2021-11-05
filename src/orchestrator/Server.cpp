@@ -36,6 +36,7 @@ std::unordered_map<std::string_view, Server::UserCommandType> Server::m_commandL
     {"clearTask"sv, UserCommandType::ClearTask},
     {"cleanTask"sv, UserCommandType::CleanTask},
     {"declareTaskDependency"sv, UserCommandType::DeclareTaskDependency},
+    {"validateTaskToken"sv, UserCommandType::CheckTaskToken},
     {"summary"sv, UserCommandType::Summary},
 };
 
@@ -49,13 +50,16 @@ std::unordered_map<std::string_view, Server::PilotCommandType> Server::m_pilot_c
 };
 
 std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, std::string_view token) const {
-  auto tokenValid = m_director->ValidateTaskToken(task, token);
+  auto queryResult = m_director->ValidateTaskToken(task, token);
 
-  if (!tokenValid) {
+  switch (queryResult) {
+  case Director::OperationResult::Success:
+    return {true, {}};
+  case Director::OperationResult::ProcessError:
     return {false, fmt::format("Invalid token for task {}", task)};
+  case Director::OperationResult::DatabaseError:
+    return {false, fmt::format("Task {} does not exist", task)};
   }
-
-  return {true, {}};
 }
 
 std::string Server::HandleCommand(UserCommand &&command) {
@@ -103,6 +107,14 @@ std::string Server::HandleCommand(UserCommand &&command) {
                                      ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task,
                                                    ucmd.cmd.dependsOn)
                                      : fmt::format("Failed to add task dependency");
+                        },
+                        // Check if a task/token pair is valid
+                        [this](const OrchCommand<CheckTaskToken> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
+                          return fmt::format("Task/token pair is valid.");
                         },
                         // Submit a new job
                         [this](OrchCommand<SubmitJob> &ucmd) {
@@ -293,7 +305,7 @@ UserCommand Server::toUserCommand(const json &msg) {
   auto cmdTypeP = m_commandLUT.find(command);
 
   if (cmdTypeP == end(m_commandLUT)) {
-    if(command == "fava")
+    if (command == "fava")
       return OrchCommand<InvalidCommand>{"Duranti, faccia il serio..."};
     return OrchCommand<InvalidCommand>{fmt::format("Command {} not supported", command)};
   }
@@ -328,6 +340,13 @@ UserCommand Server::toUserCommand(const json &msg) {
     // handle invalid fields:
     errorMessage =
         fmt::format("Invalid command arguments. Required fields are: {}", DeclareTaskDependency::requiredFields);
+    break;
+  case UserCommandType::CheckTaskToken:
+    if (ValidateJsonCommand<CheckTaskToken>(msg))
+      return OrchCommand<CheckTaskToken>{msg["task"], msg["token"]};
+
+    // handle invalid fields:
+    errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CheckTaskToken::requiredFields);
     break;
   case UserCommandType::SubmitJob:
     if (ValidateJsonCommand<SubmitJob>(msg))

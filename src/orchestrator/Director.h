@@ -63,7 +63,7 @@ public:
 
   std::string Summary(const std::string &user);
 
-  bool ValidateTaskToken(std::string_view task, std::string_view token) const;
+  OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const;
 
 private:
   void JobInsert();
