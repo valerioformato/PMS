@@ -18,11 +18,11 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
   switch (ftInfo.type) {
   case FileTransferType::Inbound:
     from = fs::path{ftInfo.remotePath} / fs::path{ftInfo.fileName};
-    to = fs::path{ftInfo.currentPath} / fs::path{ftInfo.fileName};
+    to = fs::path{ftInfo.currentPath};
     break;
   case FileTransferType::Outbound:
     from = fs::path{ftInfo.currentPath} / fs::path{ftInfo.fileName};
-    to = fs::path{ftInfo.remotePath} / fs::path{ftInfo.fileName};
+    to = fs::path{ftInfo.remotePath};
     break;
   }
 
