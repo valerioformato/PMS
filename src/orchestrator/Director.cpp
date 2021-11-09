@@ -86,7 +86,7 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   if (query_result) {
     return JsonUtils::bson2json(query_result.value());
   } else {
-    return {};
+    return R"({"sleep": true})"_json;
   }
 }
 
