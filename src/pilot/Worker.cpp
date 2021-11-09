@@ -169,18 +169,14 @@ void Worker::Start(unsigned long int maxJobs) {
         spdlog::trace("Inbound transfers completed?");
       }
 
-      fs::path exePath{executable};
-      if (!fs::exists(exePath)) {
-        spdlog::error("Cannot find file {}", exePath.string());
-      }
-      spdlog::trace("{} ({}, {}, {})", exePath.string(), jobIO.stdin, jobIO.stdout, jobIO.stderr);
+      spdlog::trace("{} ({}, {}, {})", executable, jobIO.stdin, jobIO.stdout, jobIO.stderr);
 
       spdlog::info("Worker: Spawning process");
       std::string executableWithArgs;
       if (arguments.empty()) {
-        executableWithArgs = fmt::format("{}", fs::canonical(exePath).string());
+        executableWithArgs = fmt::format("{}", executable);
       } else {
-        executableWithArgs = fmt::format("{} {}", fs::canonical(exePath).string(), fmt::join(arguments, " "));
+        executableWithArgs = fmt::format("{} {}", executable, fmt::join(arguments, " "));
       }
       spdlog::info("Worker:  - {}", executableWithArgs);
 
