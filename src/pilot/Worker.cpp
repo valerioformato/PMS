@@ -53,7 +53,7 @@ bool Worker::Register() {
 
 void Worker::Start(unsigned long int maxJobs) {
 
-  if(maxJobs < std::numeric_limits< decltype(maxJobs)>::max()){
+  if (maxJobs < std::numeric_limits<decltype(maxJobs)>::max()) {
     spdlog::debug("Starting worker for {} jobs...", maxJobs);
   }
 
@@ -93,7 +93,7 @@ void Worker::Start(unsigned long int maxJobs) {
       abandonedJobs.clear();
     }
 
-    if(job.contains("finished")){
+    if (job.contains("finished")) {
       sleepTime = std::chrono::minutes(1);
       wait = true;
     }
@@ -138,7 +138,14 @@ void Worker::Start(unsigned long int maxJobs) {
         switch (envType) {
         case EnvInfoType::Script:
           try {
-            shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
+            if (!job["env"].contains("args")) {
+              shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
+            } else {
+              std::vector<std::string> dummy;
+              auto scriptArgs = job["exe_args"];
+              std::copy(scriptArgs.begin(), scriptArgs.end(), std::back_inserter(dummy));
+              shellScript.print(". {} {}\n", fs::canonical(job["env"]["file"]).string(), fmt::join(dummy, " "));
+            }
           } catch (const fs::filesystem_error &e) {
             spdlog::error("{}", e.what());
             continue;
@@ -223,15 +230,15 @@ void Worker::Start(unsigned long int maxJobs) {
         }
       }
 
-        // check for outbound file transfers
-        if (job.contains("output")) {
-          FileTransferQueue ftQueue;
-          auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
-          for (const auto &ftJob : fts) {
-            ftQueue.Add(ftJob);
-          }
-          ftQueue.Process();
+      // check for outbound file transfers
+      if (job.contains("output")) {
+        FileTransferQueue ftQueue;
+        auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
+        for (const auto &ftJob : fts) {
+          ftQueue.Add(ftJob);
         }
+        ftQueue.Process();
+      }
 
       // remove temporary sandbox directory
       fs::remove_all(wdPath);
