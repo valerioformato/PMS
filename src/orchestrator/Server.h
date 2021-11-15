@@ -38,7 +38,15 @@ private:
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
   void pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
 
-  enum class UserCommandType { SubmitJob, CreateTask, CleanTask, ClearTask, DeclareTaskDependency, Summary };
+  enum class UserCommandType {
+    SubmitJob,
+    CreateTask,
+    CleanTask,
+    ClearTask,
+    DeclareTaskDependency,
+    CheckTaskToken,
+    Summary
+  };
   std::string HandleCommand(UserCommand &&command);
   static UserCommand toUserCommand(const json &msg);
   static std::unordered_map<std::string_view, UserCommandType> m_commandLUT;

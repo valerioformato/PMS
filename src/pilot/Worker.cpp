@@ -57,8 +57,11 @@ void Worker::Start(unsigned long int maxJobs) {
     spdlog::debug("Starting worker for {} jobs...", maxJobs);
   }
 
-  bool exit = false;
-  bool wait = false;
+  enum class State { RUN, SLEEP, WAIT, EXIT };
+
+  State state;
+  //  bool exit = false;
+  //  bool wait = false;
 
   constexpr auto maxWaitTime = std::chrono::minutes(10);
   auto sleepTime = std::chrono::seconds(1);
@@ -81,6 +84,7 @@ void Worker::Start(unsigned long int maxJobs) {
     json job;
     try {
       job = json::parse(m_wsConnection->Send(request.dump()));
+      state = State::RUN;
     } catch (const Connection::FailedConnectionException &e) {
       if (!hb.IsAlive())
         break;
@@ -95,10 +99,13 @@ void Worker::Start(unsigned long int maxJobs) {
 
     if (job.contains("finished")) {
       sleepTime = std::chrono::minutes(1);
-      wait = true;
+      state = State::WAIT;
+    } else if (job.contains("sleep")) {
+      sleepTime = std::chrono::minutes(1);
+      state = State::SLEEP;
     }
 
-    if (!job.empty() && !wait) {
+    if (!job.empty() && state == State::RUN) {
       spdlog::info("Worker: got a new job");
       spdlog::trace("Job: {}", job.dump(2));
 
@@ -169,18 +176,14 @@ void Worker::Start(unsigned long int maxJobs) {
         spdlog::trace("Inbound transfers completed?");
       }
 
-      fs::path exePath{executable};
-      if (!fs::exists(exePath)) {
-        spdlog::error("Cannot find file {}", exePath.string());
-      }
-      spdlog::trace("{} ({}, {}, {})", exePath.string(), jobIO.stdin, jobIO.stdout, jobIO.stderr);
+      spdlog::trace("{} ({}, {}, {})", executable, jobIO.stdin, jobIO.stdout, jobIO.stderr);
 
       spdlog::info("Worker: Spawning process");
       std::string executableWithArgs;
       if (arguments.empty()) {
-        executableWithArgs = fmt::format("{}", fs::canonical(exePath).string());
+        executableWithArgs = fmt::format("{}", executable);
       } else {
-        executableWithArgs = fmt::format("{} {}", fs::canonical(exePath).string(), fmt::join(arguments, " "));
+        executableWithArgs = fmt::format("{} {}", executable, fmt::join(arguments, " "));
       }
       spdlog::info("Worker:  - {}", executableWithArgs);
 
@@ -246,16 +249,16 @@ void Worker::Start(unsigned long int maxJobs) {
       lastJobFinished = std::chrono::system_clock::now();
 
       if (++doneJobs == maxJobs)
-        exit = true;
+        state = State::EXIT;
 
     } else {
       std::this_thread::sleep_for(sleepTime);
 
       auto delta = std::chrono::system_clock::now() - lastJobFinished;
-      if (delta > maxWaitTime) {
+      if (delta > maxWaitTime && state == State::WAIT) {
         spdlog::trace("Worker: no jobs for {:%M:%S}... Exiting now.",
                       std::chrono::duration_cast<std::chrono::seconds>(maxWaitTime));
-        exit = true;
+        state = State::EXIT;
       } else {
         spdlog::trace("Worker: no jobs, been waiting for {:%M:%S}...",
                       std::chrono::duration_cast<std::chrono::seconds>(delta));
@@ -263,7 +266,7 @@ void Worker::Start(unsigned long int maxJobs) {
       }
     }
 
-    if (exit)
+    if (state == State::EXIT)
       break;
   }
 }

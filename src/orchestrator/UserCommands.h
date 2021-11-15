@@ -53,6 +53,13 @@ struct DeclareTaskDependency {
   constexpr static std::array requiredFields{"task"sv, "dependsOn"sv, "token"sv};
 };
 
+struct CheckTaskToken {
+  std::string task;
+  std::string token;
+
+  constexpr static std::array requiredFields{"task"sv, "token"sv};
+};
+
 struct Summary {
   std::string user;
 

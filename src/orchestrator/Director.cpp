@@ -86,7 +86,7 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   if (query_result) {
     return JsonUtils::bson2json(query_result.value());
   } else {
-    return {};
+    return R"({"sleep": true})"_json;
   }
 }
 
@@ -200,7 +200,7 @@ Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, 
   query["user"] = user;
   query["tasks"] = json::array({});
   for (const auto &[taskName, token] : tasks) {
-    if (ValidateTaskToken(taskName, token)) {
+    if (ValidateTaskToken(taskName, token) == OperationResult::Success) {
       query["tasks"].push_back(taskName);
       result.validTasks.push_back(taskName);
     } else {
@@ -569,12 +569,12 @@ void Director::DBSync() {
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
-bool Director::ValidateTaskToken(std::string_view task, std::string_view token) const {
+Director::OperationResult Director::ValidateTaskToken(std::string_view task, std::string_view token) const {
   if (auto taskIt = m_tasks.find(std::string{task}); taskIt != end(m_tasks)) {
-    return taskIt->second.token == token;
+    return taskIt->second.token == token ? OperationResult::Success : OperationResult::ProcessError;
   }
 
-  return false;
+  return OperationResult::DatabaseError;
 }
 
 Director::PilotInfo Director::GetPilotInfo(std::string_view uuid) {
