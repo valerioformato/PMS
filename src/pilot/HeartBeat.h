@@ -19,7 +19,7 @@ class HeartBeat {
 public:
   HeartBeat(boost::uuids::uuid uuid, std::shared_ptr<Connection> wsConnection)
       : m_uuid{uuid}, m_wsConnection{std::move(wsConnection)}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this,
-                                                                                m_exitSignal.get_future()} {}
+                                                                                        m_exitSignal.get_future()} {}
   ~HeartBeat();
 
   [[nodiscard]] bool IsAlive() const { return m_alive; }

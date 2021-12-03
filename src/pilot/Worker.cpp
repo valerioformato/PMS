@@ -3,7 +3,6 @@
 #include <thread>
 
 // external headers
-#include <boost/process.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <fmt/chrono.h>
@@ -51,17 +50,18 @@ bool Worker::Register() {
   return reply["validTasks"].size() > 0;
 }
 
-void Worker::Start(unsigned long int maxJobs) {
+void Worker::Start() { m_workerThread = std::thread{&Worker::MainLoop, this}; }
 
-  if (maxJobs < std::numeric_limits<decltype(maxJobs)>::max()) {
-    spdlog::debug("Starting worker for {} jobs...", maxJobs);
+void Worker::Kill() {
+  m_workerState = State::EXIT;
+  m_exitSignal.set_value();
+  m_jobProcess.terminate();
+}
+
+void Worker::MainLoop() {
+  if (m_maxJobs < std::numeric_limits<decltype(m_maxJobs)>::max()) {
+    spdlog::debug("Starting worker for {} jobs...", m_maxJobs);
   }
-
-  enum class State { RUN, SLEEP, WAIT, EXIT };
-
-  State state;
-  //  bool exit = false;
-  //  bool wait = false;
 
   constexpr auto maxWaitTime = std::chrono::minutes(10);
   auto sleepTime = std::chrono::seconds(1);
@@ -76,6 +76,10 @@ void Worker::Start(unsigned long int maxJobs) {
   // main loop
   while (true) {
 
+    if (m_workerState == State::EXIT) {
+      break;
+    }
+
     json request;
     request["command"] = "p_claimJob";
     request["pilotUuid"] = boost::uuids::to_string(m_uuid);
@@ -84,7 +88,7 @@ void Worker::Start(unsigned long int maxJobs) {
     json job;
     try {
       job = json::parse(m_wsConnection->Send(request.dump()));
-      state = State::RUN;
+      m_workerState = State::JOBACQUIRED;
     } catch (const Connection::FailedConnectionException &e) {
       if (!hb.IsAlive())
         break;
@@ -99,13 +103,13 @@ void Worker::Start(unsigned long int maxJobs) {
 
     if (job.contains("finished")) {
       sleepTime = std::chrono::minutes(1);
-      state = State::WAIT;
+      m_workerState = State::WAIT;
     } else if (job.contains("sleep")) {
       sleepTime = std::chrono::minutes(1);
-      state = State::SLEEP;
+      m_workerState = State::SLEEP;
     }
 
-    if (!job.empty() && state == State::RUN) {
+    if (!job.empty() && m_workerState == State::JOBACQUIRED) {
       spdlog::info("Worker: got a new job");
       spdlog::trace("Job: {}", job.dump(2));
 
@@ -189,10 +193,12 @@ void Worker::Start(unsigned long int maxJobs) {
       // close the script file before execution, or the child will silently fail
       shellScript.close();
 
+      m_workerState = State::RUN;
+
       std::error_code procError;
-      bp::child proc(bp::search_path("sh"), shellScriptPath.filename().string(), bp::std_out > jobIO.stdout,
-                     bp::std_err > jobIO.stderr, bp::std_in < jobIO.stdin, bp::start_dir(wdPath.string()), bp::shell,
-                     procError);
+      m_jobProcess = bp::child(bp::search_path("sh"), shellScriptPath.filename().string(), bp::std_out > jobIO.stdout,
+                               bp::std_err > jobIO.stderr, bp::std_in < jobIO.stdin, bp::start_dir(wdPath.string()),
+                               bp::shell, procError);
 
       // set status to "Running"
       if (!UpdateJobStatus(job["hash"], job["task"], JobStatus::Running)) {
@@ -200,30 +206,30 @@ void Worker::Start(unsigned long int maxJobs) {
         // NOTE(vformato):  in this case we do nothing. We hope that while the process runs the connection is recovered.
       }
 
-      proc.wait();
+      m_jobProcess.wait();
 
-      spdlog::debug("Process exited with code {}", proc.exit_code());
+      spdlog::debug("Process exited with code {}", m_jobProcess.exit_code());
 
-      if (procError || proc.exit_code()) {
+      JobStatus nextJobStatus;
+      if (procError || m_jobProcess.exit_code()) {
         spdlog::error("Worker: Job exited with an error: {}", procError.message());
-        if (!UpdateJobStatus(job["hash"], job["task"], JobStatus::Error)) {
-          spdlog::error("Can't reach server while trying to set job as Error. Abandoning job...");
-
-          // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "abandoned"
-          // jobs, and we'll communicate to the server as soon as the connection becomes available...
-          abandonedJobs.push_back(job);
-          continue;
-        }
+        nextJobStatus = JobStatus::Error;
+      } else if (m_workerState == State::EXIT) {
+        spdlog::warn("Worker: Requested termination. Marking job as failed...");
+        nextJobStatus = JobStatus::Error;
       } else {
         spdlog::info("Worker: Job done");
-        if (!UpdateJobStatus(job["hash"], job["task"], JobStatus::Done)) {
-          spdlog::error("Can't reach server while trying to set job as Done. Abandoning job...");
+        nextJobStatus = JobStatus::Done;
+      }
 
-          // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "abandoned"
-          // jobs, and we'll communicate to the server as soon as the connection becomes available...
-          abandonedJobs.push_back(job);
-          continue;
-        }
+      if (!UpdateJobStatus(job["hash"], job["task"], nextJobStatus)) {
+        spdlog::error("Can't reach server while trying to set job status as {}. Abandoning job...",
+                      magic_enum::enum_name(nextJobStatus));
+
+        // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "abandoned"
+        // jobs, and we'll communicate to the server as soon as the connection becomes available...
+        abandonedJobs.push_back(job);
+        continue;
       }
 
       // check for outbound file transfers
@@ -241,26 +247,23 @@ void Worker::Start(unsigned long int maxJobs) {
 
       lastJobFinished = std::chrono::system_clock::now();
 
-      if (++doneJobs == maxJobs)
-        state = State::EXIT;
+      if (++doneJobs == m_maxJobs)
+        m_workerState = State::EXIT;
 
-    } else {
-      std::this_thread::sleep_for(sleepTime);
+    } else if (m_workerState != State::EXIT) {
+      m_exitSignalFuture.wait_for(sleepTime);
 
       auto delta = std::chrono::system_clock::now() - lastJobFinished;
-      if (delta > maxWaitTime && state == State::WAIT) {
+      if (delta > maxWaitTime && m_workerState == State::WAIT) {
         spdlog::trace("Worker: no jobs for {:%M:%S}... Exiting now.",
                       std::chrono::duration_cast<std::chrono::seconds>(maxWaitTime));
-        state = State::EXIT;
+        m_workerState = State::EXIT;
       } else {
         spdlog::trace("Worker: no jobs, been waiting for {:%M:%S}...",
                       std::chrono::duration_cast<std::chrono::seconds>(delta));
         continue;
       }
     }
-
-    if (state == State::EXIT)
-      break;
   }
 }
 

@@ -9,6 +9,7 @@
 #include <utility>
 
 // external headers
+#include <boost/process.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <nlohmann/json.hpp>
 
@@ -26,12 +27,32 @@ class Worker {
 public:
   explicit Worker(Config config, std::shared_ptr<Client> wsClient)
       : m_config{std::move(config)}, m_wsConnection{wsClient->PersistentConnection()} {}
+  ~Worker() { m_workerThread.join(); }
 
   bool Register();
 
-  void Start(unsigned long int maxJobs = std::numeric_limits<unsigned long int>::max());
+  void Start();
+  void Kill();
+
+  void SetMaxJobs(unsigned int maxJobs) { m_maxJobs = maxJobs; }
 
 private:
+  enum class State { JOBACQUIRED, RUN, SLEEP, WAIT, EXIT };
+
+  State m_workerState = State::WAIT;
+  std::thread m_workerThread;
+  Config m_config;
+  std::shared_ptr<Connection> m_wsConnection;
+  unsigned long int m_maxJobs = std::numeric_limits<unsigned long int>::max();
+
+  std::promise<void> m_exitSignal;
+  std::shared_future<void> m_exitSignalFuture{m_exitSignal.get_future()};
+
+  boost::process::child m_jobProcess;
+  boost::uuids::uuid m_uuid{};
+
+  void MainLoop();
+
   enum class EnvInfoType { NONE, Script, List };
   std::map<EnvInfoType, std::string_view> m_envInfoNames = {{EnvInfoType::Script, "script"sv},
                                                             {EnvInfoType::List, "list"sv}};
@@ -46,12 +67,6 @@ private:
     std::string stdout = "/dev/null";
     std::string stderr = "/dev/null";
   };
-
-  std::thread m_thread;
-  Config m_config;
-  std::shared_ptr<Connection> m_wsConnection;
-
-  boost::uuids::uuid m_uuid{};
 };
 } // namespace PMS::Pilot
 
