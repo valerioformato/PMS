@@ -149,7 +149,16 @@ void Worker::MainLoop() {
         switch (envType) {
         case EnvInfoType::Script:
           try {
-            shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
+            if (!job["env"].contains("args")) {
+              shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
+            } else {
+              std::vector<std::string> dummy;
+              auto scriptArgs = job["env"]["args"];
+              std::copy(scriptArgs.begin(), scriptArgs.end(), std::back_inserter(dummy));
+              std::string scriptWithArgs =
+                  fmt::format("{} {}\n", fs::canonical(job["env"]["file"]).string(), fmt::join(dummy, " "));
+              shellScript.print(". {}", scriptWithArgs);
+            }
           } catch (const fs::filesystem_error &e) {
             spdlog::error("{}", e.what());
             continue;
