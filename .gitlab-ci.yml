@@ -27,7 +27,9 @@ build-ubuntu20.04:
 
 dockerize-ubuntu20.04:
   stage: dockerize
-  image: docker:stable
+  image: docker:19.03.12
+  services:
+    - docker:19.03.12-dind
   needs: ["build-ubuntu20.04"]
   tags:
     - docker
@@ -35,9 +37,7 @@ dockerize-ubuntu20.04:
     - master
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2
-  services:
-    - docker:dind
+    # DOCKER_DRIVER: overlay2
   script:
     - cp docker/Dockerfile .
     - docker login --username vformato --password $dockerhubtoken
