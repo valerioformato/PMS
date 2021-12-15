@@ -69,6 +69,7 @@ void Worker::MainLoop() {
   HeartBeat hb{m_uuid, m_wsConnection};
   unsigned long int doneJobs = 0;
 
+  auto startTime = std::chrono::system_clock::now();
   auto lastJobFinished = std::chrono::system_clock::now();
 
   std::vector<json> abandonedJobs;
@@ -88,7 +89,7 @@ void Worker::MainLoop() {
     json job;
     try {
       job = json::parse(m_wsConnection->Send(request.dump()));
-      m_workerState = State::JOBACQUIRED;
+      m_workerState = State::JOB_ACQUIRED;
     } catch (const Connection::FailedConnectionException &e) {
       if (!hb.IsAlive())
         break;
@@ -109,7 +110,7 @@ void Worker::MainLoop() {
       m_workerState = State::SLEEP;
     }
 
-    if (!job.empty() && m_workerState == State::JOBACQUIRED) {
+    if (!job.empty() && m_workerState == State::JOB_ACQUIRED) {
       spdlog::info("Worker: got a new job");
       spdlog::trace("Job: {}", job.dump(2));
 
@@ -256,7 +257,7 @@ void Worker::MainLoop() {
 
       lastJobFinished = std::chrono::system_clock::now();
 
-      if (++doneJobs == m_maxJobs)
+      if (++doneJobs == m_maxJobs || (std::chrono::system_clock::now() - startTime) > m_maxTime)
         m_workerState = State::EXIT;
 
     } else if (m_workerState != State::EXIT) {

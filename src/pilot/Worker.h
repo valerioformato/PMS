@@ -2,6 +2,7 @@
 #define PMS_PILOT_WORKER_H
 
 // c++ headers
+#include <chrono>
 #include <map>
 #include <memory>
 #include <string_view>
@@ -36,14 +37,19 @@ public:
 
   void SetMaxJobs(unsigned int maxJobs) { m_maxJobs = maxJobs; }
 
+  template <class Rep, class Period> void SetMaxTime(std::chrono::duration<Rep, Period> maxTime) {
+    m_maxTime = std::chrono::duration_cast<std::chrono::seconds>(maxTime);
+  }
+
 private:
-  enum class State { JOBACQUIRED, RUN, SLEEP, WAIT, EXIT };
+  enum class State { JOB_ACQUIRED, RUN, SLEEP, WAIT, EXIT };
 
   State m_workerState = State::WAIT;
   std::thread m_workerThread;
   Config m_config;
   std::shared_ptr<Connection> m_wsConnection;
   unsigned long int m_maxJobs = std::numeric_limits<unsigned long int>::max();
+  std::chrono::seconds m_maxTime = std::numeric_limits<std::chrono::seconds>::max();
 
   std::promise<void> m_exitSignal;
   std::shared_future<void> m_exitSignalFuture{m_exitSignal.get_future()};

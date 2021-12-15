@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "common/Utils.h"
 #include "pilot/PilotConfig.h"
 #include "pilot/Worker.h"
 #include "pilot/client/Client.h"
@@ -15,13 +16,14 @@ static constexpr auto USAGE =
     R"(PMS Pilot fish executable.
 
     Usage:
-          PMSPilot <configfile> [-v | -vv] [-m MAXJOBS]
+          PMSPilot <configfile> [-v | -vv] [-m MAXJOBS] [-t MAXTIME]
           PMSPilot --version
 
     Options:
           -v...                           Enable debug output (verbose, trace)
           -h --help                       Show this screen.
           -m MAXJOBS, --maxJobs=MAXJOBS   Number of jobs to run before shutdown
+          -t MAXTIME, --maxTime=MAXTIME   Time limit ("2d", "1h30m", "40s", ...)
           --version                       Show version.
 )";
 
@@ -81,6 +83,9 @@ int main(int argc, const char **argv) {
 
   if(args["--maxJobs"])
     worker.SetMaxJobs(args["--maxJobs"].asLong());
+
+  if(args["--maxTime"])
+    worker.SetMaxTime(Utils::ParseTimeString(args["--maxTime"].asString()));
 
 
   // Run everything!
