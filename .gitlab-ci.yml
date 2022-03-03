@@ -36,8 +36,10 @@ dockerize-ubuntu20.04:
   only:
     - master
   variables:
-    DOCKER_HOST: localhost:2375
-    # DOCKER_DRIVER: overlay2
+    # DOCKER_HOST: localhost:2375
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    
   script:
     - cp docker/Dockerfile .
     - docker login --username vformato --password $dockerhubtoken
