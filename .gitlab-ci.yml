@@ -36,7 +36,7 @@ dockerize-ubuntu20.04:
   only:
     - master
   variables:
-    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_HOST: tcp://localhost:2375/
     # DOCKER_DRIVER: overlay2
   script:
     - cp docker/Dockerfile .
