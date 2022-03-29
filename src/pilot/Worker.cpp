@@ -103,8 +103,7 @@ void Worker::MainLoop() {
     }
 
     if (job.contains("finished")) {
-      sleepTime = std::chrono::minutes(1);
-      m_workerState = State::WAIT;
+      m_workerState = State::EXIT;
     } else if (job.contains("sleep")) {
       sleepTime = std::chrono::minutes(1);
       m_workerState = State::SLEEP;
@@ -273,6 +272,8 @@ void Worker::MainLoop() {
                       std::chrono::duration_cast<std::chrono::seconds>(delta));
         continue;
       }
+    } else {
+      m_exitSignal.set_value();
     }
   }
 }

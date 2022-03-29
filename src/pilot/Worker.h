@@ -49,7 +49,7 @@ private:
   Config m_config;
   std::shared_ptr<Connection> m_wsConnection;
   unsigned long int m_maxJobs = std::numeric_limits<unsigned long int>::max();
-  std::chrono::seconds m_maxTime = std::numeric_limits<std::chrono::seconds>::max();
+  std::chrono::seconds m_maxTime = std::chrono::seconds::max();
 
   std::promise<void> m_exitSignal;
   std::shared_future<void> m_exitSignalFuture{m_exitSignal.get_future()};
