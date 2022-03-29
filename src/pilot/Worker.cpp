@@ -52,6 +52,8 @@ bool Worker::Register() {
 
 void Worker::Start() { m_workerThread = std::thread{&Worker::MainLoop, this}; }
 
+void Worker::Stop() { m_workerThread.join(); }
+
 void Worker::Kill() {
   m_workerState = State::EXIT;
   m_exitSignal.set_value();
@@ -255,9 +257,11 @@ void Worker::MainLoop() {
       fs::remove_all(wdPath);
 
       lastJobFinished = std::chrono::system_clock::now();
-
-      if (++doneJobs == m_maxJobs || (std::chrono::system_clock::now() - startTime) > m_maxTime)
-        m_workerState = State::EXIT;
+      auto delta = lastJobFinished - startTime;
+      
+      if (++doneJobs == m_maxJobs || std::chrono::duration_cast<decltype(m_maxTime)>(delta) > m_maxTime){
+	m_workerState = State::EXIT;
+      }
 
     } else if (m_workerState != State::EXIT) {
       m_exitSignalFuture.wait_for(sleepTime);

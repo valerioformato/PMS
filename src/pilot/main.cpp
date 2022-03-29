@@ -42,8 +42,10 @@ void signal_watcher(Pilot::Worker &worker) {
     std::this_thread::sleep_for(std::chrono::seconds{1});
   }
 
-  spdlog::warn("Received signal {}", gSignalStatus);
-  worker.Kill();
+  if(gSignalStatus > 0){
+    spdlog::warn("Received signal {}", gSignalStatus);
+    worker.Kill();
+  }
 }
 
 int main(int argc, const char **argv) {
@@ -92,6 +94,11 @@ int main(int argc, const char **argv) {
   std::thread watchThread{signal_watcher, std::ref(worker)};
   worker.Start();
 
+  // this blocks until the main loop thread has exited
+  worker.Stop();
+
+  // terrible hack to stop signal handler thread
+  gSignalStatus = -1;
   watchThread.join();
   return 0;
 }

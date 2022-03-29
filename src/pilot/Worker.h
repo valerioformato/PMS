@@ -28,11 +28,11 @@ class Worker {
 public:
   explicit Worker(Config config, std::shared_ptr<Client> wsClient)
       : m_config{std::move(config)}, m_wsConnection{wsClient->PersistentConnection()} {}
-  ~Worker() { m_workerThread.join(); }
 
   bool Register();
 
   void Start();
+  void Stop();
   void Kill();
 
   void SetMaxJobs(unsigned int maxJobs) { m_maxJobs = maxJobs; }
