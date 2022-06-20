@@ -23,6 +23,10 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
   case FileTransferType::Outbound:
     from = fs::path{ftInfo.currentPath} / fs::path{ftInfo.fileName};
     to = fs::path{ftInfo.remotePath};
+    if (!fs::exists(to)){
+      spdlog::warn("Directory {} does not exist. Creating it...", to.string());
+      fs::create_directories(to);
+    }
     break;
   }
 
