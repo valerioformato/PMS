@@ -66,7 +66,7 @@ private:
 
   bool UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status);
 
-  static std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, const json &, std::string_view);
+  std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, json, std::string_view);
 
   struct jobSTDIO {
     std::string stdin = "/dev/null";

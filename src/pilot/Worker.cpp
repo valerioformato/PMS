@@ -8,6 +8,7 @@
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <fmt/os.h>
+#include <fmt/ranges.h>
 #include <magic_enum.hpp>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -258,9 +259,9 @@ void Worker::MainLoop() {
 
       lastJobFinished = std::chrono::system_clock::now();
       auto delta = lastJobFinished - startTime;
-      
-      if (++doneJobs == m_maxJobs || std::chrono::duration_cast<decltype(m_maxTime)>(delta) > m_maxTime){
-	m_workerState = State::EXIT;
+
+      if (++doneJobs == m_maxJobs || std::chrono::duration_cast<decltype(m_maxTime)>(delta) > m_maxTime) {
+        m_workerState = State::EXIT;
       }
 
     } else if (m_workerState != State::EXIT) {
@@ -304,9 +305,24 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   return reply == "Ok";
 }
 
-std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType type, const json &request,
+std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType type, json request,
                                                                std::string_view currentPath) {
   std::vector<FileTransferInfo> result;
+
+  if (request.is_array()) {
+    // We have an array: this means output depends on the pilot tag
+    auto tmpIt = std::find_if(request.begin(), request.end(), [this](const json &element) {
+      return std::any_of(begin(m_config.tags), end(m_config.tags),
+                         [&element](const auto &tag) { return tag == element["tag"]; });
+    });
+
+    // if there is a tag matching this pilot we parse the associated request
+    if (tmpIt != request.end()) {
+      request = *tmpIt;
+    } else {
+      throw std::runtime_error(fmt::format("No output tag matches this pilot tags ({})", m_config.tags));
+    }
+  }
 
   if (!request.contains("files")) {
     spdlog::error(R"(No "files" field present in file transfer request.)");
