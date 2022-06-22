@@ -234,6 +234,21 @@ void Worker::MainLoop() {
         nextJobStatus = JobStatus::Done;
       }
 
+      // check for outbound file transfers
+      if (job.contains("output")) {
+        FileTransferQueue ftQueue;
+        try {
+          auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
+          for (const auto &ftJob : fts) {
+            ftQueue.Add(ftJob);
+          }
+          ftQueue.Process();
+        } catch (const std::exception &e) {
+          nextJobStatus = JobStatus::Error;
+          spdlog::error("{}", e.what());
+        }
+      }
+
       if (!UpdateJobStatus(job["hash"], job["task"], nextJobStatus)) {
         spdlog::error("Can't reach server while trying to set job status as {}. Abandoning job...",
                       magic_enum::enum_name(nextJobStatus));
@@ -242,16 +257,6 @@ void Worker::MainLoop() {
         // jobs, and we'll communicate to the server as soon as the connection becomes available...
         abandonedJobs.push_back(job);
         continue;
-      }
-
-      // check for outbound file transfers
-      if (job.contains("output")) {
-        FileTransferQueue ftQueue;
-        auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
-        for (const auto &ftJob : fts) {
-          ftQueue.Add(ftJob);
-        }
-        ftQueue.Process();
       }
 
       // remove temporary sandbox directory
@@ -325,8 +330,7 @@ std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType 
   }
 
   if (!request.contains("files")) {
-    spdlog::error(R"(No "files" field present in file transfer request.)");
-    return result;
+    throw std::domain_error(R"(No "files" field present in file transfer request.)");
   }
 
   constexpr static std::array requiredFields{"file"sv, "protocol"sv};
