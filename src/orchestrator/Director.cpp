@@ -151,15 +151,16 @@ void Director::WriteJobUpdates() {
       perfCounters.emplace_back(end - start, m_jobUpdateRequests.size());
 
       m_jobUpdateRequests.clear();
+
+      // NOTE: This should be fine, right?
+      json filter;
+      filter["status"] = magic_enum::enum_name(JobStatus::Error);
+      filter["retries"]["$gte"] = m_maxRetries;
+
+      json updateAction;
+      updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Failed);
+      handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
     }
-
-    json filter;
-    filter["status"] = magic_enum::enum_name(JobStatus::Error);
-    filter["retries"]["$gte"] = m_maxRetries;
-
-    json updateAction;
-    updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Failed);
-    handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
 
     // do some performance logging
     if (perfCounters.size() == nSamples) {
