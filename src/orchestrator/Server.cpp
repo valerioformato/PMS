@@ -60,6 +60,9 @@ std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, st
   case Director::OperationResult::DatabaseError:
     return {false, fmt::format("Task {} does not exist", task)};
   }
+
+  // dummy return
+  return {false, {}};
 }
 
 std::string Server::HandleCommand(UserCommand &&command) {
