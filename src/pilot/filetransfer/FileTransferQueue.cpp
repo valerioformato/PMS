@@ -23,7 +23,7 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
   case FileTransferType::Outbound:
     from = fs::path{ftInfo.currentPath} / fs::path{ftInfo.fileName};
     to = fs::path{ftInfo.remotePath};
-    if (!fs::exists(to)){
+    if (!fs::exists(to)) {
       spdlog::warn("Directory {} does not exist. Creating it...", to.string());
       fs::create_directories(to);
     }
@@ -32,12 +32,7 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
 
   spdlog::debug("Attempting to copy {} to {}", from.string(), to.string());
 
-  try {
-    fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
-  } catch (const fs::filesystem_error &e) {
-    spdlog::error("{}", e.what());
-    return false;
-  }
+  fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
 
   return true;
 }
@@ -57,7 +52,7 @@ void FileTransferQueue::Process() {
   });
   auto result = RunXRootDFileTransfer();
   if (!result) {
-    spdlog::error("XRootD transfer failed, check previous messages");
+    throw std::runtime_error("XRootD transfer failed, check previous messages");
   }
 #endif
 }
