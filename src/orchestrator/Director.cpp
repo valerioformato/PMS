@@ -191,7 +191,7 @@ void Director::WriteJobUpdates() {
 
 Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
                                                     const std::vector<std::pair<std::string, std::string>> &tasks,
-                                                    const std::vector<std::string> &tags) {
+                                                    const std::vector<std::string> &tags, const json &host_info) {
   NewPilotResult result{OperationResult::Success, {}, {}};
 
   auto handle = m_frontPoolHandle->DBHandle();
@@ -209,6 +209,7 @@ Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, 
     }
   }
   query["tags"] = tags;
+  query["host"] = host_info;
 
   m_activePilots[std::string(pilotUuid)] = PilotInfo{result.validTasks, tags};
 

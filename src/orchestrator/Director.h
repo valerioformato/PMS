@@ -3,9 +3,9 @@
 
 // c++ headers
 #include <future>
+#include <mutex>
 #include <queue>
 #include <thread>
-#include <mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -48,7 +48,7 @@ public:
   };
   NewPilotResult RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
                                   const std::vector<std::pair<std::string, std::string>> &tasks,
-                                  const std::vector<std::string> &tags);
+                                  const std::vector<std::string> &tags, const json &host_info);
   OperationResult UpdateHeartBeat(std::string_view pilotUuid);
   OperationResult DeleteHeartBeat(std::string_view pilotUuid);
 

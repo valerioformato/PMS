@@ -14,6 +14,8 @@
 
 #include "common/Job.h"
 
+using json = nlohmann::json;
+
 namespace PMS::Orchestrator {
 
 using namespace std::string_view_literals;
@@ -38,6 +40,7 @@ struct RegisterNewPilot {
   std::string user;
   std::vector<std::pair<std::string, std::string>> tasks;
   std::vector<std::string> tags;
+  json host_info;
 
   constexpr static std::array requiredFields{"pilotUuid"sv, "user"sv, "tasks"sv};
 };
