@@ -3,6 +3,7 @@
 #include <thread>
 
 // external headers
+#include <boost/asio/ip/address.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <fmt/chrono.h>
@@ -24,11 +25,38 @@ namespace fs = std::filesystem;
 
 namespace PMS::Pilot {
 
+std::string read_file(std::string const &file) {
+  std::ifstream is(file);
+  if (!is.good()) {
+    throw std::runtime_error("Error: stream has errors.");
+  }
+  std::stringstream ss;
+  ss << is.rdbuf();
+  std::string m;
+  // Remove ending line character '\n' or '\r\n'.
+  std::getline(ss, m);
+  return m;
+}
+
 bool Worker::Register() {
   // generate a pilot uuid
   m_uuid = boost::uuids::random_generator()();
 
   json req;
+
+  auto get_ip_address = []() {
+    boost::asio::io_service ioService;
+    boost::asio::ip::tcp::resolver resolver(ioService);
+
+    return resolver.resolve(boost::asio::ip::host_name(), "")->endpoint().address().to_string();
+  };
+
+  // get host info
+  req["host"]["hostname"] = boost::asio::ip::host_name();
+  req["host"]["ip"] = get_ip_address();
+  req["host"]["os_version"] = read_file("/proc/version");
+
+  // prepare command
   req["command"] = "p_registerNewPilot";
   req["pilotUuid"] = boost::uuids::to_string(m_uuid);
   req["user"] = m_config.user;
@@ -38,6 +66,8 @@ bool Worker::Register() {
   }
   if (!m_config.tags.empty())
     req["tags"] = m_config.tags;
+
+  spdlog::trace("{}", req.dump(2));
 
   json reply;
   try {
