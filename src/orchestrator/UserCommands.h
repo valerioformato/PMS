@@ -25,6 +25,13 @@ struct SubmitJob {
   constexpr static std::array requiredFields{"job"sv, "task"sv, "token"sv};
 };
 
+struct FindJobs{
+  json match;
+  json filter;
+
+  constexpr static std::array requiredFields{"match"sv};
+};
+
 struct CreateTask {
   std::string task;
 

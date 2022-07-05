@@ -623,7 +623,7 @@ Director::PilotInfo Director::GetPilotInfo(std::string_view uuid) {
   }
 }
 
-std::string Director::Summary(const std::string &user) {
+std::string Director::Summary(const std::string &user) const {
   auto handle = m_frontPoolHandle->DBHandle();
 
   json summary = json::array({});
@@ -647,7 +647,7 @@ std::string Director::Summary(const std::string &user) {
       continue;
     }
 
-    Task task = m_tasks[taskName];
+    Task task = m_tasks.at(taskName);
 
     json taskSummary;
     taskSummary["taskname"] = task.name;
@@ -659,6 +659,29 @@ std::string Director::Summary(const std::string &user) {
   }
 
   return summary.dump();
+}
+
+std::string Director::QueryBackDB(const json &match, const json &filter) const {
+  auto handle = m_backPoolHandle->DBHandle();
+
+  json projectionOpt;
+  if (filter.empty()) {
+    projectionOpt = R"({"_id":0})"_json;
+  } else {
+    projectionOpt = filter;
+    projectionOpt["_id"] = 0;
+  }
+  mongocxx::options::find query_options;
+  query_options.projection(JsonUtils::json2bson(projectionOpt));
+
+  json resp;
+  resp["result"] = json::array({});
+
+  auto query_result = handle["jobs"].find(JsonUtils::json2bson(match), query_options);
+  std::transform(query_result.begin(), query_result.end(), std::back_inserter(resp["result"]),
+                 [](const auto &job) { return JsonUtils::bson2json(job); });
+
+  return resp.dump();
 }
 
 } // namespace PMS::Orchestrator
