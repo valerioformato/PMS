@@ -22,5 +22,6 @@ struct Task {
     return (totJobs > 0) && ((jobs[JobStatus::Done] + jobs[JobStatus::Failed]) != totJobs) && readyForScheduling;
   }
   [[nodiscard]] bool IsExhausted() const { return (totJobs > 0 && jobs[JobStatus::Pending] == 0); }
+  [[nodiscard]] bool IsFailed() const { return IsExhausted() && jobs[JobStatus::Failed] > 0; }
 };
 } // namespace PMS::Orchestrator

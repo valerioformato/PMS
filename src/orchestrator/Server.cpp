@@ -61,6 +61,9 @@ std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, st
   case Director::OperationResult::DatabaseError:
     return {false, fmt::format("Task {} does not exist", task)};
   }
+
+  // dummy return
+  return {false, {}};
 }
 
 std::string Server::HandleCommand(UserCommand &&command) {
@@ -149,15 +152,18 @@ std::string Server::HandleCommand(UserCommand &&command) {
 std::string Server::HandleCommand(PilotCommand &&command) {
   return std::visit(
       overloaded{
+          // request a new job
           [this](const OrchCommand<ClaimJob> &pcmd) { return m_director->ClaimJob(pcmd.cmd.uuid).dump(); },
+          // update job status
           [this](const OrchCommand<UpdateJobStatus> &pcmd) {
             auto result = m_director->UpdateJobStatus(pcmd.cmd.uuid, pcmd.cmd.hash, pcmd.cmd.task, pcmd.cmd.status);
             return (result == Director::OperationResult::Success) ? fmt::format("Ok")
                                                                   : fmt::format("Failed to change job status");
           },
+          // register a new pilot
           [this](const OrchCommand<RegisterNewPilot> &pcmd) {
-            const auto &[result, validTasks, invalidTasks] =
-                m_director->RegisterNewPilot(pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks, pcmd.cmd.tags);
+            const auto &[result, validTasks, invalidTasks] = m_director->RegisterNewPilot(
+                pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks, pcmd.cmd.tags, pcmd.cmd.host_info);
 
             json replyDoc;
             replyDoc["validTasks"] = json::array({});
@@ -169,12 +175,14 @@ std::string Server::HandleCommand(PilotCommand &&command) {
                        ? replyDoc.dump()
                        : fmt::format("Could not register pilot {}", pcmd.cmd.uuid);
           },
+          // update pilot heartbeat
           [this](const OrchCommand<UpdateHeartBeat> &pcmd) {
             auto result = m_director->UpdateHeartBeat(pcmd.cmd.uuid);
 
             return (result == Director::OperationResult::Success) ? fmt::format("Ok")
                                                                   : fmt::format("Failed to update heartbeat");
           },
+          // delete pilot
           [this](const OrchCommand<DeleteHeartBeat> &pcmd) {
             auto result = m_director->DeleteHeartBeat(pcmd.cmd.uuid);
 
@@ -414,7 +422,8 @@ PilotCommand Server::toPilotCommand(const json &msg) {
       if (msg.contains("tags")) {
         std::copy(msg["tags"].begin(), msg["tags"].end(), std::back_inserter(tags));
       }
-      return OrchCommand<RegisterNewPilot>{msg["pilotUuid"], msg["user"], std::move(tasks), std::move(tags)};
+      return OrchCommand<RegisterNewPilot>{msg["pilotUuid"], msg["user"], std::move(tasks), std::move(tags),
+                                           msg["host"]};
     }
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", RegisterNewPilot::requiredFields);

@@ -53,7 +53,7 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   auto pilotInfo = GetPilotInfo(pilotUuid);
   bool done = true;
   for (const auto &taskName : pilotInfo.tasks) {
-    done &= m_tasks[taskName].IsExhausted();
+    done &= (m_tasks[taskName].IsExhausted() || m_tasks[taskName].IsFailed());
   }
 
   if (done)
@@ -191,7 +191,7 @@ void Director::WriteJobUpdates() {
 
 Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
                                                     const std::vector<std::pair<std::string, std::string>> &tasks,
-                                                    const std::vector<std::string> &tags) {
+                                                    const std::vector<std::string> &tags, const json &host_info) {
   NewPilotResult result{OperationResult::Success, {}, {}};
 
   auto handle = m_frontPoolHandle->DBHandle();
@@ -209,6 +209,7 @@ Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, 
     }
   }
   query["tags"] = tags;
+  query["host"] = host_info;
 
   m_activePilots[std::string(pilotUuid)] = PilotInfo{result.validTasks, tags};
 
@@ -418,13 +419,14 @@ void Director::JobTransfer() {
 void Director::UpdateTasks() {
   static constexpr auto coolDown = std::chrono::seconds(60);
 
-  auto handle = m_backPoolHandle->DBHandle();
+  auto backHandle = m_backPoolHandle->DBHandle();
+  auto frontHandle = m_frontPoolHandle->DBHandle();
 
   do {
     m_logger->debug("Updating tasks");
 
     // get list of all tasks
-    auto tasksResult = handle["tasks"].find({});
+    auto tasksResult = backHandle["tasks"].find({});
 
     // beware: cursors cannot be reused as-is
     for (const auto &result : tasksResult) {
@@ -442,6 +444,22 @@ void Director::UpdateTasks() {
         std::copy(tmpdoc["dependencies"].begin(), tmpdoc["dependencies"].end(), std::back_inserter(task.dependencies));
       }
 
+      // skip failed tasks, since failed jobs won't be tried anymore
+      if (task.IsFailed()) {
+        continue;
+      }
+
+      auto markTaskAsFailed = [&frontHandle](const std::string_view taskName) {
+        json filter;
+        filter["task"] = taskName;
+
+        json updateQuery;
+        updateQuery["$set"]["status"] = magic_enum::enum_name(JobStatus::Failed);
+        updateQuery["$currentDate"]["lastUpdate"] = true;
+
+        frontHandle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateQuery));
+      };
+
       if (task.dependencies.empty()) {
         task.readyForScheduling = true;
       } else {
@@ -454,6 +472,11 @@ void Director::UpdateTasks() {
             break;
           }
 
+          if (requiredTaskIt->second.IsFailed()) {
+            markTaskAsFailed(task.name);
+            continue;
+          }
+
           taskIsReady &= requiredTaskIt->second.IsFinished();
         }
 
@@ -463,12 +486,12 @@ void Director::UpdateTasks() {
       // update job counters in task
       json countQuery;
       countQuery["task"] = taskName;
-      task.totJobs = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
+      task.totJobs = backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
 
       std::vector<std::string> statusSummary;
       for (auto status : magic_enum::enum_values<JobStatus>()) {
         countQuery["status"] = magic_enum::enum_name(status);
-        task.jobs[status] = handle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
+        task.jobs[status] = backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
         statusSummary.push_back(fmt::format("{} {}", task.jobs[status], magic_enum::enum_name(status)));
       }
 
