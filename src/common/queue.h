@@ -52,7 +52,7 @@ public:
     m_queue.push(std::move(value));
   }
 
-  template <class... Args> void emplace(Args &&... args) {
+  template <class... Args> void emplace(Args &&...args) {
     std::lock_guard<decltype(m_mutex)>{m_mutex};
     m_queue.emplace(std::forward<Args>(args)...);
   }
@@ -62,7 +62,7 @@ public:
     m_queue.pop();
   };
 
-  T consume(){
+  T consume() {
     std::lock_guard<decltype(m_mutex)>{m_mutex};
     T result = front();
     pop();

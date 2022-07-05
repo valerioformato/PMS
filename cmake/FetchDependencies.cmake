@@ -100,4 +100,3 @@ endif()
 
 find_package(bsoncxx REQUIRED)
 find_package(mongocxx REQUIRED 3.6.0)
-

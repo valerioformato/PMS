@@ -52,7 +52,6 @@ std::string Client::Send(const json &msg, std::string_view uri) {
     spdlog::error("Could not establish a connection after {} tries. Aborting...", nMaxTries);
   }
 
-
   return connection.Send(msg.dump());
 }
 

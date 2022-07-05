@@ -177,4 +177,3 @@ mark_as_advanced(XROOTD_INCLUDE_DIR
                  XROOTD_XrdSys_LIBRARY
                  XROOTD_XrdOuc_LIBRARY
                  XROOTD_Xrd_LIBRARY )
-

@@ -67,86 +67,88 @@ std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, st
 }
 
 std::string Server::HandleCommand(UserCommand &&command) {
-  return std::visit(
-      overloaded{
-          // Create a new task
-          [this](const OrchCommand<CreateTask> &ucmd) {
-            auto [result, token] = m_director->CreateTask(ucmd.cmd.task);
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Task {} created. Token: {}", ucmd.cmd.task, token)
-                       : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
-          },
-          // Remove an existing task
-          [this](const OrchCommand<ClearTask> &ucmd) {
-            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!valid) {
-              return serverReply;
-            }
+  return std::visit(overloaded{
+                        // Create a new task
+                        [this](const OrchCommand<CreateTask> &ucmd) {
+                          auto [result, token] = m_director->CreateTask(ucmd.cmd.task);
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format("Task {} created. Token: {}", ucmd.cmd.task, token)
+                                     : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
+                        },
+                        // Remove an existing task
+                        [this](const OrchCommand<ClearTask> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
 
-            auto result = m_director->ClearTask(ucmd.cmd.task);
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
-                       : fmt::format("Failed to clear task \"{}\"", ucmd.cmd.task);
-          },
-          // Remove jobs from an existing task
-          [this](const OrchCommand<CleanTask> &ucmd) {
-            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!valid) {
-              return serverReply;
-            }
+                          auto result = m_director->ClearTask(ucmd.cmd.task);
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
+                                     : fmt::format("Failed to clear task \"{}\"", ucmd.cmd.task);
+                        },
+                        // Remove jobs from an existing task
+                        [this](const OrchCommand<CleanTask> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
 
-            auto result = m_director->ClearTask(ucmd.cmd.task, false);
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
-                       : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
-          },
-          // Declare a dependency between tasks
-          [this](const OrchCommand<DeclareTaskDependency> &ucmd) {
-            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!valid) {
-              return serverReply;
-            }
+                          auto result = m_director->ClearTask(ucmd.cmd.task, false);
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
+                                     : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
+                        },
+                        // Declare a dependency between tasks
+                        [this](const OrchCommand<DeclareTaskDependency> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
 
-            auto result = m_director->AddTaskDependency(ucmd.cmd.task, ucmd.cmd.dependsOn);
-            return result == Director::OperationResult::Success
-                       ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task, ucmd.cmd.dependsOn)
-                       : fmt::format("Failed to add task dependency");
-          },
-          // Check if a task/token pair is valid
-          [this](const OrchCommand<CheckTaskToken> &ucmd) {
-            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!valid) {
-              return serverReply;
-            }
-            return fmt::format("Task/token pair is valid.");
-          },
-          // Submit a new job
-          [this](OrchCommand<SubmitJob> &ucmd) {
-            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!valid) {
-              return serverReply;
-            }
+                          auto result = m_director->AddTaskDependency(ucmd.cmd.task, ucmd.cmd.dependsOn);
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task,
+                                                   ucmd.cmd.dependsOn)
+                                     : fmt::format("Failed to add task dependency");
+                        },
+                        // Check if a task/token pair is valid
+                        [this](const OrchCommand<CheckTaskToken> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
+                          return fmt::format("Task/token pair is valid.");
+                        },
+                        // Submit a new job
+                        [this](OrchCommand<SubmitJob> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
 
-            // create an hash for this job
-            std::string job_hash;
-            ucmd.cmd.job["task"] = ucmd.cmd.task;
-            picosha2::hash256_hex_string(ucmd.cmd.job.dump(), job_hash);
-            ucmd.cmd.job["hash"] = job_hash;
+                          // create an hash for this job
+                          std::string job_hash;
+                          ucmd.cmd.job["task"] = ucmd.cmd.task;
+                          picosha2::hash256_hex_string(ucmd.cmd.job.dump(), job_hash);
+                          ucmd.cmd.job["hash"] = job_hash;
 
-            auto result = m_director->AddNewJob(ucmd.cmd.job);
+                          auto result = m_director->AddNewJob(ucmd.cmd.job);
 
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Job received, generated hash: {}", job_hash)
-                       : fmt::format("Job submission failed.");
-          },
-          // query db for jobs info
-          [this](const OrchCommand<FindJobs> &ucmd) { return m_director->QueryBackDB(ucmd.cmd.match, ucmd.cmd.filter); },
-          // Get user summary
-          [this](const OrchCommand<Summary> &ucmd) { return m_director->Summary(ucmd.cmd.user); },
-          // Handle errors
-          [](const OrchCommand<InvalidCommand> &ucmd) { return ucmd.cmd.errorMessage; },
-      },
-      command);
+                          return result == Director::OperationResult::Success
+                                     ? fmt::format("Job received, generated hash: {}", job_hash)
+                                     : fmt::format("Job submission failed.");
+                        },
+                        // query db for jobs info
+                        [this](const OrchCommand<FindJobs> &ucmd) {
+                          return m_director->QueryBackDB(ucmd.cmd.match, ucmd.cmd.filter);
+                        },
+                        // Get user summary
+                        [this](const OrchCommand<Summary> &ucmd) { return m_director->Summary(ucmd.cmd.user); },
+                        // Handle errors
+                        [](const OrchCommand<InvalidCommand> &ucmd) { return ucmd.cmd.errorMessage; },
+                    },
+                    command);
 }
 
 std::string Server::HandleCommand(PilotCommand &&command) {

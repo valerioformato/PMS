@@ -39,8 +39,7 @@ Connection::~Connection() {
 }
 
 Connection::Connection(Connection &&rhs) noexcept
-    : m_status{rhs.m_status}, m_endpoint{std::move(rhs.m_endpoint)}, m_connection{std::move(rhs.m_connection)} {
-}
+    : m_status{rhs.m_status}, m_endpoint{std::move(rhs.m_endpoint)}, m_connection{std::move(rhs.m_connection)} {}
 
 Connection &Connection::operator=(Connection &&rhs) noexcept {
   m_status = rhs.m_status;

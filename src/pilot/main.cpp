@@ -42,7 +42,7 @@ void signal_watcher(Pilot::Worker &worker) {
     std::this_thread::sleep_for(std::chrono::seconds{1});
   }
 
-  if(gSignalStatus > 0){
+  if (gSignalStatus > 0) {
     spdlog::warn("Received signal {}", gSignalStatus);
     worker.Kill();
   }
@@ -83,12 +83,11 @@ int main(int argc, const char **argv) {
     return 0;
   }
 
-  if(args["--maxJobs"])
+  if (args["--maxJobs"])
     worker.SetMaxJobs(args["--maxJobs"].asLong());
 
-  if(args["--maxTime"])
+  if (args["--maxTime"])
     worker.SetMaxTime(Utils::ParseTimeString(args["--maxTime"].asString()));
-
 
   // Run everything!
   std::thread watchThread{signal_watcher, std::ref(worker)};
