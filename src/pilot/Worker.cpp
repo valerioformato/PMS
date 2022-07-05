@@ -67,8 +67,6 @@ bool Worker::Register() {
   if (!m_config.tags.empty())
     req["tags"] = m_config.tags;
 
-  spdlog::trace("{}", req.dump(2));
-
   json reply;
   try {
     reply = json::parse(m_wsConnection->Send(req.dump()));
