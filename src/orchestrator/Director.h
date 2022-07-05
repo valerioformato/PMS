@@ -3,9 +3,9 @@
 
 // c++ headers
 #include <future>
+#include <mutex>
 #include <queue>
 #include <thread>
-#include <mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -61,7 +61,8 @@ public:
   CreateTaskResult CreateTask(const std::string &task);
   OperationResult ClearTask(const std::string &task, bool deleteTask = true);
 
-  std::string Summary(const std::string &user);
+  std::string Summary(const std::string &user) const;
+  std::string QueryBackDB(const json &match, const json &filter) const;
 
   OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const;
 
