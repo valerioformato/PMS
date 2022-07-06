@@ -26,28 +26,43 @@ def getNextJob():
             "cnaf",
             "cern"
         ],
-        "input": {
-            "files": [
+        # "input": {
+        #     "files": [
+        #         {
+        #             "protocol": "xrootd",
+        #             "file": "pippo.txt",
+        #             "source": "root://eosuser.cern.ch///eos/user/v/vformato/test_pilot/input"
+        #         }
+        #     ]
+        # },
+        "output": 
+            [
                 {
-                    "protocol": "xrootd",
-                    "file": "pippo.txt",
-                    "source": "root://eosuser.cern.ch///eos/user/v/vformato/test_pilot/input"
+                    "tag": "cnaf",
+                    "files": [
+                        {
+                            "protocol": "local",
+                            "file": f"test.*",
+                            "destination": "path_cnaf"
+                        }
+                    ]
+                },
+                {
+                    "tag": "cern",
+                    "files": [
+                        {
+                            "protocol": "local",
+                            "file": f"test.*",
+                            "destination": "path_cern"
+                        }
+                    ]
                 }
             ]
-        },
-        "output": {
-            "files": [
-                {
-                    "protocol": "xrootd",
-                    "file": f"pippo{nJobs}-*.txt",
-                    "destination": "root://eosuser.cern.ch///eos/user/v/vformato/test_pilot/output"
-                }
-            ]
-        },
+        ,
         "jobName": "thisIsATestJobForOutput"
     }
 
-
+# 5
 async def send_to_orchestrator(websocket, msg):
     await websocket.send(json.dumps(msg))
 
@@ -56,66 +71,53 @@ async def send_to_orchestrator(websocket, msg):
     return response
 
 
-token = "1d9cb243-2176-4ab8-b370-872ad4d6e91a"
-
+token = "2487e01e-0f32-4172-bb9a-8f58b10f9fb2"
 
 async def hello():
-    uri = "ws://90.147.102.88/server"
+    # uri = "ws://localhost:9002"
+    uri = "ws://212.189.205.63/server"
+    uri_pilot = "ws://localhost:9003"
 
     taskName = "sometask"
-
+    
     async with websockets.connect(uri) as websocket:
-        print("Invalid command...")
-        myReq = {"command": "puppamilafava", "task": taskName, "token": token}
-        await send_to_orchestrator(websocket, myReq)
-
-        # print("Cleaning the task...")
-        # myReq = {"command": "cleanTask", "task": taskName, "token": token}
+        # print("Invalid command...")
+        # myReq = {"command": "puppamilafava", "task": taskName, "token": token}
         # await send_to_orchestrator(websocket, myReq)
 
         # print("Creating a new task...")
         # myReq = {"command": "createTask", "task": taskName}
         # resp = await send_to_orchestrator(websocket, myReq)
-        # newToken = resp.split(" ")[-1]
+        # token = resp.split(" ")[-1]
+        # 
+        # print(f"task {taskName} created with token {token}")
 
-        print(f"task {taskName} created with token {newToken}")
+        print("Cleaning the task...")
+        myReq = {"command": "cleanTask", "task": taskName, "token": token}
+        await send_to_orchestrator(websocket, myReq)
 
         for _ in range(0, 3):
             newJob = getNextJob()
 
             myReq = {"command": "submitJob", "job": newJob,
-                     "task": taskName, "token": newToken}
+                     "task": taskName, "token": token}
 
             print("Sending job...")
-            # await send_to_orchestrator(websocket, myReq)
+            resp = await send_to_orchestrator(websocket, myReq)
+            jhash = resp.split(' ')[-1]
 
+
+        time.sleep(2)    
+        myReq = {
+            "command": "findJobs",
+            "match": {"user": "vformato"},
+            "filter": {"hash":1, "user": 1, "status": 1}
+        }
+        await send_to_orchestrator(websocket, myReq)
+
+    # async with websockets.connect(uri) as websocket:
+    #     print("Removing the task...")
+    #     myReq = {"command": "clearTask", "task": taskName, "token": token}
+    #     await send_to_orchestrator(websocket, myReq)
 
 asyncio.run(hello())
-
-# async def simulate_pilot():
-#     uri = "ws://localhost:9003"
-
-#     async with websockets.connect(uri) as websocket:
-#         print("Sending request...")
-#         myReq = {
-#             "command": "p_claimJob",
-#             "filter": {"task": "sometask"},
-#             "pilotUuid": "unnumeroacaso",
-#             "token": token,
-#         }
-
-#         job = json.loads(await send_to_orchestrator(websocket, myReq))
-#         print(json.dumps(job, indent=2))
-
-#         myReq = {
-#             "command": "p_updateJobStatus",
-#             "status": "Running",
-#             "hash": job["hash"],
-#             "task": job["task"],
-#             "token": token,
-#         }
-#         await send_to_orchestrator(websocket, myReq)
-
-#         time.sleep(1)
-#         myReq["status"] = "Done"
-#         await send_to_orchestrator(websocket, myReq)

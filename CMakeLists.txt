@@ -54,7 +54,7 @@ add_compile_options(-Wall -Wextra)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
 include(cmake/FetchDependencies.cmake)
-
+include(cmake/InstallPrecommit.cmake)
 
 add_subdirectory(src)
 
