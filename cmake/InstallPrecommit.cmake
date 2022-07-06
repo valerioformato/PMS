@@ -1,8 +1,8 @@
 find_program(PRECOMMIT pre-commit)
 if (NOT PRECOMMIT)
     find_program(PIP NAMES pip pip3)
-    message(STATUS "Will use ${PIP}")
     if (PIP)
+        message(STATUS "Will use ${PIP}")
         message(STATUS "pre-commit not found, trying to install...")
         execute_process(
                 COMMAND ${PIP} install pre-commit
@@ -17,6 +17,9 @@ if (NOT PRECOMMIT)
                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
                     RESULT_VARIABLE PRECOMMIT_HOOKS_INSTALLED
             )
+            if (PRECOMMIT_HOOKS_INSTALLED)
+                message(WARNING "Something went wrong during hook installation")
+            endif ()
         endif ()
     endif ()
 endif ()
