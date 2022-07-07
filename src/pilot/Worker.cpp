@@ -333,6 +333,14 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   request["hash"] = hash;
   request["task"] = task;
   request["status"] = magic_enum::enum_name(status);
+
+  if (status == JobStatus::Running) {
+    request["$currentDate"]["startTime"] = true;
+  }
+  if (status == JobStatus::Done || status == JobStatus::Error) {
+    request["$currentDate"]["endTime"] = true;
+  }
+
   auto reply = m_wsConnection->Send(request.dump());
 
   return reply == "Ok";

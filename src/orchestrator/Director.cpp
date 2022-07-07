@@ -584,6 +584,16 @@ void Director::DBSync() {
       json jobUpdateAction;
       jobUpdateAction["$set"]["status"] = job["status"];
 
+      if (auto status = magic_enum::enum_cast<JobStatus>(job["status"]); status.has_value()) {
+        if (status.value() == JobStatus::Running) {
+          jobUpdateAction["$set"]["startTime"] = job["startTime"];
+          jobUpdateAction["$set"]["pilotUuid"] = job["pilotUuid"];
+        }
+        if (status.value() == JobStatus::Done || status.value() == JobStatus::Error) {
+          jobUpdateAction["$set"]["endTime"] = job["endTime"];
+        }
+      }
+
       return mongocxx::model::update_one{JsonUtils::json2bson(jobQuery), JsonUtils::json2bson(jobUpdateAction)};
     });
     if (!writeOps.empty())
