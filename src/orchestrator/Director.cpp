@@ -582,36 +582,19 @@ void Director::DBSync() {
       jobQuery["hash"] = job["hash"];
 
       json jobUpdateAction;
-      bsoncxx::builder::basic::document final_query{};
+      jobUpdateAction["$set"]["status"] = job["status"];
 
       if (auto status = magic_enum::enum_cast<JobStatus>(job["status"]); status.has_value()) {
-        jobUpdateAction["$set"]["status"] = job["status"];
-
         if (status.value() == JobStatus::Running) {
+          jobUpdateAction["$set"]["startTime"] = job["startTime"];
           jobUpdateAction["$set"]["pilotUuid"] = job["pilotUuid"];
         }
-
-        auto b_jobUpdateAction = JsonUtils::json2bson(jobUpdateAction);
-        final_query.append(bsoncxx::builder::concatenate(b_jobUpdateAction.view()));
-
-        if (status.value() == JobStatus::Running) {
-          // still wondering why I prefer nlohmann json? But again, datetime are special citizen in mongodb...
-          final_query.append(
-              bsoncxx::builder::basic::kvp("$set", [_job](bsoncxx::builder::basic::sub_document sub_doc) {
-                auto elem = _job["startTime"];
-                sub_doc.append(bsoncxx::builder::basic::kvp(elem.key(), elem.get_value()));
-              }));
-        }
         if (status.value() == JobStatus::Done || status.value() == JobStatus::Error) {
-          final_query.append(
-              bsoncxx::builder::basic::kvp("$set", [_job](bsoncxx::builder::basic::sub_document sub_doc) {
-                auto elem = _job["endTime"];
-                sub_doc.append(bsoncxx::builder::basic::kvp(elem.key(), elem.get_value()));
-              }));
+          jobUpdateAction["$set"]["endTime"] = job["endTime"];
         }
       }
 
-      return mongocxx::model::update_one{JsonUtils::json2bson(jobQuery), final_query.extract()};
+      return mongocxx::model::update_one{JsonUtils::json2bson(jobQuery), JsonUtils::json2bson(jobUpdateAction)};
     });
     if (!writeOps.empty())
       bHandle["jobs"].bulk_write(writeOps);
