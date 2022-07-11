@@ -54,7 +54,11 @@ bool Worker::Register() {
   // get host info
   req["host"]["hostname"] = boost::asio::ip::host_name();
   req["host"]["ip"] = get_ip_address();
-  req["host"]["os_version"] = read_file("/proc/version");
+  try {
+    req["host"]["os_version"] = read_file("/proc/version");
+  } catch (const std::runtime_error &e) {
+    // nothing :)
+  }
 
   // prepare command
   req["command"] = "p_registerNewPilot";

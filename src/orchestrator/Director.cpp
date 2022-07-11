@@ -584,7 +584,7 @@ void Director::DBSync() {
       json jobUpdateAction;
       jobUpdateAction["$set"]["status"] = job["status"];
 
-      if (auto status = magic_enum::enum_cast<JobStatus>(job["status"]); status.has_value()) {
+      if (auto status = magic_enum::enum_cast<JobStatus>(job["status"].get<std::string_view>()); status.has_value()) {
         if (status.value() == JobStatus::Running) {
           jobUpdateAction["$set"]["startTime"] = job["startTime"];
           jobUpdateAction["$set"]["pilotUuid"] = job["pilotUuid"];
