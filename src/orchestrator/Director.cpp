@@ -110,7 +110,7 @@ Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, 
     break;
   case JobStatus::Error:
   case JobStatus::Done:
-    jobUpdateAction["$currentDate"]["finishTime"] = true;
+    jobUpdateAction["$currentDate"]["endTime"] = true;
     break;
   default:
     break;
