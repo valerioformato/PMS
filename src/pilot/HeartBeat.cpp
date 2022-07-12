@@ -29,7 +29,7 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
   updateMsg["uuid"] = boost::uuids::to_string(m_uuid);
 
   std::chrono::system_clock::time_point firstFailedConnection;
-  bool failedToConnect;
+  bool failedToConnect = false;
 
   do {
     spdlog::trace("Updating HeartBeat");

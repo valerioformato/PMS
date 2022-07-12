@@ -508,7 +508,7 @@ using time_point = std::chrono::system_clock::time_point;
 void Director::UpdatePilots() {
   static constexpr auto coolDown = std::chrono::seconds(60);
 
-  static std::chrono::system_clock::duration gracePeriod = std::chrono::hours{1};
+  static constexpr std::chrono::system_clock::duration gracePeriod = std::chrono::hours{1};
 
   auto handle = m_frontPoolHandle->DBHandle();
 
@@ -531,18 +531,19 @@ void Director::UpdatePilots() {
       json deleteQuery;
       deleteQuery["uuid"] = pilot["uuid"];
 
-      handle["pilots"].delete_one(JsonUtils::json2bson(deleteQuery));
-
       json jobQuery;
       jobQuery["pilotUuid"] = pilot["uuid"];
       jobQuery["status"] = magic_enum::enum_name(JobStatus::Running);
 
       auto queryJResult = handle["jobs"].find_one(JsonUtils::json2bson(jobQuery));
       if (queryJResult) {
+        m_logger->debug("Dead pilot {} had a running job, setting to Error...", pilot["uuid"]);
         json job = JsonUtils::bson2json(queryJResult.value());
         UpdateJobStatus(pilot["uuid"].get<std::string_view>(), job["hash"].get<std::string_view>(),
                         job["task"].get<std::string_view>(), JobStatus::Error);
       }
+
+      handle["pilots"].delete_one(JsonUtils::json2bson(deleteQuery));
 
       if (auto pilotIt = m_activePilots.find(pilot["uuid"]); pilotIt != end(m_activePilots))
         m_activePilots.erase(pilotIt);
