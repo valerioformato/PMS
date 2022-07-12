@@ -53,7 +53,7 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   auto pilotInfo = GetPilotInfo(pilotUuid);
   bool done = true;
   for (const auto &taskName : pilotInfo.tasks) {
-    done &= (m_tasks[taskName].IsExhausted() || m_tasks[taskName].IsFailed());
+    done &= (m_tasks[taskName].IsExhausted());
   }
 
   if (done)
