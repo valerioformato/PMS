@@ -243,7 +243,9 @@ void Director::WriteHeartBeatUpdates() {
       // no possible issues or strange mis-conversions when this data is handled by the DB.
       bsoncxx::view_or_value<bsoncxx::document::view, bsoncxx::document::value> updateAction =
           bsoncxx::builder::basic::make_document(
-              bsoncxx::builder::basic::kvp("lastHeartBeat", bsoncxx::types::b_date(time)));
+              bsoncxx::builder::basic::kvp("$set", [](bsoncxx::builder::basic::sub_document sub_doc) {
+                sub_doc.append(bsoncxx::builder::basic::kvp("lastHeartBeat", bsoncxx::types::b_date(time)));
+              }));
 
       requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction});
     }
