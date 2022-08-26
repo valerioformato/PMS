@@ -45,6 +45,7 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
       if (std::chrono::system_clock::now() - firstFailedConnection > gracePeriod) {
         spdlog::error("Could not update heartbeat for {}. Shutting down...", gracePeriod);
         m_alive = false;
+        m_exitSignal.set_value();
       }
     }
 
