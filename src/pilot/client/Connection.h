@@ -41,6 +41,7 @@ public:
   };
 
 private:
+  std::string m_uri{};
   State m_status;
   std::shared_ptr<WSclient> m_endpoint;
   WSclient::connection_ptr m_connection;
@@ -51,6 +52,9 @@ private:
 
   std::mutex cv_m;
   std::condition_variable cv;
+
+  void Connect();
+  void Reconnect();
 };
 
 } // namespace PMS::Pilot
