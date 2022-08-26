@@ -64,8 +64,8 @@ public:
 
   T consume() {
     std::lock_guard lock{m_mutex};
-    T result = front();
-    pop();
+    T result = m_queue.front();
+    m_queue.pop();
     return result;
   }
 
