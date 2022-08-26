@@ -306,10 +306,10 @@ void Server::Start() {
 
 void Server::Stop() {
   m_logger->info("Stopping Websocket server");
-  m_endpoint.stop_listening();
   m_endpoint.stop();
-  m_pilot_endpoint.stop_listening();
+  m_endpoint.stop_listening();
   m_pilot_endpoint.stop();
+  m_pilot_endpoint.stop_listening();
   m_isRunning = false;
 }
 
