@@ -218,21 +218,41 @@ Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, 
 }
 
 Director::OperationResult Director::UpdateHeartBeat(std::string_view pilotUuid) {
+  m_heartbeatUpdates.emplace(std::string{pilotUuid}, std::chrono::system_clock::now());
+  return Director::OperationResult::Success;
+}
+
+void Director::WriteHeartBeatUpdates() {
+  static constexpr auto coolDown = std::chrono::seconds(10);
+
   auto handle = m_frontPoolHandle->DBHandle();
+  do {
+    std::unordered_map<std::string, time_point> unique_hbs;
+    auto hbs = m_heartbeatUpdates.consume_all();
+    // NOTE: de-duplicate heartbeats. If all is correct, requests are ordered in time, so only most recent one survives
+    std::for_each(begin(hbs), end(hbs), [&unique_hbs](const PilotHeartBeat &hb) { unique_hbs[hb.uuid] = hb.time; });
 
-  json updateFilter;
-  updateFilter["uuid"] = pilotUuid;
+    std::vector<mongocxx::model::write> requests;
+    for (const auto &[uuid, time] : unique_hbs) {
+      json updateFilter;
+      updateFilter["uuid"] = uuid;
 
-  json updateAction;
-  updateAction["$currentDate"]["lastHeartBeat"] = true;
+      // this is why we prefer using nlohmann json wherever possible...
+      // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
+      // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
+      // no possible issues or strange mis-conversions when this data is handled by the DB.
+      bsoncxx::view_or_value<bsoncxx::document::view, bsoncxx::document::value> updateAction =
+          bsoncxx::builder::basic::make_document(
+              bsoncxx::builder::basic::kvp("lastHeartBeat", bsoncxx::types::b_date(time)));
 
-  mongocxx::options::update updateOpt{};
-  updateOpt.upsert(true);
+      requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction});
+    }
 
-  auto queryResult =
-      handle["pilots"].update_one(JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction), updateOpt);
+    m_logger->debug("Updating {} heartbeats", requests.size());
 
-  return queryResult ? Director::OperationResult::Success : Director::OperationResult::DatabaseError;
+    handle["jobs"].bulk_write(requests);
+
+  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
 Director::OperationResult Director::DeleteHeartBeat(std::string_view pilotUuid) {
@@ -503,8 +523,6 @@ void Director::UpdateTasks() {
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
-using time_point = std::chrono::system_clock::time_point;
-
 void Director::UpdatePilots() {
   static constexpr auto coolDown = std::chrono::seconds(60);
 
@@ -513,6 +531,8 @@ void Director::UpdatePilots() {
   auto handle = m_frontPoolHandle->DBHandle();
 
   do {
+    WriteHeartBeatUpdates();
+
     // this is why we prefer using nlohmann json wherever possible...
     // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
     // use the bson internal type for handling datetime objects in JSON, so that we are sure there are

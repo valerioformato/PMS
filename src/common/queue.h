@@ -69,6 +69,16 @@ public:
     return result;
   }
 
+  std::vector<T> consume_all() {
+    std::lock_guard lock{m_mutex};
+    std::vector<T> result;
+    while (!m_queue.empty()) {
+      result.push_back(m_queue.front());
+      m_queue.pop();
+    }
+    return result;
+  }
+
 private:
   mutable std::mutex m_mutex;
   std::queue<T> m_queue;

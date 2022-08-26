@@ -25,6 +25,8 @@ using json = nlohmann::json;
 namespace PMS::Orchestrator {
 class Director {
 public:
+  using time_point = std::chrono::system_clock::time_point;
+
   enum class OperationResult { Success, ProcessError, DatabaseError };
 
   Director(std::shared_ptr<DB::PoolHandle> frontPoolHandle, std::shared_ptr<DB::PoolHandle> backPoolHandle)
@@ -72,6 +74,7 @@ private:
   void UpdateTasks();
   void UpdatePilots();
   void WriteJobUpdates();
+  void WriteHeartBeatUpdates();
   void DBSync();
 
   struct PilotInfo {
@@ -87,6 +90,13 @@ private:
   std::shared_ptr<DB::PoolHandle> m_backPoolHandle;
 
   ts_queue<json> m_incomingJobs;
+
+  struct PilotHeartBeat {
+    PilotHeartBeat(std::string u, time_point t) : uuid{std::move(u)}, time{t} {};
+    std::string uuid;
+    time_point time;
+  };
+  ts_queue<PilotHeartBeat> m_heartbeatUpdates;
 
   std::mutex m_jobUpdateRequests_mx;
   std::vector<mongocxx::model::write> m_jobUpdateRequests;

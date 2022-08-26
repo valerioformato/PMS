@@ -270,7 +270,7 @@ void Server::SetupEndpoint(WSserver &endpoint, unsigned int port) {
       endpoint.start_accept();
       return;
     } catch (const std::exception &e) {
-      m_logger->debug("Error in acquiring port... retrying... {} / {}", iTry, maxTries);
+      m_logger->debug("Error in acquiring port {}... retrying... {} / {}", port, iTry, maxTries);
       std::this_thread::sleep_for(std::chrono::seconds{10});
     }
   }
@@ -306,10 +306,10 @@ void Server::Start() {
 
 void Server::Stop() {
   m_logger->info("Stopping Websocket server");
-  m_endpoint.stop();
   m_endpoint.stop_listening();
-  m_pilot_endpoint.stop();
+  m_endpoint.stop();
   m_pilot_endpoint.stop_listening();
+  m_pilot_endpoint.stop();
   m_isRunning = false;
 }
 

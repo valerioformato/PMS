@@ -29,11 +29,18 @@ public:
   void Stop();
 
 private:
+  Thread::Pool m_threadPool;
+  std::shared_ptr<spdlog::logger> m_logger;
+
+  bool m_isRunning = false;
+  unsigned int m_port;
+  WSserver m_endpoint;
+  WSserver m_pilot_endpoint;
+  std::shared_ptr<Director> m_director;
+
   std::pair<bool, std::string> ValidateTaskToken(std::string_view task, std::string_view token) const;
 
   void SetupEndpoint(WSserver &endpoint, unsigned int port);
-
-  Thread::Pool m_threadPool;
 
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
   void pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
@@ -56,14 +63,6 @@ private:
   std::string HandleCommand(PilotCommand &&command);
   static PilotCommand toPilotCommand(const json &msg);
   static std::unordered_map<std::string_view, PilotCommandType> m_pilot_commandLUT;
-
-  std::shared_ptr<spdlog::logger> m_logger;
-
-  bool m_isRunning = false;
-  unsigned int m_port;
-  WSserver m_endpoint;
-  WSserver m_pilot_endpoint;
-  std::shared_ptr<Director> m_director;
 };
 
 } // namespace PMS::Orchestrator
