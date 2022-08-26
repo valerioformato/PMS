@@ -248,10 +248,10 @@ void Director::WriteHeartBeatUpdates() {
       requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction});
     }
 
-    m_logger->debug("Updating {} heartbeats", requests.size());
-
-    handle["jobs"].bulk_write(requests);
-
+    if (!requests.empty()) {
+      m_logger->debug("Updating {} heartbeats", requests.size());
+      handle["jobs"].bulk_write(requests);
+    }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
