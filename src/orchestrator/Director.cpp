@@ -247,12 +247,14 @@ void Director::WriteHeartBeatUpdates() {
                 sub_doc.append(bsoncxx::builder::basic::kvp("lastHeartBeat", bsoncxx::types::b_date(tp)));
               }));
 
-      requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction});
+      requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction}.upsert(true));
     }
 
     if (!requests.empty()) {
       m_logger->debug("Updating {} heartbeats", requests.size());
-      handle["jobs"].bulk_write(requests);
+      mongocxx::options::bulk_write write_options;
+      write_options.ordered(false);
+      handle["pilots"].bulk_write(requests, write_options);
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
