@@ -30,9 +30,16 @@ void DBHandle::SetupDBCollections() {
   if (!(*m_poolEntry)[m_dbname].has_collection("tasks")) {
     spdlog::debug("Creating indexes for the \"tasks\" collection");
     mongocxx::options::index index_options{};
-    // hash is a unique index
+    // task name is a unique index
     index_options.unique(true);
     (*m_poolEntry)[m_dbname]["tasks"].create_index(make_document(kvp("name", 1)), index_options);
+  }
+  if (!(*m_poolEntry)[m_dbname].has_collection("pilots")) {
+    spdlog::debug("Creating indexes for the \"pilots\" collection");
+    mongocxx::options::index index_options{};
+    // pilot uuid is a unique index
+    index_options.unique(true);
+    (*m_poolEntry)[m_dbname]["pilots"].create_index(make_document(kvp("uuid", 1)), index_options);
   }
 }
 } // namespace PMS::DB
