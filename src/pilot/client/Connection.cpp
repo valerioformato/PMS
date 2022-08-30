@@ -109,12 +109,14 @@ std::string Connection::Send(const std::string &message) {
 
   if (ec) {
     switch (m_status) {
+    case State::Closed:
     case State::Failed:
-      m_in_flight_message.set_exception(std::make_exception_ptr(FailedConnectionException{"Connection failed"}));
+      m_in_flight_message.set_exception(std::make_exception_ptr(
+          std::make_exception_ptr(FailedConnectionException(fmt::format("Error sending message: {}", ec.message())))));
       break;
     default:
-      m_in_flight_message.set_exception(
-          std::make_exception_ptr(std::runtime_error(fmt::format("Error sending message: {}", ec.message()))));
+      m_in_flight_message.set_exception(std::make_exception_ptr(std::make_exception_ptr(
+          FailedConnectionException(fmt::format("Unexpected error sending message: {}", ec.message())))));
       break;
     }
   }
