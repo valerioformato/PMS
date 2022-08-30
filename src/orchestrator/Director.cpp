@@ -50,7 +50,13 @@ Director::OperationResult Director::AddNewJob(json &&job) {
 json Director::ClaimJob(std::string_view pilotUuid) {
   auto handle = m_frontPoolHandle->DBHandle();
 
-  auto pilotInfo = GetPilotInfo(pilotUuid);
+  auto maybe_pilotInfo = GetPilotInfo(pilotUuid);
+  if (!maybe_pilotInfo.has_value()) {
+    return R"({"error": "unknown pilot"})"_json;
+  }
+
+  const auto &pilotInfo = maybe_pilotInfo.value();
+
   bool done = true;
   for (const auto &taskName : pilotInfo.tasks) {
     done &= (m_tasks[taskName].IsExhausted());
@@ -92,7 +98,14 @@ json Director::ClaimJob(std::string_view pilotUuid) {
 
 Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, std::string_view hash,
                                                     std::string_view task, JobStatus status) {
-  auto pilotTasks = GetPilotInfo(pilotUuid).tasks;
+  auto maybe_pilotInfo = GetPilotInfo(pilotUuid);
+  if (!maybe_pilotInfo.has_value()) {
+    return OperationResult::DatabaseError;
+  }
+
+  const auto &pilotInfo = maybe_pilotInfo.value();
+
+  auto pilotTasks = pilotInfo.tasks;
   if (std::find(begin(pilotTasks), end(pilotTasks), task) == end(pilotTasks))
     return OperationResult::DatabaseError;
 
@@ -231,6 +244,11 @@ void Director::WriteHeartBeatUpdates() {
 
   std::vector<mongocxx::model::write> requests;
   for (const auto &[uuid, time] : unique_hbs) {
+    // NOTE: if this pilot is not in the active cache *and* not in the front DB collection then it's either an unknown
+    // pilot or it sent an update before dying and being removed from both cache and DB
+    if (auto maybe_pilotInfo = GetPilotInfo(uuid); !maybe_pilotInfo.has_value())
+      continue;
+
     json updateFilter;
     updateFilter["uuid"] = uuid;
 
@@ -632,7 +650,7 @@ Director::OperationResult Director::ValidateTaskToken(std::string_view task, std
   return OperationResult::DatabaseError;
 }
 
-Director::PilotInfo Director::GetPilotInfo(std::string_view uuid) {
+std::optional<Director::PilotInfo> Director::GetPilotInfo(std::string_view uuid) {
   if (auto uuidString = std::string{uuid}; m_activePilots.find(uuidString) != end(m_activePilots)) {
     return m_activePilots[uuidString];
   } else {
@@ -646,11 +664,11 @@ Director::PilotInfo Director::GetPilotInfo(std::string_view uuid) {
       json dummy = JsonUtils::bson2json(query_result.value());
       std::copy(dummy["tasks"].begin(), dummy["tasks"].end(), std::back_inserter(result.tasks));
       std::copy(dummy["tags"].begin(), dummy["tags"].end(), std::back_inserter(result.tags));
+      m_activePilots[uuidString] = result;
+      return result;
     }
 
-    m_activePilots[uuidString] = result;
-
-    return result;
+    return {};
   }
 }
 
