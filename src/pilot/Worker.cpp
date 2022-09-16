@@ -79,7 +79,6 @@ bool Worker::Register() {
     return false;
   }
 
-  fmt::print("{}\n", reply.dump(2));
   return reply["validTasks"].size() > 0;
 }
 

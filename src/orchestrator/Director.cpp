@@ -50,7 +50,13 @@ Director::OperationResult Director::AddNewJob(json &&job) {
 json Director::ClaimJob(std::string_view pilotUuid) {
   auto handle = m_frontPoolHandle->DBHandle();
 
-  auto pilotInfo = GetPilotInfo(pilotUuid);
+  auto maybe_pilotInfo = GetPilotInfo(pilotUuid);
+  if (!maybe_pilotInfo.has_value()) {
+    return R"({"error": "unknown pilot"})"_json;
+  }
+
+  const auto &pilotInfo = maybe_pilotInfo.value();
+
   bool done = true;
   for (const auto &taskName : pilotInfo.tasks) {
     done &= (m_tasks[taskName].IsExhausted());
@@ -92,7 +98,14 @@ json Director::ClaimJob(std::string_view pilotUuid) {
 
 Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, std::string_view hash,
                                                     std::string_view task, JobStatus status) {
-  auto pilotTasks = GetPilotInfo(pilotUuid).tasks;
+  auto maybe_pilotInfo = GetPilotInfo(pilotUuid);
+  if (!maybe_pilotInfo.has_value()) {
+    return OperationResult::DatabaseError;
+  }
+
+  const auto &pilotInfo = maybe_pilotInfo.value();
+
+  auto pilotTasks = pilotInfo.tasks;
   if (std::find(begin(pilotTasks), end(pilotTasks), task) == end(pilotTasks))
     return OperationResult::DatabaseError;
 
@@ -223,38 +236,41 @@ Director::OperationResult Director::UpdateHeartBeat(std::string_view pilotUuid) 
 }
 
 void Director::WriteHeartBeatUpdates() {
-  static constexpr auto coolDown = std::chrono::seconds(10);
-
   auto handle = m_frontPoolHandle->DBHandle();
-  do {
-    std::unordered_map<std::string, time_point> unique_hbs;
-    auto hbs = m_heartbeatUpdates.consume_all();
-    // NOTE: de-duplicate heartbeats. If all is correct, requests are ordered in time, so only most recent one survives
-    std::for_each(begin(hbs), end(hbs), [&unique_hbs](const PilotHeartBeat &hb) { unique_hbs[hb.uuid] = hb.time; });
+  std::unordered_map<std::string, time_point> unique_hbs;
+  auto hbs = m_heartbeatUpdates.consume_all();
+  // NOTE: de-duplicate heartbeats. If all is correct, requests are ordered in time, so only most recent one survives
+  std::for_each(begin(hbs), end(hbs), [&unique_hbs](const PilotHeartBeat &hb) { unique_hbs[hb.uuid] = hb.time; });
 
-    std::vector<mongocxx::model::write> requests;
-    for (const auto &[uuid, time] : unique_hbs) {
-      json updateFilter;
-      updateFilter["uuid"] = uuid;
+  std::vector<mongocxx::model::write> requests;
+  for (const auto &[uuid, time] : unique_hbs) {
+    // NOTE: if this pilot is not in the active cache *and* not in the front DB collection then it's either an unknown
+    // pilot or it sent an update before dying and being removed from both cache and DB
+    if (auto maybe_pilotInfo = GetPilotInfo(uuid); !maybe_pilotInfo.has_value())
+      continue;
 
-      // this is why we prefer using nlohmann json wherever possible...
-      // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
-      // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
-      // no possible issues or strange mis-conversions when this data is handled by the DB.
-      bsoncxx::view_or_value<bsoncxx::document::view, bsoncxx::document::value> updateAction =
-          bsoncxx::builder::basic::make_document(
-              bsoncxx::builder::basic::kvp("$set", [tp = time](bsoncxx::builder::basic::sub_document sub_doc) {
-                sub_doc.append(bsoncxx::builder::basic::kvp("lastHeartBeat", bsoncxx::types::b_date(tp)));
-              }));
+    json updateFilter;
+    updateFilter["uuid"] = uuid;
 
-      requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction});
-    }
+    // this is why we prefer using nlohmann json wherever possible...
+    // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
+    // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
+    // no possible issues or strange mis-conversions when this data is handled by the DB.
+    bsoncxx::view_or_value<bsoncxx::document::view, bsoncxx::document::value> updateAction =
+        bsoncxx::builder::basic::make_document(
+            bsoncxx::builder::basic::kvp("$set", [tp = time](bsoncxx::builder::basic::sub_document sub_doc) {
+              sub_doc.append(bsoncxx::builder::basic::kvp("lastHeartBeat", bsoncxx::types::b_date(tp)));
+            }));
 
-    if (!requests.empty()) {
-      m_logger->debug("Updating {} heartbeats", requests.size());
-      handle["jobs"].bulk_write(requests);
-    }
-  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
+    requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction}.upsert(true));
+  }
+
+  if (!requests.empty()) {
+    m_logger->debug("Updating {} heartbeats", requests.size());
+    mongocxx::options::bulk_write write_options;
+    write_options.ordered(false);
+    handle["pilots"].bulk_write(requests, write_options);
+  }
 }
 
 Director::OperationResult Director::DeleteHeartBeat(std::string_view pilotUuid) {
@@ -634,7 +650,7 @@ Director::OperationResult Director::ValidateTaskToken(std::string_view task, std
   return OperationResult::DatabaseError;
 }
 
-Director::PilotInfo Director::GetPilotInfo(std::string_view uuid) {
+std::optional<Director::PilotInfo> Director::GetPilotInfo(std::string_view uuid) {
   if (auto uuidString = std::string{uuid}; m_activePilots.find(uuidString) != end(m_activePilots)) {
     return m_activePilots[uuidString];
   } else {
@@ -648,11 +664,11 @@ Director::PilotInfo Director::GetPilotInfo(std::string_view uuid) {
       json dummy = JsonUtils::bson2json(query_result.value());
       std::copy(dummy["tasks"].begin(), dummy["tasks"].end(), std::back_inserter(result.tasks));
       std::copy(dummy["tags"].begin(), dummy["tags"].end(), std::back_inserter(result.tags));
+      m_activePilots[uuidString] = result;
+      return result;
     }
 
-    m_activePilots[uuidString] = result;
-
-    return result;
+    return {};
   }
 }
 
