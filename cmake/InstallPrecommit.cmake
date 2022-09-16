@@ -22,4 +22,14 @@ if (NOT PRECOMMIT)
             endif ()
         endif ()
     endif ()
+else ()
+    message(STATUS "Installing pre-commit hooks...")
+    execute_process(
+            COMMAND pre-commit install
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+            RESULT_VARIABLE PRECOMMIT_HOOKS_INSTALLED
+    )
+    if (PRECOMMIT_HOOKS_INSTALLED)
+        message(WARNING "Something went wrong during hook installation")
+    endif ()
 endif ()
