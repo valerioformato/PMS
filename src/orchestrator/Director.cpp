@@ -482,8 +482,8 @@ void Director::UpdateTasks() {
         std::copy(tmpdoc["dependencies"].begin(), tmpdoc["dependencies"].end(), std::back_inserter(task.dependencies));
       }
 
-      // skip failed tasks, since failed jobs won't be tried anymore
-      if (task.IsFailed()) {
+      // skip stale failed tasks, since failed jobs won't be tried anymore
+      if (!task.IsActive() && task.IsFailed()) {
         continue;
       }
 
@@ -500,7 +500,7 @@ void Director::UpdateTasks() {
 
       if (task.dependencies.empty()) {
         task.readyForScheduling = true;
-      } else {
+      } else if (!task.IsFailed()) {
         bool taskIsReady = true;
         for (const auto &requiredTaskName : task.dependencies) {
           auto requiredTaskIt = m_tasks.find(requiredTaskName);
@@ -533,9 +533,9 @@ void Director::UpdateTasks() {
         statusSummary.push_back(fmt::format("{} {}", task.jobs[status], magic_enum::enum_name(status)));
       }
 
-      m_logger->debug("Task {} updated - {} job{} ({}) - status: {}{}{}", task.name, task.totJobs,
+      m_logger->debug("Task {} updated - {} job{} ({}) - status: {}{}{}{}", task.name, task.totJobs,
                       task.totJobs > 1 ? "s" : "", fmt::join(statusSummary, ", "), task.IsActive() ? "A" : "",
-                      task.IsExhausted() ? "E" : "", task.IsFinished() ? "F" : "");
+                      task.IsExhausted() ? "E" : "", task.IsFinished() ? "F" : "", task.IsFailed() ? "X" : "");
     }
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
