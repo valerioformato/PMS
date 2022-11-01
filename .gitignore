@@ -109,3 +109,6 @@ tramp
 
 ##### VSCode ########
 .vscode/
+
+##### Clion ########
+.idea/
