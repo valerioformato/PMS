@@ -108,6 +108,19 @@ void Worker::MainLoop() {
   auto lastJobFinished = std::chrono::system_clock::now();
 
   std::vector<json> abandonedJobs;
+  auto handleJobStatusChange = [&abandonedJobs, this](const auto &job, auto status) {
+    if (!UpdateJobStatus(job["hash"], job["task"], status)) {
+      spdlog::error("Can't reach server while trying to set job status as {}. Abandoning job...",
+                    magic_enum::enum_name(status));
+
+      // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "abandoned"
+      // jobs, and we'll communicate to the server as soon as the connection becomes available...
+      abandonedJobs.push_back(job);
+      return false;
+    }
+
+    return true;
+  };
 
   // main loop
   while (true) {
@@ -209,12 +222,23 @@ void Worker::MainLoop() {
       // check for inbound file transfers
       if (job.contains("input")) {
         FileTransferQueue ftQueue;
-        auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"], wdPath.string());
-        for (const auto &ftJob : fts) {
-          ftQueue.Add(ftJob);
+        try {
+          auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"], wdPath.string());
+          for (const auto &ftJob : fts) {
+            ftQueue.Add(ftJob);
+          }
+          ftQueue.Process();
+        } catch (const std::exception &e) {
+          spdlog::error("{}", e.what());
+          handleJobStatusChange(job, JobStatus::Error);
+          m_workerState = State::WAIT;
+
+          // remove temporary sandbox directory
+          fs::remove_all(wdPath);
+
+          continue;
         }
-        ftQueue.Process();
-        spdlog::trace("Inbound transfers completed?");
+        spdlog::trace("Inbound transfers completed");
       }
 
       spdlog::trace("{} ({}, {}, {})", executable, jobIO.stdin, jobIO.stdout, jobIO.stderr);
@@ -281,15 +305,7 @@ void Worker::MainLoop() {
         }
       }
 
-      if (!UpdateJobStatus(job["hash"], job["task"], nextJobStatus)) {
-        spdlog::error("Can't reach server while trying to set job status as {}. Abandoning job...",
-                      magic_enum::enum_name(nextJobStatus));
-
-        // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "abandoned"
-        // jobs, and we'll communicate to the server as soon as the connection becomes available...
-        abandonedJobs.push_back(job);
-        continue;
-      }
+      handleJobStatusChange(job, nextJobStatus);
 
       // remove temporary sandbox directory
       fs::remove_all(wdPath);
