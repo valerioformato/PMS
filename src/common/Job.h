@@ -4,8 +4,8 @@
 #include <magic_enum.hpp>
 
 namespace PMS {
-// TODO: once we switch to c++17 replace with magic_enum
-enum class JobStatus { Pending = 0, Claimed, Running, Done, Error, Failed };
+
+enum class JobStatus { Pending = 0, Claimed, Running, Done, Error, Failed, InboundTransfer, OutboundTransfer };
 constexpr unsigned int nJobStatus = magic_enum::enum_count<JobStatus>();
 
 } // namespace PMS

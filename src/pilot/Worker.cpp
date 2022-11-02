@@ -227,6 +227,8 @@ void Worker::MainLoop() {
           for (const auto &ftJob : fts) {
             ftQueue.Add(ftJob);
           }
+
+          UpdateJobStatus(job["hash"], job["task"], JobStatus::InboundTransfer);
           ftQueue.Process();
         } catch (const std::exception &e) {
           spdlog::error("{}", e.what());
@@ -298,6 +300,8 @@ void Worker::MainLoop() {
           for (const auto &ftJob : fts) {
             ftQueue.Add(ftJob);
           }
+
+          UpdateJobStatus(job["hash"], job["task"], JobStatus::OutboundTransfer);
           ftQueue.Process();
         } catch (const std::exception &e) {
           nextJobStatus = JobStatus::Error;
