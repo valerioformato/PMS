@@ -130,7 +130,7 @@ Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, 
   }
 
   {
-    std::lock_guard lock{m_jobUpdateRequests_mx};
+    [[maybe_unused]] std::lock_guard lock{m_jobUpdateRequests_mx};
     m_jobUpdateRequests.push_back(
         mongocxx::model::update_one{JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction)});
   }
@@ -571,7 +571,9 @@ void Director::UpdatePilots() {
 
       json jobQuery;
       jobQuery["pilotUuid"] = pilot["uuid"];
-      jobQuery["status"] = magic_enum::enum_name(JobStatus::Running);
+      jobQuery["status"]["$in"] = std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Running),
+                                                                magic_enum::enum_name(JobStatus::InboundTransfer),
+                                                                magic_enum::enum_name(JobStatus::OutboundTransfer)};
 
       auto queryJResult = handle["jobs"].find_one(JsonUtils::json2bson(jobQuery));
       if (queryJResult) {
