@@ -1,0 +1,22 @@
+#ifndef PMSVersion
+#define PMSVersion
+
+#include <fmt/format.h>
+
+#include <string_view>
+
+namespace PMS {
+struct Version {
+  // version numbers
+  static constexpr unsigned int major = @CMAKE_PROJECT_VERSION_MAJOR@;
+  static constexpr unsigned int minor = @CMAKE_PROJECT_VERSION_MINOR@;
+  static constexpr unsigned int patch = @CMAKE_PROJECT_VERSION_PATCH@;
+
+  static std::string AsString() { return fmt::format("v{}.{}.{}", major, minor, patch); }
+
+  // git info
+  static constexpr std::string_view git_sha = "@GIT_HASH@";
+};
+} // namespace PMS
+
+#endif // PMSVersion

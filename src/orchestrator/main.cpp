@@ -8,6 +8,7 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "PMSVersion.h"
 #include "db/CredType.h"
 #include "db/PoolHandle.h"
 #include "orchestrator/Director.h"
@@ -46,9 +47,10 @@ void signal_watcher(Orchestrator::Server &server) {
 }
 
 int main(int argc, const char **argv) {
-  std::map<std::string, docopt::value> args = docopt::docopt(USAGE, {std::next(argv), std::next(argv, argc)},
-                                                             true,         // show help if requested
-                                                             "PMS 0.0.1"); // version string
+  std::map<std::string, docopt::value> args =
+      docopt::docopt(USAGE, {std::next(argv), std::next(argv, argc)},
+                     true, // show help if requested
+                     fmt::format("PMS {} ({})", PMS::Version::AsString(), PMS::Version::git_sha)); // version string
 
   switch (args["-v"].asLong()) {
   case 1:

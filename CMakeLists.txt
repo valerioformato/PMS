@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 
 # Pilot Management System
-project(PMS)
+project(PMS VERSION 0.0.1)
 
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 # use, i.e. don't skip the full RPATH for the build tree
@@ -55,6 +55,14 @@ set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
 include(cmake/FetchDependencies.cmake)
 include(cmake/InstallPrecommit.cmake)
+
+# Get git commit sha
+execute_process(
+        COMMAND git log -1 --format=%H
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        OUTPUT_VARIABLE GIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
 
 add_subdirectory(src)
 

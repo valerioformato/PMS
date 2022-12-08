@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "PMSVersion.h"
 #include "common/Utils.h"
 #include "pilot/PilotConfig.h"
 #include "pilot/Worker.h"
@@ -49,9 +50,10 @@ void signal_watcher(Pilot::Worker &worker) {
 }
 
 int main(int argc, const char **argv) {
-  std::map<std::string, docopt::value> args = docopt::docopt(USAGE, {std::next(argv), std::next(argv, argc)},
-                                                             true,         // show help if requested
-                                                             "PMS 0.0.1"); // version string
+  std::map<std::string, docopt::value> args =
+      docopt::docopt(USAGE, {std::next(argv), std::next(argv, argc)},
+                     true, // show help if requested
+                     fmt::format("PMS {} ({})", PMS::Version::AsString(), PMS::Version::git_sha)); // version string
 
   switch (args["-v"].asLong()) {
   case 1:
