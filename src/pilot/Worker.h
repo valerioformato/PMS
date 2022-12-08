@@ -24,12 +24,15 @@ using json = nlohmann::json;
 using namespace std::string_view_literals;
 
 namespace PMS::Pilot {
+
+struct Info;
+
 class Worker {
 public:
   explicit Worker(Config config, std::shared_ptr<Client> wsClient)
       : m_config{std::move(config)}, m_wsConnection{wsClient->PersistentConnection()} {}
 
-  bool Register();
+  bool Register(const Info &);
 
   void Start();
   void Stop();

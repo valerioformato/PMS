@@ -1,8 +1,10 @@
 // c++ headers
+#include <fstream>
 #include <functional>
 #include <signal.h>
 
 // external dependencies
+#include <boost/asio/ip/address.hpp>
 #include <docopt.h>
 #include <spdlog/spdlog.h>
 
@@ -10,6 +12,7 @@
 #include "PMSVersion.h"
 #include "common/Utils.h"
 #include "pilot/PilotConfig.h"
+#include "pilot/PilotInfo.h"
 #include "pilot/Worker.h"
 #include "pilot/client/Client.h"
 
@@ -49,6 +52,51 @@ void signal_watcher(Pilot::Worker &worker) {
   }
 }
 
+std::string read_file(std::string const &file) {
+  std::ifstream is(file);
+  if (!is.good()) {
+    throw std::runtime_error("Error: stream has errors.");
+  }
+  std::stringstream ss;
+  ss << is.rdbuf();
+  std::string m;
+  // Remove ending line character '\n' or '\r\n'.
+  std::getline(ss, m);
+  return m;
+}
+
+Pilot::Info ReadPilotInfo() {
+  Pilot::Info result{};
+
+  auto get_ip_address = []() {
+    boost::asio::io_service ioService;
+    boost::asio::ip::tcp::resolver resolver(ioService);
+
+    return resolver.resolve(boost::asio::ip::host_name(), "")->endpoint().address().to_string();
+  };
+
+  result.hostname = boost::asio::ip::host_name();
+  result.ip = get_ip_address();
+  try {
+    result.os_version = read_file("/proc/version");
+  } catch (const std::runtime_error &e) {
+    // nothing :)
+  }
+
+  return result;
+}
+
+void Report(const Pilot::Info &info) {
+  fmt::print("{:=^80}\n", " PMS ");
+  fmt::print(" Version {} ({})\n", PMS::Version::AsString(), PMS::Version::git_sha);
+  fmt::print(" This is pilot {}\n", boost::uuids::to_string(info.uuid));
+  fmt::print(" Running on host {} \n IP addr: {}\n", info.hostname, info.ip);
+  if (!info.os_version.empty()) {
+    fmt::print(" OS Version: {}\n", info.os_version);
+  }
+  fmt::print("{:=^80}\n", "");
+}
+
 int main(int argc, const char **argv) {
   std::map<std::string, docopt::value> args =
       docopt::docopt(USAGE, {std::next(argv), std::next(argv, argc)},
@@ -64,12 +112,14 @@ int main(int argc, const char **argv) {
     break;
   }
 
-  // Use the default logger (stdout, multi-threaded, colored)
-  spdlog::info("Starting pilot job");
-
   // Install a signal handler
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);
+
+  Pilot::Info pilotInfo = ReadPilotInfo();
+  Report(pilotInfo);
+
+  spdlog::info("Starting pilot job");
 
   // read the configuration from input file
   std::string configFileName = args["<configfile>"].asString();
@@ -80,7 +130,7 @@ int main(int argc, const char **argv) {
   auto wsClient = std::make_shared<PMS::Pilot::Client>(serverUri);
 
   Pilot::Worker worker{config, wsClient};
-  if (!worker.Register()) {
+  if (!worker.Register(pilotInfo)) {
     spdlog::warn("Served returned no valid tasks. Please check your token(s)");
     return 0;
   }
