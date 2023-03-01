@@ -267,7 +267,7 @@ void Worker::MainLoop() {
       }
 
       // check for outbound file transfers
-      if (job.contains("output")) {
+      if (job.contains("output") && nextJobStatus != JobStatus::Error) {
         FileTransferQueue ftQueue;
         try {
           auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());

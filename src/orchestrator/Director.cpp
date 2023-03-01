@@ -74,7 +74,11 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   filter["status"]["$in"] =
       std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Pending), magic_enum::enum_name(JobStatus::Error)};
   filter["task"]["$in"] = activeTasks;
-  filter["tags"]["$all"] = pilotInfo.tags;
+  if (pilotInfo.tags.empty()) {
+    filter["tags"]["$type"] = "array";
+    filter["tags"]["$eq"] = std::vector<std::string>{};
+  } else
+    filter["tags"]["$all"] = pilotInfo.tags;
 
   json updateAction;
   updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Claimed);
