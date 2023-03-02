@@ -3,6 +3,7 @@
 #include <filesystem>
 
 // external dependencies
+#include <boost/process.hpp>
 #include <regex>
 #include <spdlog/spdlog.h>
 
@@ -10,6 +11,7 @@
 #include "pilot/filetransfer/FileTransferQueue.h"
 
 namespace fs = std::filesystem;
+namespace bp = boost::process;
 
 namespace PMS::Pilot {
 bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
@@ -37,11 +39,86 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
   return true;
 }
 
+// TODO: gfal transfers are temporarily implemented by spawning a process call to the actual gfal client.
+//       With enough time we should use the actual library and embed the file transfer similarly to what we do with
+//       xrootd.
+
+// Reimplement a few functions from the filesystem library via gfal binaries
+namespace gfal {
+bool exists(const std::string_view path) {
+  std::error_code proc_ec;
+  std::string out, err;
+  bp::child ls_process{bp::search_path("gfal-ls"), std::string{path}, bp::std_out > out, bp::std_err > err, proc_ec};
+  ls_process.wait();
+
+  if (proc_ec || ls_process.exit_code()) {
+    spdlog::error("{}", err);
+    return false;
+  }
+
+  return true;
+}
+
+void create_directories(const std::string_view path) {
+  std::error_code proc_ec;
+  std::string out, err;
+  bp::child mkdir_process{bp::search_path("gfal-mkdir -p"), std::string{path}, bp::std_out > out, bp::std_err > err,
+                          proc_ec};
+  mkdir_process.wait();
+
+  if (proc_ec || mkdir_process.exit_code()) {
+    spdlog::error("{}", err);
+    throw std::runtime_error(err);
+  }
+}
+} // namespace gfal
+
+bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
+  std::string from, to;
+
+  switch (ftInfo.type) {
+  case FileTransferType::Inbound:
+    from = fmt::format("{}/{}", ftInfo.remotePath, ftInfo.fileName);
+    to = ftInfo.currentPath;
+    break;
+  case FileTransferType::Outbound:
+    from = fmt::format("{}/{}", ftInfo.currentPath, ftInfo.fileName);
+    to = ftInfo.remotePath;
+    if (!gfal::exists(to)) {
+      spdlog::warn("Directory {} does not exist. Creating it...", to);
+      gfal::create_directories(to);
+    }
+    break;
+  }
+
+  spdlog::debug("Attempting to copy {} to {} via gfal", from, to);
+
+  std::error_code proc_ec;
+  std::string out, err;
+  bp::child transfer_process{bp::search_path("gfal-copy"), from, to, bp::std_out > out, bp::std_err > err, proc_ec};
+  transfer_process.wait();
+
+  if (proc_ec || transfer_process.exit_code()) {
+    return false;
+  }
+
+  return true;
+}
+
 void FileTransferQueue::Process() {
   // run the local file transfers
   std::for_each(begin(m_queue), end(m_queue), [](const auto &ft) {
-    if (ft.protocol == FileTransferProtocol::local)
+    switch (ft.protocol) {
+    case FileTransferProtocol::local:
       LocalFileTransfer(ft);
+      break;
+    case FileTransferProtocol::gfal:
+      GfalFileTransfer(ft);
+      break;
+    case FileTransferProtocol::xrootd:
+      // handled later
+      break;
+    }
   });
 
 #ifdef ENABLE_XROOTD
@@ -50,6 +127,7 @@ void FileTransferQueue::Process() {
     if (ft.protocol == FileTransferProtocol::xrootd)
       AddXRootDFileTransfer(ft);
   });
+
   auto result = RunXRootDFileTransfer();
   if (!result) {
     throw std::runtime_error("XRootD transfer failed, check previous messages");
@@ -75,7 +153,7 @@ void FileTransferQueue::ProcessWildcards(std::string &fileName) {
 std::vector<std::string> FileTransferQueue::ExpandWildcard(const FileTransferInfo &ftInfo) {
   std::regex matcher{ftInfo.fileName};
 
-  // inbound, xrootd: glob remote dir
+  // inbound, xrootd/gfal: glob remote dir
   // inbound, local: glob local dir
   // outbound, *: glob current dir
   std::string_view dir;
@@ -90,6 +168,9 @@ std::vector<std::string> FileTransferQueue::ExpandWildcard(const FileTransferInf
       return GlobFS(dir, matcher);
     case FileTransferProtocol::xrootd:
       return GlobXRootD(dir, matcher);
+    case FileTransferProtocol::gfal:
+      spdlog::warn("Wildcards not yet supported in gfal transfers");
+      break;
     }
   }
 

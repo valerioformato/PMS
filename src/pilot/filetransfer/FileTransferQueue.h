@@ -14,7 +14,7 @@
 namespace PMS::Pilot {
 
 enum class FileTransferType { Inbound, Outbound };
-enum class FileTransferProtocol { local, xrootd };
+enum class FileTransferProtocol { local, xrootd, gfal };
 
 struct FileTransferInfo {
   FileTransferType type;
@@ -48,6 +48,7 @@ private:
   bool AddXRootDFileTransfer(const FileTransferInfo &ftInfo);
   bool RunXRootDFileTransfer();
 #endif
+  static bool GfalFileTransfer(const FileTransferInfo &ftInfo);
 };
 } // namespace PMS::Pilot
 
