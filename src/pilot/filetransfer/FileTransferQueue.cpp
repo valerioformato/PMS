@@ -44,41 +44,41 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
 //       xrootd.
 
 // Reimplement a few functions from the filesystem library via gfal binaries
-namespace gfal {
-bool exists(const std::string_view path) {
-  std::error_code proc_ec;
-  bp::ipstream out_stream, err_stream;
-  bp::child ls_process{bp::search_path("gfal-ls"), std::string{"-d"},        std::string{path},
-                       bp::std_out > out_stream,   bp::std_err > err_stream, proc_ec};
-  ls_process.wait();
-
-  std::string out, err;
-  out_stream >> out;
-  err_stream >> err;
-  if (proc_ec || ls_process.exit_code()) {
-    spdlog::error("{}", err);
-    return false;
-  }
-
-  return true;
-}
-
-void create_directories(const std::string_view path) {
-  std::error_code proc_ec;
-  bp::ipstream out_stream, err_stream;
-  bp::child mkdir_process{bp::search_path("gfal-mkdir"), std::string{"-p"},        std::string{path},
-                          bp::std_out > out_stream,      bp::std_err > err_stream, proc_ec};
-  mkdir_process.wait();
-
-  std::string out, err;
-  out_stream >> out;
-  err_stream >> err;
-  if (proc_ec || mkdir_process.exit_code()) {
-    spdlog::error("{}", err);
-    throw std::runtime_error(err);
-  }
-}
-} // namespace gfal
+// namespace gfal {
+// bool exists(const std::string_view path) {
+//   std::error_code proc_ec;
+//   bp::ipstream out_stream, err_stream;
+//   bp::child ls_process{bp::search_path("gfal-ls"), std::string{"-d"},        std::string{path},
+//                        bp::std_out > out_stream,   bp::std_err > err_stream, proc_ec};
+//   ls_process.wait();
+//
+//   std::string out, err;
+//   out_stream >> out;
+//   err_stream >> err;
+//   if (proc_ec || ls_process.exit_code()) {
+//     spdlog::error("{}", err);
+//     return false;
+//   }
+//
+//   return true;
+// }
+//
+// void create_directories(const std::string_view path) {
+//   std::error_code proc_ec;
+//   bp::ipstream out_stream, err_stream;
+//   bp::child mkdir_process{bp::search_path("gfal-mkdir"), std::string{"-p"},        std::string{path},
+//                           bp::std_out > out_stream,      bp::std_err > err_stream, proc_ec};
+//   mkdir_process.wait();
+//
+//   std::string out, err;
+//   out_stream >> out;
+//   err_stream >> err;
+//   if (proc_ec || mkdir_process.exit_code()) {
+//     spdlog::error("{}", err);
+//     throw std::runtime_error(err);
+//   }
+// }
+// } // namespace gfal
 
 bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
   std::string from, to;
@@ -91,10 +91,6 @@ bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
   case FileTransferType::Outbound:
     from = fmt::format("{}/{}", ftInfo.currentPath, ftInfo.fileName);
     to = ftInfo.remotePath;
-    if (!gfal::exists(to)) {
-      spdlog::warn("Directory {} does not exist. Creating it...", to);
-      gfal::create_directories(to);
-    }
     break;
   }
 
@@ -102,7 +98,7 @@ bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
 
   std::error_code proc_ec;
   bp::ipstream out_stream, err_stream;
-  bp::child transfer_process{bp::search_path("gfal-copy"), std::string{"-f"},        from,   to,
+  bp::child transfer_process{bp::search_path("gfal-copy"), std::string{"-p -f"},     from,   to,
                              bp::std_out > out_stream,     bp::std_err > err_stream, proc_ec};
   transfer_process.wait();
 
