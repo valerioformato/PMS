@@ -48,8 +48,8 @@ namespace gfal {
 bool exists(const std::string_view path) {
   std::error_code proc_ec;
   bp::ipstream out_stream, err_stream;
-  bp::child ls_process{bp::search_path("gfal-ls"), std::string{path}, bp::std_out > out_stream,
-                       bp::std_err > err_stream, proc_ec};
+  bp::child ls_process{bp::search_path("gfal-ls"), std::string{"-d"},        std::string{path},
+                       bp::std_out > out_stream,   bp::std_err > err_stream, proc_ec};
   ls_process.wait();
 
   std::string out, err;
@@ -66,8 +66,8 @@ bool exists(const std::string_view path) {
 void create_directories(const std::string_view path) {
   std::error_code proc_ec;
   bp::ipstream out_stream, err_stream;
-  bp::child mkdir_process{bp::search_path("gfal-mkdir -p"), std::string{path}, bp::std_out > out_stream,
-                          bp::std_err > err_stream, proc_ec};
+  bp::child mkdir_process{bp::search_path("gfal-mkdir"), std::string{"-p"},        std::string{path},
+                          bp::std_out > out_stream,      bp::std_err > err_stream, proc_ec};
   mkdir_process.wait();
 
   std::string out, err;
@@ -102,8 +102,8 @@ bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
 
   std::error_code proc_ec;
   bp::ipstream out_stream, err_stream;
-  bp::child transfer_process{bp::search_path("gfal-copy"), from,   to, bp::std_out > out_stream,
-                             bp::std_err > err_stream,     proc_ec};
+  bp::child transfer_process{bp::search_path("gfal-copy"), std::string{"-f"},        from,   to,
+                             bp::std_out > out_stream,     bp::std_err > err_stream, proc_ec};
   transfer_process.wait();
 
   std::string out, err;
