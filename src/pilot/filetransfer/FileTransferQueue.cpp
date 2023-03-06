@@ -47,10 +47,14 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
 namespace gfal {
 bool exists(const std::string_view path) {
   std::error_code proc_ec;
-  std::string out, err;
-  bp::child ls_process{bp::search_path("gfal-ls"), std::string{path}, bp::std_out > out, bp::std_err > err, proc_ec};
+  bp::ipstream out_stream, err_stream;
+  bp::child ls_process{bp::search_path("gfal-ls"), std::string{path}, bp::std_out > out_stream,
+                       bp::std_err > err_stream, proc_ec};
   ls_process.wait();
 
+  std::string out, err;
+  out_stream >> out;
+  err_stream >> err;
   if (proc_ec || ls_process.exit_code()) {
     spdlog::error("{}", err);
     return false;
@@ -61,11 +65,14 @@ bool exists(const std::string_view path) {
 
 void create_directories(const std::string_view path) {
   std::error_code proc_ec;
-  std::string out, err;
-  bp::child mkdir_process{bp::search_path("gfal-mkdir -p"), std::string{path}, bp::std_out > out, bp::std_err > err,
-                          proc_ec};
+  bp::ipstream out_stream, err_stream;
+  bp::child mkdir_process{bp::search_path("gfal-mkdir -p"), std::string{path}, bp::std_out > out_stream,
+                          bp::std_err > err_stream, proc_ec};
   mkdir_process.wait();
 
+  std::string out, err;
+  out_stream >> out;
+  err_stream >> err;
   if (proc_ec || mkdir_process.exit_code()) {
     spdlog::error("{}", err);
     throw std::runtime_error(err);
@@ -94,10 +101,14 @@ bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
   spdlog::debug("Attempting to copy {} to {} via gfal", from, to);
 
   std::error_code proc_ec;
-  std::string out, err;
-  bp::child transfer_process{bp::search_path("gfal-copy"), from, to, bp::std_out > out, bp::std_err > err, proc_ec};
+  bp::ipstream out_stream, err_stream;
+  bp::child transfer_process{bp::search_path("gfal-copy"), from,   to, bp::std_out > out_stream,
+                             bp::std_err > err_stream,     proc_ec};
   transfer_process.wait();
 
+  std::string out, err;
+  out_stream >> out;
+  err_stream >> err;
   if (proc_ec || transfer_process.exit_code()) {
     return false;
   }
