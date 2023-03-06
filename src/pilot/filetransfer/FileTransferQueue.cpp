@@ -98,8 +98,14 @@ bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
 
   std::error_code proc_ec;
   bp::ipstream out_stream, err_stream;
-  bp::child transfer_process{bp::search_path("gfal-copy"), std::string{"-p -f"},     from,   to,
-                             bp::std_out > out_stream,     bp::std_err > err_stream, proc_ec};
+  bp::child transfer_process{bp::search_path("gfal-copy"),
+                             std::string{"-p"},
+                             std::string{"-f"},
+                             from,
+                             to,
+                             bp::std_out > out_stream,
+                             bp::std_err > err_stream,
+                             proc_ec};
   transfer_process.wait();
 
   std::string out, err;
