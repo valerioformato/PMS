@@ -25,9 +25,9 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
   case FileTransferType::Outbound:
     from = fs::path{ftInfo.currentPath} / fs::path{ftInfo.fileName};
     to = fs::path{ftInfo.remotePath};
-    if (!fs::exists(to)) {
-      spdlog::warn("Directory {} does not exist. Creating it...", to.string());
-      fs::create_directories(to);
+    if (auto parent_dir = fs::path(to).parent_path(); !fs::exists(parent_dir)) {
+      spdlog::warn("Directory {} does not exist. Creating it...", parent_dir.string());
+      fs::create_directories(parent_dir);
     }
     break;
   }
@@ -42,43 +42,6 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
 // TODO: gfal transfers are temporarily implemented by spawning a process call to the actual gfal client.
 //       With enough time we should use the actual library and embed the file transfer similarly to what we do with
 //       xrootd.
-
-// Reimplement a few functions from the filesystem library via gfal binaries
-// namespace gfal {
-// bool exists(const std::string_view path) {
-//   std::error_code proc_ec;
-//   bp::ipstream out_stream, err_stream;
-//   bp::child ls_process{bp::search_path("gfal-ls"), std::string{"-d"},        std::string{path},
-//                        bp::std_out > out_stream,   bp::std_err > err_stream, proc_ec};
-//   ls_process.wait();
-//
-//   std::string out, err;
-//   out_stream >> out;
-//   err_stream >> err;
-//   if (proc_ec || ls_process.exit_code()) {
-//     spdlog::error("{}", err);
-//     return false;
-//   }
-//
-//   return true;
-// }
-//
-// void create_directories(const std::string_view path) {
-//   std::error_code proc_ec;
-//   bp::ipstream out_stream, err_stream;
-//   bp::child mkdir_process{bp::search_path("gfal-mkdir"), std::string{"-p"},        std::string{path},
-//                           bp::std_out > out_stream,      bp::std_err > err_stream, proc_ec};
-//   mkdir_process.wait();
-//
-//   std::string out, err;
-//   out_stream >> out;
-//   err_stream >> err;
-//   if (proc_ec || mkdir_process.exit_code()) {
-//     spdlog::error("{}", err);
-//     throw std::runtime_error(err);
-//   }
-// }
-// } // namespace gfal
 
 bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
   std::string from, to;
