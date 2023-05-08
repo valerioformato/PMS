@@ -5,7 +5,18 @@
 
 namespace PMS {
 
-enum class JobStatus { Pending = 0, Claimed, Running, Done, Error, Failed, InboundTransfer, OutboundTransfer };
+enum class JobStatus {
+  Pending = 0,
+  Claimed,
+  Running,
+  Done,
+  Error,
+  Failed,
+  InboundTransfer,
+  OutboundTransfer,
+  InboundTransferError,
+  OutboundTransferError
+};
 constexpr unsigned int nJobStatus = magic_enum::enum_count<JobStatus>();
 
 } // namespace PMS

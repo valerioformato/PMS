@@ -142,19 +142,20 @@ Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, 
   return OperationResult::Success;
 }
 
-struct WJU_PerfCounters {
-  WJU_PerfCounters(std::chrono::system_clock::duration time_, unsigned int jobWrites_)
-      : time{time_}, jobWrites{jobWrites_} {}
-
-  std::chrono::system_clock::duration time;
-  unsigned int jobWrites;
-};
+// TODO: This has never been really needed in a long time. Consider removing it.
+// struct WJU_PerfCounters {
+//  WJU_PerfCounters(std::chrono::system_clock::duration time_, unsigned int jobWrites_)
+//      : time{time_}, jobWrites{jobWrites_} {}
+//
+//  std::chrono::system_clock::duration time;
+//  unsigned int jobWrites;
+//};
 
 void Director::WriteJobUpdates() {
   static constexpr auto coolDown = std::chrono::seconds(1);
-  static constexpr unsigned int nSamples = 60;
-  static std::vector<WJU_PerfCounters> perfCounters;
-  perfCounters.reserve(nSamples);
+  //  static constexpr unsigned int nSamples = 60;
+  //  static std::vector<WJU_PerfCounters> perfCounters;
+  //  perfCounters.reserve(nSamples);
 
   auto handle = m_frontPoolHandle->DBHandle();
   do {
@@ -165,13 +166,14 @@ void Director::WriteJobUpdates() {
       handle["jobs"].bulk_write(m_jobUpdateRequests);
 
       auto end = std::chrono::system_clock::now();
-      perfCounters.emplace_back(end - start, m_jobUpdateRequests.size());
+      // perfCounters.emplace_back(end - start, m_jobUpdateRequests.size());
 
       m_jobUpdateRequests.clear();
 
-      // NOTE: This should be fine, right?
       json filter;
-      filter["status"] = magic_enum::enum_name(JobStatus::Error);
+      filter["status"]["$in"] = std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Error),
+                                                              magic_enum::enum_name(JobStatus::InboundTransferError),
+                                                              magic_enum::enum_name(JobStatus::OutboundTransferError)};
       filter["retries"]["$gte"] = m_maxRetries;
 
       json updateAction;
@@ -179,30 +181,33 @@ void Director::WriteJobUpdates() {
       handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
     }
 
-    // do some performance logging
-    if (perfCounters.size() == nSamples) {
-      auto meanJobs = std::accumulate(begin(perfCounters), end(perfCounters), 0.0,
-                                      [](const auto &curr, const auto &pfc) { return curr + pfc.jobWrites; }) /
-                      nSamples;
+    // TODO: This has never been really needed in a long time. Consider removing it.
 
-      auto mean =
-          std::accumulate(begin(perfCounters), end(perfCounters), 0.0,
-                          [](const auto &curr, const auto &pfc) {
-                            return curr + std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count();
-                          }) /
-          nSamples;
-      auto stdev =
-          std::sqrt(std::accumulate(
-              begin(perfCounters), end(perfCounters), 0.0,
-              [mean](const auto &curr, const auto &pfc) {
-                return curr + (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() - mean) *
-                                  (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() - mean);
-              })) /
-          (nSamples - 1);
-      m_logger->debug("[WriteJobUpdates] Wrote on average {:4.2f} jobs in {:4.2f} +- {:4.2f} ms", meanJobs, mean,
-                      stdev);
-      perfCounters.clear();
-    }
+    //    // do some performance logging
+    //    if (perfCounters.size() == nSamples) {
+    //      auto meanJobs = std::accumulate(begin(perfCounters), end(perfCounters), 0.0,
+    //                                      [](const auto &curr, const auto &pfc) { return curr + pfc.jobWrites; }) /
+    //                      nSamples;
+    //
+    //      auto mean =
+    //          std::accumulate(begin(perfCounters), end(perfCounters), 0.0,
+    //                          [](const auto &curr, const auto &pfc) {
+    //                            return curr + std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count();
+    //                          }) /
+    //          nSamples;
+    //      auto stdev =
+    //          std::sqrt(std::accumulate(
+    //              begin(perfCounters), end(perfCounters), 0.0,
+    //              [mean](const auto &curr, const auto &pfc) {
+    //                return curr + (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() - mean) *
+    //                                  (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() -
+    //                                  mean);
+    //              })) /
+    //          (nSamples - 1);
+    //      m_logger->debug("[WriteJobUpdates] Wrote on average {:4.2f} jobs in {:4.2f} +- {:4.2f} ms", meanJobs, mean,
+    //                      stdev);
+    //      perfCounters.clear();
+    //    }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 

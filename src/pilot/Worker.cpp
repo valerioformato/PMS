@@ -206,7 +206,7 @@ void Worker::MainLoop() {
           ftQueue.Process();
         } catch (const std::exception &e) {
           spdlog::error("{}", e.what());
-          handleJobStatusChange(job, JobStatus::Error);
+          handleJobStatusChange(job, JobStatus::InboundTransferError);
           m_workerState = State::WAIT;
 
           // remove temporary sandbox directory
@@ -267,7 +267,7 @@ void Worker::MainLoop() {
       }
 
       // check for outbound file transfers
-      if (job.contains("output") && nextJobStatus != JobStatus::Error) {
+      if (job.contains("output")) {
         FileTransferQueue ftQueue;
         try {
           auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
@@ -278,7 +278,7 @@ void Worker::MainLoop() {
           UpdateJobStatus(job["hash"], job["task"], JobStatus::OutboundTransfer);
           ftQueue.Process();
         } catch (const std::exception &e) {
-          nextJobStatus = JobStatus::Error;
+          nextJobStatus = JobStatus::OutboundTransferError;
           spdlog::error("{}", e.what());
         }
       }
