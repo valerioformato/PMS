@@ -73,5 +73,12 @@ struct Summary {
   constexpr static std::array requiredFields{"user"sv};
 };
 
+struct ResetFailedJobs {
+  std::string task;
+  std::string token;
+
+  constexpr static std::array requiredFields{"task"sv, "token"sv};
+};
+
 } // namespace PMS::Orchestrator
 #endif // PMS_USERCOMMANDS_H

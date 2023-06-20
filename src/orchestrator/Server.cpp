@@ -39,6 +39,7 @@ std::unordered_map<std::string_view, Server::UserCommandType> Server::m_commandL
     {"declareTaskDependency"sv, UserCommandType::DeclareTaskDependency},
     {"validateTaskToken"sv, UserCommandType::CheckTaskToken},
     {"summary"sv, UserCommandType::Summary},
+    {"resetFailedJobs"sv, UserCommandType::ResetFailedJobs},
 };
 
 std::unordered_map<std::string_view, Server::PilotCommandType> Server::m_pilot_commandLUT{
@@ -145,6 +146,18 @@ std::string Server::HandleCommand(UserCommand &&command) {
                         },
                         // Get user summary
                         [this](const OrchCommand<Summary> &ucmd) { return m_director->Summary(ucmd.cmd.user); },
+                        // Reset jobs in a given task that have status Failed
+                        [this](const OrchCommand<ResetFailedJobs> &ucmd) {
+                          auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+                          if (!valid) {
+                            return serverReply;
+                          }
+
+                          auto result = m_director->ResetFailedJobs(ucmd.cmd.task);
+
+                          return result == Director::OperationResult::Success ? fmt::format("Jobs reset")
+                                                                              : fmt::format("Jobs reset failed");
+                        },
                         // Handle errors
                         [](const OrchCommand<InvalidCommand> &ucmd) { return ucmd.cmd.errorMessage; },
                     },
@@ -381,6 +394,13 @@ UserCommand Server::toUserCommand(const json &msg) {
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", Summary::requiredFields);
+    break;
+  case UserCommandType::ResetFailedJobs:
+    if (ValidateJsonCommand<ResetFailedJobs>(msg))
+      return OrchCommand<ResetFailedJobs>{msg["task"], msg["token"]};
+
+    // handle invalid fields:
+    errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ResetFailedJobs::requiredFields);
     break;
   }
 

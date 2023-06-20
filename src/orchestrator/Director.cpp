@@ -744,4 +744,27 @@ std::string Director::QueryBackDB(const json &match, const json &filter) const {
   return resp.dump();
 }
 
+Director::OperationResult Director::ResetFailedJobs(std::string_view task) const {
+  json filter;
+  filter["task"] = task;
+  filter["status"] = magic_enum::enum_name(JobStatus::Failed);
+
+  json updateAction;
+  updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Pending);
+  updateAction["$inc"]["retries"] = 0;
+
+  try {
+    auto front_handle = m_frontPoolHandle->DBHandle();
+    front_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
+
+    auto back_handle = m_backPoolHandle->DBHandle();
+    front_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
+  } catch (const std::exception &e) {
+    m_logger->error("Server query failed with error {}", e.what());
+    return OperationResult::DatabaseError;
+  }
+
+  return Director::OperationResult::Success;
+}
+
 } // namespace PMS::Orchestrator

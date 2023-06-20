@@ -53,13 +53,20 @@ private:
     ClearTask,
     DeclareTaskDependency,
     CheckTaskToken,
-    Summary
+    Summary,
+    ResetFailedJobs,
   };
   std::string HandleCommand(UserCommand &&command);
   static UserCommand toUserCommand(const json &msg);
   static std::unordered_map<std::string_view, UserCommandType> m_commandLUT;
 
-  enum class PilotCommandType { ClaimJob, UpdateJobStatus, RegisterNewPilot, UpdateHeartBeat, DeleteHeartBeat };
+  enum class PilotCommandType {
+    ClaimJob,
+    UpdateJobStatus,
+    RegisterNewPilot,
+    UpdateHeartBeat,
+    DeleteHeartBeat,
+  };
   std::string HandleCommand(PilotCommand &&command);
   static PilotCommand toPilotCommand(const json &msg);
   static std::unordered_map<std::string_view, PilotCommandType> m_pilot_commandLUT;
