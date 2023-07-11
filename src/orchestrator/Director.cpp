@@ -751,7 +751,7 @@ Director::OperationResult Director::ResetFailedJobs(std::string_view task) const
 
   json updateAction;
   updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Pending);
-  updateAction["$inc"]["retries"] = 0;
+  updateAction["$set"]["retries"] = 0;
 
   try {
     auto front_handle = m_frontPoolHandle->DBHandle();
