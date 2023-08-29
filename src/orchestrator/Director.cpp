@@ -758,7 +758,9 @@ Director::OperationResult Director::ResetFailedJobs(std::string_view task) const
     front_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
 
     auto back_handle = m_backPoolHandle->DBHandle();
-    front_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
+    back_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
+
+    m_logger->debug("Reset all failed jobs in task {}", task);
   } catch (const std::exception &e) {
     m_logger->error("Server query failed with error {}", e.what());
     return OperationResult::DatabaseError;
