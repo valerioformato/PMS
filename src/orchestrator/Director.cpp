@@ -530,15 +530,9 @@ void Director::UpdateTasks() {
         task.readyForScheduling = taskIsReady;
       }
 
-      // update job counters in task
-      json countQuery;
-      countQuery["task"] = taskName;
-      task.totJobs = backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
-
+      UpdateTaskCounts(task);
       std::vector<std::string> statusSummary;
       for (auto status : magic_enum::enum_values<JobStatus>()) {
-        countQuery["status"] = magic_enum::enum_name(status);
-        task.jobs[status] = backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
         statusSummary.push_back(fmt::format("{} {}", task.jobs[status], magic_enum::enum_name(status)));
       }
 
@@ -548,6 +542,19 @@ void Director::UpdateTasks() {
     }
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
+}
+
+void Director::UpdateTaskCounts(Task &task) { // update job counters in task
+  auto backHandle = m_backPoolHandle->DBHandle();
+
+  json countQuery;
+  countQuery["task"] = task.name;
+  task.totJobs = backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
+
+  for (auto status : magic_enum::enum_values<JobStatus>()) {
+    countQuery["status"] = magic_enum::enum_name(status);
+    task.jobs[status] = backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery));
+  }
 }
 
 void Director::UpdatePilots() {
@@ -744,9 +751,9 @@ std::string Director::QueryBackDB(const json &match, const json &filter) const {
   return resp.dump();
 }
 
-Director::OperationResult Director::ResetFailedJobs(std::string_view task) const {
+Director::OperationResult Director::ResetFailedJobs(std::string_view taskname) {
   json filter;
-  filter["task"] = task;
+  filter["taskname"] = taskname;
   filter["status"] = magic_enum::enum_name(JobStatus::Failed);
 
   json updateAction;
@@ -760,11 +767,14 @@ Director::OperationResult Director::ResetFailedJobs(std::string_view task) const
     auto back_handle = m_backPoolHandle->DBHandle();
     back_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
 
-    m_logger->debug("Reset all failed jobs in task {}", task);
+    m_logger->debug("Reset all failed jobs in taskname {}", taskname);
   } catch (const std::exception &e) {
     m_logger->error("Server query failed with error {}", e.what());
     return OperationResult::DatabaseError;
   }
+
+  std::string s_taskname{taskname};
+  UpdateTaskCounts(m_tasks.at(s_taskname));
 
   return Director::OperationResult::Success;
 }

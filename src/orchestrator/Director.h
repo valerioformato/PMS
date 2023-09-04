@@ -67,13 +67,14 @@ public:
   std::string QueryBackDB(const json &match, const json &filter) const;
 
   OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const;
-  OperationResult ResetFailedJobs(std::string_view task) const;
+  OperationResult ResetFailedJobs(std::string_view taskname);
 
 private:
   void JobInsert();
   void JobTransfer();
   void UpdateTasks();
   void UpdatePilots();
+  void UpdateTaskCounts(Task &task);
   void WriteJobUpdates();
   void WriteHeartBeatUpdates();
   void DBSync();
