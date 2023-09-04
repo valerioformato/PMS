@@ -160,13 +160,8 @@ void Director::WriteJobUpdates() {
   auto handle = m_frontPoolHandle->DBHandle();
   do {
     if (!m_jobUpdateRequests.empty()) {
-      auto start = std::chrono::system_clock::now();
-
       std::lock_guard lock{m_jobUpdateRequests_mx};
       handle["jobs"].bulk_write(m_jobUpdateRequests);
-
-      auto end = std::chrono::system_clock::now();
-      // perfCounters.emplace_back(end - start, m_jobUpdateRequests.size());
 
       m_jobUpdateRequests.clear();
 
@@ -180,34 +175,6 @@ void Director::WriteJobUpdates() {
       updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Failed);
       handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
     }
-
-    // TODO: This has never been really needed in a long time. Consider removing it.
-
-    //    // do some performance logging
-    //    if (perfCounters.size() == nSamples) {
-    //      auto meanJobs = std::accumulate(begin(perfCounters), end(perfCounters), 0.0,
-    //                                      [](const auto &curr, const auto &pfc) { return curr + pfc.jobWrites; }) /
-    //                      nSamples;
-    //
-    //      auto mean =
-    //          std::accumulate(begin(perfCounters), end(perfCounters), 0.0,
-    //                          [](const auto &curr, const auto &pfc) {
-    //                            return curr + std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count();
-    //                          }) /
-    //          nSamples;
-    //      auto stdev =
-    //          std::sqrt(std::accumulate(
-    //              begin(perfCounters), end(perfCounters), 0.0,
-    //              [mean](const auto &curr, const auto &pfc) {
-    //                return curr + (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() - mean) *
-    //                                  (std::chrono::duration_cast<std::chrono::milliseconds>(pfc.time).count() -
-    //                                  mean);
-    //              })) /
-    //          (nSamples - 1);
-    //      m_logger->debug("[WriteJobUpdates] Wrote on average {:4.2f} jobs in {:4.2f} +- {:4.2f} ms", meanJobs, mean,
-    //                      stdev);
-    //      perfCounters.clear();
-    //    }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
