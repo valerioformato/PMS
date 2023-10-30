@@ -717,7 +717,7 @@ std::string Director::QueryBackDB(const json &match, const json &filter) const {
 
 Director::OperationResult Director::ResetFailedJobs(std::string_view taskname) {
   json filter;
-  filter["taskname"] = taskname;
+  filter["task"] = taskname;
   filter["status"] = magic_enum::enum_name(JobStatus::Failed);
 
   json updateAction;
@@ -727,12 +727,12 @@ Director::OperationResult Director::ResetFailedJobs(std::string_view taskname) {
   try {
     auto front_handle = m_frontPoolHandle->DBHandle();
     auto n_docs = front_handle["jobs"].count_documents(JsonUtils::json2bson(filter));
-    m_logger->debug("Found {} documents in front DB to update", n_docs);
+    m_logger->debug("ResetFailedJobs: Found {} documents in front DB to update", n_docs);
     front_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
 
     auto back_handle = m_backPoolHandle->DBHandle();
     n_docs = back_handle["jobs"].count_documents(JsonUtils::json2bson(filter));
-    m_logger->debug("Found {} documents in back DB to update", n_docs);
+    m_logger->debug("ResetFailedJobs: Found {} documents in back DB to update", n_docs);
     back_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction));
 
     m_logger->debug("Reset all failed jobs in taskname {}", taskname);
