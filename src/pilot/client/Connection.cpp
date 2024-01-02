@@ -91,7 +91,7 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
 }
 
 void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr msg) {
-  spdlog::trace("Message received: {}", msg->get_payload());
+  // spdlog::trace("Message received: {}", msg->get_payload());
   m_in_flight_message.set_value(msg->get_payload());
 }
 

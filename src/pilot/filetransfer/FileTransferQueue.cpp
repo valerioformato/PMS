@@ -74,6 +74,10 @@ bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
   std::string out, err;
   out_stream >> out;
   err_stream >> err;
+
+  spdlog::trace("{}", out);
+  spdlog::trace("{}", err);
+
   if (proc_ec || transfer_process.exit_code()) {
     return false;
   }

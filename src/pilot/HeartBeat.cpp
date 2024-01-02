@@ -32,7 +32,7 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
   bool failedToConnect = false;
 
   do {
-    spdlog::trace("Updating HeartBeat");
+    // spdlog::trace("Updating HeartBeat");
     try {
       m_wsConnection->Send(updateMsg.dump());
       failedToConnect = false;
