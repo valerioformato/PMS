@@ -22,12 +22,13 @@ void Director::Start() {
   m_backPoolHandle->DBHandle().SetupDBCollections();
   m_frontPoolHandle->DBHandle().SetupDBCollections();
 
-  m_threads.emplace_back(&Director::UpdatePilots, this);
+  m_threads.emplace_back(&Director::UpdateDeadPilots, this);
   m_threads.emplace_back(&Director::UpdateTasks, this);
   m_threads.emplace_back(&Director::JobInsert, this);
   m_threads.emplace_back(&Director::JobTransfer, this);
   m_threads.emplace_back(&Director::DBSync, this);
   m_threads.emplace_back(&Director::WriteJobUpdates, this);
+  m_threads.emplace_back(&Director::WriteHeartBeatUpdates, this);
 }
 
 void Director::Stop() {
@@ -209,41 +210,45 @@ Director::OperationResult Director::UpdateHeartBeat(std::string_view pilotUuid) 
 }
 
 void Director::WriteHeartBeatUpdates() {
-  auto handle = m_frontPoolHandle->DBHandle();
-  std::unordered_map<std::string, time_point> unique_hbs;
-  auto hbs = m_heartbeatUpdates.consume_all();
-  // NOTE: de-duplicate heartbeats. If all is correct, requests are ordered in time, so only most recent one survives
-  std::for_each(begin(hbs), end(hbs), [&unique_hbs](const PilotHeartBeat &hb) { unique_hbs[hb.uuid] = hb.time; });
+  static constexpr auto coolDown = std::chrono::minutes(1);
 
-  std::vector<mongocxx::model::write> requests;
-  for (const auto &[uuid, time] : unique_hbs) {
-    // NOTE: if this pilot is not in the active cache *and* not in the front DB collection then it's either an unknown
-    // pilot or it sent an update before dying and being removed from both cache and DB
-    if (auto maybe_pilotInfo = GetPilotInfo(uuid); !maybe_pilotInfo.has_value())
-      continue;
+  do {
+    auto handle = m_frontPoolHandle->DBHandle();
+    std::unordered_map<std::string, time_point> unique_hbs;
+    auto hbs = m_heartbeatUpdates.consume_all();
+    // NOTE: de-duplicate heartbeats. If all is correct, requests are ordered in time, so only most recent one survives
+    std::for_each(begin(hbs), end(hbs), [&unique_hbs](const PilotHeartBeat &hb) { unique_hbs[hb.uuid] = hb.time; });
 
-    json updateFilter;
-    updateFilter["uuid"] = uuid;
+    std::vector<mongocxx::model::write> requests;
+    for (const auto &[uuid, time] : unique_hbs) {
+      // NOTE: if this pilot is not in the active cache *and* not in the front DB collection then it's either an unknown
+      // pilot or it sent an update before dying and being removed from both cache and DB
+      if (auto maybe_pilotInfo = GetPilotInfo(uuid); !maybe_pilotInfo.has_value())
+        continue;
 
-    // this is why we prefer using nlohmann json wherever possible...
-    // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
-    // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
-    // no possible issues or strange mis-conversions when this data is handled by the DB.
-    bsoncxx::view_or_value<bsoncxx::document::view, bsoncxx::document::value> updateAction =
-        bsoncxx::builder::basic::make_document(
-            bsoncxx::builder::basic::kvp("$set", [tp = time](bsoncxx::builder::basic::sub_document sub_doc) {
-              sub_doc.append(bsoncxx::builder::basic::kvp("lastHeartBeat", bsoncxx::types::b_date(tp)));
-            }));
+      json updateFilter;
+      updateFilter["uuid"] = uuid;
 
-    requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction}.upsert(true));
-  }
+      // this is why we prefer using nlohmann json wherever possible...
+      // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
+      // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
+      // no possible issues or strange mis-conversions when this data is handled by the DB.
+      bsoncxx::view_or_value<bsoncxx::document::view, bsoncxx::document::value> updateAction =
+          bsoncxx::builder::basic::make_document(
+              bsoncxx::builder::basic::kvp("$set", [tp = time](bsoncxx::builder::basic::sub_document sub_doc) {
+                sub_doc.append(bsoncxx::builder::basic::kvp("lastHeartBeat", bsoncxx::types::b_date(tp)));
+              }));
 
-  if (!requests.empty()) {
-    m_logger->debug("Updating {} heartbeats", requests.size());
-    mongocxx::options::bulk_write write_options;
-    write_options.ordered(false);
-    handle["pilots"].bulk_write(requests, write_options);
-  }
+      requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction}.upsert(true));
+    }
+
+    if (!requests.empty()) {
+      m_logger->debug("Updating {} heartbeats", requests.size());
+      mongocxx::options::bulk_write write_options;
+      write_options.ordered(false);
+      handle["pilots"].bulk_write(requests, write_options);
+    }
+  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
 Director::OperationResult Director::DeleteHeartBeat(std::string_view pilotUuid) {
@@ -521,16 +526,14 @@ void Director::UpdateTaskCounts(Task &task) { // update job counters in task
   }
 }
 
-void Director::UpdatePilots() {
-  static constexpr auto coolDown = std::chrono::seconds(60);
+void Director::UpdateDeadPilots() {
+  static constexpr auto coolDown = std::chrono::minutes(10);
 
   static constexpr std::chrono::system_clock::duration gracePeriod = std::chrono::hours{1};
 
   auto handle = m_frontPoolHandle->DBHandle();
 
   do {
-    WriteHeartBeatUpdates();
-
     // this is why we prefer using nlohmann json wherever possible...
     // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
     // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
@@ -542,6 +545,7 @@ void Director::UpdatePilots() {
         }));
 
     auto queryResult = handle["pilots"].find(getPilotsQuery.view());
+    std::vector<mongocxx::model::write> requests;
     for (const auto &_pilot : queryResult) {
       json pilot = JsonUtils::bson2json(_pilot);
       m_logger->debug("Removing dead pilot {}", pilot["uuid"]);

@@ -73,7 +73,7 @@ private:
   void JobInsert();
   void JobTransfer();
   void UpdateTasks();
-  void UpdatePilots();
+  void UpdateDeadPilots();
   void UpdateTaskCounts(Task &task);
   void WriteJobUpdates();
   void WriteHeartBeatUpdates();
