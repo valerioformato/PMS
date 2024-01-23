@@ -255,8 +255,6 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
     return;
   }
 
-  m_logger->trace("Received a valid message :)");
-
   std::string reply = HandleCommand(toPilotCommand(parsedMessage));
 
   m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);

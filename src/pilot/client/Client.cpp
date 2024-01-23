@@ -28,14 +28,14 @@ std::string Client::Send(const json &msg, std::string_view uri) {
 
   unsigned int nTries = 0;
   while (
-      (connection.get_status() == Connection::State::Failed || connection.get_status() == Connection::State::Closed) &&
+      (connection.get_status() == Connection::State::closing || connection.get_status() == Connection::State::closed) &&
       ++nTries < nMaxTries) {
     std::this_thread::sleep_for(std::chrono::seconds(5));
     spdlog::warn("Retrying... {}/{}", nTries, nMaxTries);
     connection = Connection(m_endpoint, uri);
   }
 
-  if ((connection.get_status() == Connection::State::Failed || connection.get_status() == Connection::State::Closed)) {
+  if ((connection.get_status() == Connection::State::closing || connection.get_status() == Connection::State::closed)) {
     spdlog::error("Could not establish a connection after {} tries. Aborting...", nMaxTries);
   }
 
@@ -47,14 +47,14 @@ std::unique_ptr<Connection> Client::PersistentConnection(std::string_view uri) {
   auto connPtr = std::make_unique<Connection>(m_endpoint, uri);
 
   unsigned int nTries = 0;
-  while ((connPtr->get_status() == Connection::State::Failed || connPtr->get_status() == Connection::State::Closed) &&
+  while ((connPtr->get_status() == Connection::State::closing || connPtr->get_status() == Connection::State::closed) &&
          ++nTries < nMaxTries) {
     std::this_thread::sleep_for(std::chrono::seconds(5));
     spdlog::warn("Retrying... {}/{}", nTries, nMaxTries);
     connPtr = std::make_unique<Connection>(m_endpoint, uri);
   }
 
-  if ((connPtr->get_status() == Connection::State::Failed || connPtr->get_status() == Connection::State::Closed)) {
+  if ((connPtr->get_status() == Connection::State::closing || connPtr->get_status() == Connection::State::closed)) {
     spdlog::error("Could not establish a connection after {} tries. Aborting...", nMaxTries);
   }
 

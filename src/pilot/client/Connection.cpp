@@ -35,12 +35,12 @@ void Connection::Reconnect() {
 }
 
 Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
-    : m_uri{uri}, m_status{State::Connecting}, m_endpoint{std::move(endpoint)}, m_connection{nullptr} {
+    : m_uri{uri}, m_endpoint{std::move(endpoint)}, m_connection{nullptr} {
   Connect();
 }
 
 Connection::~Connection() {
-  if (m_status == State::Open) {
+  if (get_status() == State::open) {
     m_endpoint->close(get_hdl(), websocketpp::close::status::normal, "");
     std::unique_lock<std::mutex> lk(cv_m);
     cv.wait(lk);
@@ -48,10 +48,9 @@ Connection::~Connection() {
 }
 
 Connection::Connection(Connection &&rhs) noexcept
-    : m_status{rhs.m_status}, m_endpoint{std::move(rhs.m_endpoint)}, m_connection{std::move(rhs.m_connection)} {}
+    : m_endpoint{std::move(rhs.m_endpoint)}, m_connection{std::move(rhs.m_connection)} {}
 
 Connection &Connection::operator=(Connection &&rhs) noexcept {
-  m_status = rhs.m_status;
   m_connection = rhs.m_connection;
   m_endpoint = std::move(rhs.m_endpoint);
 
@@ -61,7 +60,6 @@ Connection &Connection::operator=(Connection &&rhs) noexcept {
 }
 
 void Connection::on_open([[maybe_unused]] WSclient *c, [[maybe_unused]] websocketpp::connection_hdl hdl) {
-  m_status = State::Open;
   spdlog::trace("Connection opened with server");
 
   std::lock_guard<std::mutex> lk(cv_m);
@@ -69,21 +67,23 @@ void Connection::on_open([[maybe_unused]] WSclient *c, [[maybe_unused]] websocke
 }
 
 void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
-  m_status = State::Failed;
   spdlog::error("Connection failed: {}", m_error_reason);
 
-  std::lock_guard<std::mutex> lk(cv_m);
-  cv.notify_all();
+  {
+    std::lock_guard<std::mutex> lk(cv_m);
+    cv.notify_all();
+  }
 
   WSclient::connection_ptr con = c->get_con_from_hdl(std::move(hdl));
   m_error_reason = con->get_ec().message();
 }
 
 void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
-  m_status = State::Closed;
 
-  std::lock_guard<std::mutex> lk(cv_m);
-  cv.notify_all();
+  {
+    std::lock_guard<std::mutex> lk(cv_m);
+    cv.notify_all();
+  }
 
   WSclient::connection_ptr con = c->get_con_from_hdl(std::move(hdl));
   spdlog::trace("close code: {} ({}), close reason: {}", con->get_remote_close_code(),
@@ -96,7 +96,7 @@ void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr m
 }
 
 std::string Connection::Send(const std::string &message) {
-  if (m_status == State::Closed || m_status == State::Failed) {
+  if (get_status() == State::closed || get_status() == State::closing) {
     spdlog::warn("Re-connecting to server...");
     Reconnect();
   }
@@ -108,9 +108,9 @@ std::string Connection::Send(const std::string &message) {
   m_endpoint->send(get_hdl(), message, websocketpp::frame::opcode::text, ec);
 
   if (ec) {
-    switch (m_status) {
-    case State::Closed:
-    case State::Failed:
+    switch (get_status()) {
+    case State::closed:
+    case State::closing:
       m_in_flight_message.set_exception(std::make_exception_ptr(
           std::make_exception_ptr(FailedConnectionException(fmt::format("Error sending message: {}", ec.message())))));
       break;
