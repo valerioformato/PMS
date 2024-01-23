@@ -64,6 +64,7 @@ void Connection::on_open([[maybe_unused]] WSclient *c, [[maybe_unused]] websocke
   m_status = State::Open;
   spdlog::trace("Connection opened with server");
 
+  std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
 }
 
@@ -71,6 +72,7 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
   m_status = State::Failed;
   spdlog::error("Connection failed: {}", m_error_reason);
 
+  std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
 
   WSclient::connection_ptr con = c->get_con_from_hdl(std::move(hdl));
@@ -80,6 +82,7 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
 void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
   m_status = State::Closed;
 
+  std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
 
   WSclient::connection_ptr con = c->get_con_from_hdl(std::move(hdl));
