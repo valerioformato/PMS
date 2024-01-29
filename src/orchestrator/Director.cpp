@@ -719,6 +719,39 @@ std::string Director::QueryBackDB(const json &match, const json &filter) const {
   return resp.dump();
 }
 
+std::string Director::QueryFrontDB(DBCollection collection, const json &match, const json &filter) const {
+  auto handle = m_frontPoolHandle->DBHandle();
+
+  std::string_view collection_name;
+  switch (collection) {
+  case DBCollection::Pilots:
+    collection_name = "pilots";
+    break;
+  case DBCollection::Jobs:
+    collection_name = "jobs";
+    break;
+  }
+
+  json projectionOpt;
+  if (filter.empty()) {
+    projectionOpt = R"({"_id":0})"_json;
+  } else {
+    projectionOpt = filter;
+    projectionOpt["_id"] = 0;
+  }
+  mongocxx::options::find query_options;
+  query_options.projection(JsonUtils::json2bson(projectionOpt));
+
+  json resp;
+  resp["result"] = json::array({});
+
+  auto query_result = handle[collection_name.data()].find(JsonUtils::json2bson(match), query_options);
+  std::transform(query_result.begin(), query_result.end(), std::back_inserter(resp["result"]),
+                 [](const auto &job) { return JsonUtils::bson2json(job); });
+
+  return resp.dump();
+}
+
 Director::OperationResult Director::ResetFailedJobs(std::string_view taskname) {
   json filter;
   filter["task"] = taskname;

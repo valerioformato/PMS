@@ -64,7 +64,10 @@ public:
   OperationResult ClearTask(const std::string &task, bool deleteTask = true);
 
   std::string Summary(const std::string &user) const;
+
+  enum class DBCollection { Jobs, Pilots };
   std::string QueryBackDB(const json &match, const json &filter) const;
+  std::string QueryFrontDB(DBCollection collection, const json &match, const json &filter) const;
 
   OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const;
   OperationResult ResetFailedJobs(std::string_view taskname);

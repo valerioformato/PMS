@@ -48,6 +48,7 @@ private:
   enum class UserCommandType {
     SubmitJob,
     FindJobs,
+    FindPilots,
     CreateTask,
     CleanTask,
     ClearTask,
