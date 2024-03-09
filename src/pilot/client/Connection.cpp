@@ -20,10 +20,14 @@ void Connection::Connect() {
     on_message(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
   });
 
+  // m_endpoint->set_access_channels(websocketpp::log::alevel::all);
+  // m_endpoint->clear_access_channels(websocketpp::log::alevel::frame_payload);
+
   // manually increase open and close timeout
   m_endpoint->set_open_handshake_timeout(60000l);
   m_endpoint->set_close_handshake_timeout(60000l);
 
+  spdlog::debug("Connecting...");
   m_endpoint->connect(m_connection);
   std::unique_lock<std::mutex> lk(cv_m);
   cv.wait(lk);
@@ -60,7 +64,7 @@ Connection &Connection::operator=(Connection &&rhs) noexcept {
 }
 
 void Connection::on_open([[maybe_unused]] WSclient *c, [[maybe_unused]] websocketpp::connection_hdl hdl) {
-  spdlog::trace("Connection opened with server");
+  spdlog::info("Connection established");
 
   std::lock_guard<std::mutex> lk(cv_m);
   cv.notify_all();
@@ -68,6 +72,10 @@ void Connection::on_open([[maybe_unused]] WSclient *c, [[maybe_unused]] websocke
 
 void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
   spdlog::error("Connection failed: {}", m_error_reason);
+
+  // set an exception in the message promise, in case we were waiting for a message
+  m_in_flight_message.set_exception(
+      std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
 
   {
     std::lock_guard<std::mutex> lk(cv_m);
@@ -79,6 +87,11 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
 }
 
 void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
+  spdlog::warn("Connection closed");
+
+  // set an exception in the message promise, in case we were waiting for a message
+  m_in_flight_message.set_exception(
+      std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
 
   {
     std::lock_guard<std::mutex> lk(cv_m);
@@ -91,37 +104,27 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
 }
 
 void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr msg) {
-  // spdlog::trace("Message received: {}", msg->get_payload());
   m_in_flight_message.set_value(msg->get_payload());
 }
 
 std::string Connection::Send(const std::string &message) {
+  std::lock_guard<std::mutex> slk(m_sendMutex);
+  std::promise<std::string>{}.swap(m_in_flight_message);
+  auto message_future = m_in_flight_message.get_future();
+
+  spdlog::trace("Send - lock acquired");
   if (get_status() == State::closed || get_status() == State::closing) {
     spdlog::warn("Re-connecting to server...");
     Reconnect();
   }
 
-  std::lock_guard<std::mutex> slk(m_sendMutex);
-  std::promise<std::string>{}.swap(m_in_flight_message);
-
   std::error_code ec;
+  spdlog::trace("Sending...");
   m_endpoint->send(get_hdl(), message, websocketpp::frame::opcode::text, ec);
+  spdlog::trace("... sent");
 
-  if (ec) {
-    switch (get_status()) {
-    case State::closed:
-    case State::closing:
-      m_in_flight_message.set_exception(std::make_exception_ptr(
-          std::make_exception_ptr(FailedConnectionException(fmt::format("Error sending message: {}", ec.message())))));
-      break;
-    default:
-      m_in_flight_message.set_exception(std::make_exception_ptr(std::make_exception_ptr(
-          FailedConnectionException(fmt::format("Unexpected error sending message: {}", ec.message())))));
-      break;
-    }
-  }
-
-  return m_in_flight_message.get_future().get();
+  spdlog::trace("waiting for message...");
+  return message_future.get();
 }
 
 } // namespace PMS::Pilot

@@ -16,6 +16,14 @@ HeartBeat::~HeartBeat() {
   m_thread.join();
 }
 
+auto unwrap(std::exception_ptr ptr) -> const std::exception & {
+  try {
+    std::rethrow_exception(ptr);
+  } catch (std::exception &e) {
+    return e;
+  }
+}
+
 void HeartBeat::updateHB(std::future<void> exitSignal) {
   constexpr static auto coolDown = std::chrono::seconds(15);
 
@@ -36,7 +44,8 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
     try {
       m_wsConnection->Send(updateMsg.dump());
       failedToConnect = false;
-    } catch (...) {
+    } catch (const Connection::FailedConnectionException &e) {
+      spdlog::warn("Exception thrown while sending heartbeat: {}", e.what());
       if (!failedToConnect) {
         failedToConnect = true;
         firstFailedConnection = std::chrono::system_clock::now();
@@ -47,6 +56,9 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
         m_alive = false;
         m_exitSignal.set_value();
       }
+    } catch (...) {
+      const auto &e = unwrap(std::current_exception());
+      spdlog::error("Unexpected exception: '{}'", e.what());
     }
 
   } while (exitSignal.wait_for(coolDown) == std::future_status::timeout);
