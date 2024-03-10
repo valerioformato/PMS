@@ -29,7 +29,7 @@ public:
   void Stop();
 
 private:
-  Thread::Pool m_threadPool;
+  Thread::Pool m_threadPool{32};
   std::shared_ptr<spdlog::logger> m_logger;
 
   bool m_isRunning = false;
