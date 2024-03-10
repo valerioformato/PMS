@@ -158,10 +158,13 @@ void Director::WriteJobUpdates() {
   auto handle = m_frontPoolHandle->DBHandle();
   do {
     if (!m_jobUpdateRequests.empty()) {
-      std::lock_guard lock{m_jobUpdateRequests_mx};
-      handle["jobs"].bulk_write(m_jobUpdateRequests);
+      std::vector<mongocxx::model::write> job_update_requests{};
 
-      m_jobUpdateRequests.clear();
+      {
+        std::lock_guard lock{m_jobUpdateRequests_mx};
+        std::swap(m_jobUpdateRequests, job_update_requests);
+      }
+      handle["jobs"].bulk_write(job_update_requests);
 
       json filter;
       filter["status"]["$in"] = std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Error),
