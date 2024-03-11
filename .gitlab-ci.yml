@@ -25,6 +25,10 @@ build-ubuntu20.04:
   <<: *build-docker
   image: vformato/pms-ci:ubuntu20.04
 
+build-ubuntu22.04:
+  <<: *build-docker
+  image: vformato/pms-ci:ubuntu22.04
+
 dockerize-ubuntu20.04:
   stage: dockerize
   image: docker:19.03.12
