@@ -90,8 +90,12 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
   spdlog::warn("Connection closed");
 
   // set an exception in the message promise, in case we were waiting for a message
-  m_in_flight_message.set_exception(
-      std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
+  try {
+    m_in_flight_message.set_exception(
+        std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
+  } catch (const std::future_error &e) {
+    // connection was closed while we were NOT waiting for a message. No error to be raised.
+  }
 
   {
     std::lock_guard<std::mutex> lk(cv_m);
