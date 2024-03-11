@@ -17,10 +17,6 @@ stages:
   tags:
       - docker
 
-build-centos8:
-  <<: *build-docker
-  image: vformato/pms-ci:centos8
-
 build-alma9:
   <<: *build-docker
   image: vformato/pms-ci:alma9
