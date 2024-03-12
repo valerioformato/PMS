@@ -265,10 +265,13 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
 
 void Server::SetupEndpoint(WSserver &endpoint, unsigned int port) {
 
-  endpoint.set_error_channels(websocketpp::log::alevel::all);
 #ifdef DEBUG_WEBSOCKETS
+  endpoint.set_error_channels(websocketpp::log::alevel::all);
   endpoint.set_access_channels(websocketpp::log::alevel::all);
   endpoint.clear_access_channels(websocketpp::log::alevel::frame_payload);
+#else
+  endpoint.set_error_channels(websocketpp::log::alevel::all);
+  endpoint.set_access_channels(websocketpp::log::alevel::none);
 #endif
 
   // Initialize Asio
