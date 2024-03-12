@@ -599,7 +599,7 @@ void Director::UpdateDeadPilots() {
                                                                 magic_enum::enum_name(JobStatus::InboundTransfer),
                                                                 magic_enum::enum_name(JobStatus::OutboundTransfer)};
 
-      json projectionOpt = R"({"_id":1, "hash":1})"_json;
+      json projectionOpt = R"({"_id":1, "hash":1, "task":1})"_json;
       mongocxx::options::find query_options;
       query_options.projection(JsonUtils::json2bson(projectionOpt));
 
