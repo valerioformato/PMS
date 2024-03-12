@@ -234,8 +234,6 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
     return;
   }
 
-  m_logger->trace("Received a valid message :)");
-
   std::string reply = HandleCommand(toUserCommand(parsedMessage));
 
   m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
@@ -267,9 +265,11 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
 
 void Server::SetupEndpoint(WSserver &endpoint, unsigned int port) {
 
-  // Set logging settings
-  endpoint.set_error_channels(websocketpp::log::elevel::all);
-  endpoint.set_access_channels(websocketpp::log::alevel::none);
+  endpoint.set_error_channels(websocketpp::log::alevel::all);
+#ifdef DEBUG_WEBSOCKETS
+  endpoint.set_access_channels(websocketpp::log::alevel::all);
+  endpoint.clear_access_channels(websocketpp::log::alevel::frame_payload);
+#endif
 
   // Initialize Asio
   endpoint.init_asio();
