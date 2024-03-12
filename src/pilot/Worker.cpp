@@ -67,6 +67,22 @@ void Worker::Kill() {
   m_jobProcess.terminate();
 }
 
+bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
+  json request;
+  request["command"] = "p_updateJobStatus";
+  request["pilotUuid"] = boost::uuids::to_string(m_uuid);
+  request["hash"] = hash;
+  request["task"] = task;
+  request["status"] = magic_enum::enum_name(status);
+
+  try {
+    auto reply = m_wsConnection->Send(request.dump());
+    return reply == "Ok"sv;
+  } catch (const Connection::FailedConnectionException &e) {
+    return false;
+  }
+}
+
 void Worker::MainLoop() {
   if (m_maxJobs < std::numeric_limits<decltype(m_maxJobs)>::max()) {
     spdlog::debug("Starting worker for {} jobs...", m_maxJobs);
@@ -81,15 +97,18 @@ void Worker::MainLoop() {
   auto startTime = std::chrono::system_clock::now();
   auto lastJobFinished = std::chrono::system_clock::now();
 
-  std::vector<json> abandonedJobs;
-  auto handleJobStatusChange = [&abandonedJobs, this](const auto &job, auto status) {
+  // FIXME: This should be a deque probably
+  std::deque<json> queued_job_updates;
+
+  auto handleJobStatusChange = [&queued_job_updates, this](const json &job, JobStatus status) {
     if (!UpdateJobStatus(job["hash"], job["task"], status)) {
-      spdlog::error("Can't reach server while trying to set job status as {}. Abandoning job...",
+      spdlog::error("Can't reach server while trying to set job status as {}. Queueing up job status update for later.",
                     magic_enum::enum_name(status));
 
-      // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "abandoned"
+      // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "to-be-updated"
       // jobs, and we'll communicate to the server as soon as the connection becomes available...
-      abandonedJobs.push_back(job);
+      json &queued_job_update = queued_job_updates.emplace_back(job);
+      queued_job_update["status"] = magic_enum::enum_name(status);
       return false;
     }
 
@@ -113,15 +132,29 @@ void Worker::MainLoop() {
       job = json::parse(m_wsConnection->Send(request.dump()));
       m_workerState = State::JOB_ACQUIRED;
     } catch (const Connection::FailedConnectionException &e) {
-      if (!hb.IsAlive())
-        break;
+      if (!hb.IsAlive()) {
+        spdlog::warn("No connection to server and heartbeat is not alive. Exiting...");
+        m_workerState = State::EXIT;
+      } else {
+        spdlog::warn("No connection to server. Waiting...");
+        m_workerState = State::WAIT;
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+      }
+      continue;
     }
 
     // Here we check if we had abandoned jobs that have not been updated on the server and we process them
-    if (!abandonedJobs.empty()) {
-      std::for_each(begin(abandonedJobs), end(abandonedJobs),
-                    [this](const json &job) { UpdateJobStatus(job["hash"], job["task"], JobStatus::Error); });
-      abandonedJobs.clear();
+    // NOTE: at this point, we should have a connection to the server
+    if (!queued_job_updates.empty()) {
+      while (!queued_job_updates.empty()) {
+        auto &job = queued_job_updates.front();
+
+        JobStatus status = magic_enum::enum_cast<JobStatus>(job["status"].get<std::string_view>()).value();
+        spdlog::debug("Sending queued job status update {} to {}", job["hash"], job["status"]);
+        handleJobStatusChange(job, status);
+
+        queued_job_updates.pop_front();
+      }
     }
 
     if (job.contains("finished")) {
@@ -202,7 +235,7 @@ void Worker::MainLoop() {
             ftQueue.Add(ftJob);
           }
 
-          UpdateJobStatus(job["hash"], job["task"], JobStatus::InboundTransfer);
+          handleJobStatusChange(job, JobStatus::InboundTransfer);
           ftQueue.Process();
         } catch (const std::exception &e) {
           spdlog::error("{}", e.what());
@@ -245,10 +278,7 @@ void Worker::MainLoop() {
                                bp::shell, procError);
 
       // set status to "Running"
-      if (!UpdateJobStatus(job["hash"], job["task"], JobStatus::Running)) {
-        spdlog::error("Can't reach server while trying to set job as Running.");
-        // NOTE(vformato):  in this case we do nothing. We hope that while the process runs the connection is recovered.
-      }
+      handleJobStatusChange(job, JobStatus::Running);
 
       m_jobProcess.wait();
 
@@ -275,7 +305,8 @@ void Worker::MainLoop() {
             ftQueue.Add(ftJob);
           }
 
-          UpdateJobStatus(job["hash"], job["task"], JobStatus::OutboundTransfer);
+          // UpdateJobStatus(job["hash"], job["task"], JobStatus::OutboundTransfer);
+          handleJobStatusChange(job, JobStatus::OutboundTransfer);
           ftQueue.Process();
         } catch (const std::exception &e) {
           nextJobStatus = JobStatus::OutboundTransferError;
@@ -322,19 +353,6 @@ Worker::EnvInfoType Worker::GetEnvType(const std::string &envName) {
     return EnvInfoType::NONE;
 
   return it->first;
-}
-
-bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
-  json request;
-  request["command"] = "p_updateJobStatus";
-  request["pilotUuid"] = boost::uuids::to_string(m_uuid);
-  request["hash"] = hash;
-  request["task"] = task;
-  request["status"] = magic_enum::enum_name(status);
-
-  auto reply = m_wsConnection->Send(request.dump());
-
-  return reply == "Ok";
 }
 
 std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType type, json request,
