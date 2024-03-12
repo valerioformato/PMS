@@ -286,7 +286,7 @@ void Server::SetupEndpoint(WSserver &endpoint, unsigned int port) {
       endpoint.start_accept();
       return;
     } catch (const std::exception &e) {
-      m_logger->debug("Error in acquiring port {}... retrying... {} / {}", port, iTry, maxTries);
+      m_logger->error("Error in acquiring port {}... retrying... {} / {}", port, iTry, maxTries);
       std::this_thread::sleep_for(std::chrono::seconds{10});
     }
   }

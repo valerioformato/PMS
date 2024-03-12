@@ -29,12 +29,12 @@ build-ubuntu22.04:
   <<: *build-docker
   image: vformato/pms-ci:ubuntu22.04
 
-dockerize-ubuntu20.04:
+dockerize-ubuntu22.04:
   stage: dockerize
   image: docker:19.03.12
   services:
     - docker:19.03.12-dind
-  needs: ["build-ubuntu20.04"]
+  needs: ["build-ubuntu22.04"]
   tags:
     - docker
   only:

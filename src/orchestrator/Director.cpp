@@ -20,7 +20,8 @@ using json = nlohmann::json;
 namespace PMS::Orchestrator {
 
 // FIXME: find a better solution for decorating DB queries. We don't want exceptions bringing the server down
-template <class ErrorType, unsigned int max_retries, typename Callable> decltype(auto) RetryIfFails(Callable callable) {
+template <class ErrorType, unsigned int max_retries = 10, typename Callable>
+decltype(auto) RetryIfFailsWith(Callable callable) {
   unsigned int retries = 0;
   std::exception_ptr last_exception;
 
@@ -28,6 +29,7 @@ template <class ErrorType, unsigned int max_retries, typename Callable> decltype
     try {
       return callable();
     } catch (const ErrorType &e) {
+      spdlog::trace("DB query failed, retrying... {}/{}", retries, max_retries);
       ++retries;
       last_exception = std::current_exception();
     }
@@ -110,7 +112,7 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   mongocxx::options::find_one_and_update query_options;
   query_options.bypass_document_validation(true).projection(JsonUtils::json2bson(projectionOpt));
 
-  auto query_result = RetryIfFails<mongocxx::exception, 10>([&]() {
+  auto query_result = RetryIfFailsWith<mongocxx::exception>([&]() {
     return handle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction),
                                               query_options);
   });
@@ -185,7 +187,7 @@ void Director::WriteJobUpdates() {
         std::lock_guard lock{m_jobUpdateRequests_mx};
         std::swap(m_jobUpdateRequests, job_update_requests);
       }
-      RetryIfFails<mongocxx::exception, 10>([&]() { handle["jobs"].bulk_write(job_update_requests); });
+      RetryIfFailsWith<mongocxx::exception>([&]() { handle["jobs"].bulk_write(job_update_requests); });
 
       json filter;
       filter["status"]["$in"] = std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Error),
@@ -196,7 +198,7 @@ void Director::WriteJobUpdates() {
       json updateAction;
       updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Failed);
 
-      RetryIfFails<mongocxx::exception, 10>(
+      RetryIfFailsWith<mongocxx::exception>(
           [&]() { handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction)); });
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
@@ -227,7 +229,7 @@ Director::NewPilotResult Director::RegisterNewPilot(std::string_view pilotUuid, 
   m_activePilots[std::string(pilotUuid)] = PilotInfo{result.validTasks, tags};
 
   auto query_result =
-      RetryIfFails<mongocxx::exception, 10>([&]() { return handle["pilots"].insert_one(JsonUtils::json2bson(query)); });
+      RetryIfFailsWith<mongocxx::exception>([&]() { return handle["pilots"].insert_one(JsonUtils::json2bson(query)); });
   return bool(query_result) ? result : NewPilotResult{OperationResult::DatabaseError, {}, {}};
 }
 
@@ -273,7 +275,7 @@ void Director::WriteHeartBeatUpdates() {
       m_logger->debug("Updating {} heartbeats", requests.size());
       mongocxx::options::bulk_write write_options;
       write_options.ordered(false);
-      RetryIfFails<mongocxx::exception, 10>([&]() { handle["pilots"].bulk_write(requests, write_options); });
+      RetryIfFailsWith<mongocxx::exception>([&]() { handle["pilots"].bulk_write(requests, write_options); });
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
@@ -287,7 +289,7 @@ Director::OperationResult Director::DeleteHeartBeat(std::string_view pilotUuid) 
   json deleteFilter;
   deleteFilter["uuid"] = pilotUuid;
 
-  auto queryResult = RetryIfFails<mongocxx::exception, 10>(
+  auto queryResult = RetryIfFailsWith<mongocxx::exception>(
       [&]() { return handle["pilots"].delete_one(JsonUtils::json2bson(deleteFilter)); });
 
   return queryResult ? Director::OperationResult::Success : Director::OperationResult::DatabaseError;
@@ -314,7 +316,7 @@ Director::OperationResult Director::AddTaskDependency(const std::string &task, c
   filter["name"] = task;
   json updateAction;
   updateAction["$push"]["dependencies"] = dependsOn;
-  RetryIfFails<mongocxx::exception, 10>(
+  RetryIfFailsWith<mongocxx::exception>(
       [&]() { handle["tasks"].update_one(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction)); });
 
   return OperationResult::Success;
@@ -341,7 +343,7 @@ Director::CreateTaskResult Director::CreateTask(const std::string &task) {
   insertQuery["name"] = newTask.name;
   insertQuery["token"] = newTask.token;
 
-  RetryIfFails<mongocxx::exception, 10>([&]() { handle["tasks"].insert_one(JsonUtils::json2bson(insertQuery)); });
+  RetryIfFailsWith<mongocxx::exception>([&]() { handle["tasks"].insert_one(JsonUtils::json2bson(insertQuery)); });
 
   return {OperationResult::Success, token};
 }
@@ -355,14 +357,14 @@ Director::OperationResult Director::ClearTask(const std::string &task, bool dele
     jobDeleteQuery["task"] = task;
 
     m_logger->debug("Cleaning task {}", task);
-    RetryIfFails<mongocxx::exception, 10>([&]() { bHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery)); });
-    RetryIfFails<mongocxx::exception, 10>([&]() { fHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery)); });
+    RetryIfFailsWith<mongocxx::exception>([&]() { bHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery)); });
+    RetryIfFailsWith<mongocxx::exception>([&]() { fHandle["jobs"].delete_many(JsonUtils::json2bson(jobDeleteQuery)); });
 
     if (deleteTask) {
       json taskDeleteQuery;
       taskDeleteQuery["name"] = task;
 
-      RetryIfFails<mongocxx::exception, 10>(
+      RetryIfFailsWith<mongocxx::exception>(
           [&]() { bHandle["tasks"].delete_many(JsonUtils::json2bson(taskDeleteQuery)); });
       m_tasks.erase(task);
       m_logger->debug("Task {} deleted", task);
@@ -391,7 +393,7 @@ void Director::JobInsert() {
 
       // check if this job is already in back-end database
 
-      if (auto queryResult = RetryIfFails<mongocxx::exception, 10>(
+      if (auto queryResult = RetryIfFailsWith<mongocxx::exception>(
               [&]() { return handle["jobs"].find_one(JsonUtils::json2bson(jobQuery)); });
           queryResult)
         continue;
@@ -405,7 +407,7 @@ void Director::JobInsert() {
 
     if (!toBeInserted.empty()) {
       m_logger->trace("Inserting {} new jobs into backend DB", toBeInserted.size());
-      RetryIfFails<mongocxx::exception, 10>([&]() { handle["jobs"].insert_many(toBeInserted); });
+      RetryIfFailsWith<mongocxx::exception>([&]() { handle["jobs"].insert_many(toBeInserted); });
 
       toBeInserted.clear();
     }
@@ -432,7 +434,7 @@ void Director::JobTransfer() {
       getJobsQuery["task"] = task.second.name;
       getJobsQuery["inFrontDB"]["$exists"] = false;
 
-      auto queryResult = RetryIfFails<mongocxx::exception, 10>(
+      auto queryResult = RetryIfFailsWith<mongocxx::exception>(
           [&]() { return bHandle["jobs"].find(JsonUtils::json2bson(getJobsQuery)); });
       for (const auto &job : queryResult) {
         // filtering out the _id field
@@ -443,7 +445,7 @@ void Director::JobTransfer() {
 
     if (!toBeInserted.empty()) {
       m_logger->debug("Inserting {} new jobs into frontend DB", toBeInserted.size());
-      RetryIfFails<mongocxx::exception, 10>([&]() { fHandle["jobs"].insert_many(toBeInserted); });
+      RetryIfFailsWith<mongocxx::exception>([&]() { fHandle["jobs"].insert_many(toBeInserted); });
 
       std::transform(begin(toBeInserted), end(toBeInserted), std::back_inserter(writeOps), [](const auto &jobIt) {
         json job = JsonUtils::bson2json(jobIt);
@@ -457,7 +459,7 @@ void Director::JobTransfer() {
         return mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction)};
       });
 
-      RetryIfFails<mongocxx::exception, 10>([&]() { bHandle["jobs"].bulk_write(writeOps); });
+      RetryIfFailsWith<mongocxx::exception>([&]() { bHandle["jobs"].bulk_write(writeOps); });
 
       toBeInserted.clear();
       writeOps.clear();
@@ -475,7 +477,7 @@ void Director::UpdateTasks() {
     m_logger->debug("Updating tasks");
 
     // get list of all tasks
-    auto tasksResult = RetryIfFails<mongocxx::exception, 10>([&]() { return backHandle["tasks"].find({}); });
+    auto tasksResult = RetryIfFailsWith<mongocxx::exception>([&]() { return backHandle["tasks"].find({}); });
 
     // beware: cursors cannot be reused as-is
     for (const auto &result : tasksResult) {
@@ -506,7 +508,7 @@ void Director::UpdateTasks() {
         updateQuery["$set"]["status"] = magic_enum::enum_name(JobStatus::Failed);
         updateQuery["$currentDate"]["lastUpdate"] = true;
 
-        RetryIfFails<mongocxx::exception, 10>([&]() {
+        RetryIfFailsWith<mongocxx::exception>([&]() {
           frontHandle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateQuery));
         });
       };
@@ -553,12 +555,12 @@ void Director::UpdateTaskCounts(Task &task) { // update job counters in task
 
   json countQuery;
   countQuery["task"] = task.name;
-  task.totJobs = RetryIfFails<mongocxx::exception, 10>(
+  task.totJobs = RetryIfFailsWith<mongocxx::exception>(
       [&]() { return backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery)); });
 
   for (auto status : magic_enum::enum_values<JobStatus>()) {
     countQuery["status"] = magic_enum::enum_name(status);
-    task.jobs[status] = RetryIfFails<mongocxx::exception, 10>(
+    task.jobs[status] = RetryIfFailsWith<mongocxx::exception>(
         [&]() { return backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery)); });
   }
 }
@@ -582,7 +584,7 @@ void Director::UpdateDeadPilots() {
         }));
 
     auto queryResult =
-        RetryIfFails<mongocxx::exception, 10>([&]() { return handle["pilots"].find(getPilotsQuery.view()); });
+        RetryIfFailsWith<mongocxx::exception>([&]() { return handle["pilots"].find(getPilotsQuery.view()); });
     std::vector<mongocxx::model::write> requests;
     for (const auto &_pilot : queryResult) {
       json pilot = JsonUtils::bson2json(_pilot);
@@ -597,7 +599,7 @@ void Director::UpdateDeadPilots() {
                                                                 magic_enum::enum_name(JobStatus::InboundTransfer),
                                                                 magic_enum::enum_name(JobStatus::OutboundTransfer)};
 
-      auto queryJResult = RetryIfFails<mongocxx::exception, 10>(
+      auto queryJResult = RetryIfFailsWith<mongocxx::exception>(
           [&]() { return handle["jobs"].find_one(JsonUtils::json2bson(jobQuery)); });
       if (queryJResult) {
         m_logger->debug("Dead pilot {} had a running job, setting to Error...", pilot["uuid"]);
@@ -606,10 +608,17 @@ void Director::UpdateDeadPilots() {
                         job["task"].get<std::string_view>(), JobStatus::Error);
       }
 
-      RetryIfFails<mongocxx::exception, 10>([&]() { handle["pilots"].delete_one(JsonUtils::json2bson(deleteQuery)); });
+      requests.push_back(mongocxx::model::delete_one(JsonUtils::json2bson(deleteQuery)));
+      // RetryIfFailsWith<mongocxx::exception>([&]() { handle["pilots"].delete_one(JsonUtils::json2bson(deleteQuery));
+      // });
 
       if (auto pilotIt = m_activePilots.find(pilot["uuid"]); pilotIt != end(m_activePilots))
         m_activePilots.erase(pilotIt);
+    }
+
+    if (!requests.empty()) {
+      m_logger->debug("Deleting {} pilots from front DB", requests.size());
+      RetryIfFailsWith<mongocxx::exception>([&]() { handle["pilots"].bulk_write(requests); });
     }
 
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
@@ -635,7 +644,7 @@ void Director::DBSync() {
 
     m_logger->debug("Syncing DBs...");
     auto queryResult =
-        RetryIfFails<mongocxx::exception, 10>([&]() { return fHandle["jobs"].find(getJobsQuery.view()); });
+        RetryIfFailsWith<mongocxx::exception>([&]() { return fHandle["jobs"].find(getJobsQuery.view()); });
     lastCheck = std::chrono::system_clock::now();
     m_logger->debug("...query done.");
 
@@ -662,7 +671,7 @@ void Director::DBSync() {
       return mongocxx::model::update_one{JsonUtils::json2bson(jobQuery), JsonUtils::json2bson(jobUpdateAction)};
     });
     if (!writeOps.empty())
-      RetryIfFails<mongocxx::exception, 10>([&]() { bHandle["jobs"].bulk_write(writeOps); });
+      RetryIfFailsWith<mongocxx::exception>([&]() { bHandle["jobs"].bulk_write(writeOps); });
 
     m_logger->debug("DBs synced: {} jobs updated in backend DB", writeOps.size());
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
@@ -686,7 +695,7 @@ std::optional<Director::PilotInfo> Director::GetPilotInfo(std::string_view uuid)
     json query;
     query["uuid"] = uuid;
 
-    if (auto query_result = RetryIfFails<mongocxx::exception, 10>(
+    if (auto query_result = RetryIfFailsWith<mongocxx::exception>(
             [&]() { return handle["pilots"].find_one(JsonUtils::json2bson(query)); });
         query_result) {
       json dummy = JsonUtils::bson2json(query_result.value());
@@ -716,7 +725,7 @@ std::string Director::Summary(const std::string &user) const {
   aggregationPipeline.group(JsonUtils::json2bson(groupingArgs));
 
   auto tasksQueryResult =
-      RetryIfFails<mongocxx::exception, 10>([&]() { return handle["jobs"].aggregate(aggregationPipeline); });
+      RetryIfFailsWith<mongocxx::exception>([&]() { return handle["jobs"].aggregate(aggregationPipeline); });
   for (auto item : tasksQueryResult) {
     json result = JsonUtils::bson2json(item);
     auto taskName = result["_id"];
@@ -755,7 +764,7 @@ std::string Director::QueryBackDB(const json &match, const json &filter) const {
   json resp;
   resp["result"] = json::array({});
 
-  auto query_result = RetryIfFails<mongocxx::exception, 10>(
+  auto query_result = RetryIfFailsWith<mongocxx::exception>(
       [&]() { return handle["jobs"].find(JsonUtils::json2bson(match), query_options); });
   std::transform(query_result.begin(), query_result.end(), std::back_inserter(resp["result"]),
                  [](const auto &job) { return JsonUtils::bson2json(job); });
@@ -789,7 +798,7 @@ std::string Director::QueryFrontDB(DBCollection collection, const json &match, c
   json resp;
   resp["result"] = json::array({});
 
-  auto query_result = RetryIfFails<mongocxx::exception, 10>(
+  auto query_result = RetryIfFailsWith<mongocxx::exception>(
       [&]() { return handle[collection_name.data()].find(JsonUtils::json2bson(match), query_options); });
   std::transform(query_result.begin(), query_result.end(), std::back_inserter(resp["result"]),
                  [](const auto &job) { return JsonUtils::bson2json(job); });
@@ -808,17 +817,17 @@ Director::OperationResult Director::ResetFailedJobs(std::string_view taskname) {
 
   try {
     auto front_handle = m_frontPoolHandle->DBHandle();
-    auto n_docs = RetryIfFails<mongocxx::exception, 10>(
+    auto n_docs = RetryIfFailsWith<mongocxx::exception>(
         [&]() { return front_handle["jobs"].count_documents(JsonUtils::json2bson(filter)); });
     m_logger->debug("ResetFailedJobs: Found {} documents in front DB to update", n_docs);
-    RetryIfFails<mongocxx::exception, 10>(
+    RetryIfFailsWith<mongocxx::exception>(
         [&]() { front_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction)); });
 
     auto back_handle = m_backPoolHandle->DBHandle();
-    n_docs = RetryIfFails<mongocxx::exception, 10>(
+    n_docs = RetryIfFailsWith<mongocxx::exception>(
         [&]() { return back_handle["jobs"].count_documents(JsonUtils::json2bson(filter)); });
     m_logger->debug("ResetFailedJobs: Found {} documents in back DB to update", n_docs);
-    RetryIfFails<mongocxx::exception, 10>(
+    RetryIfFailsWith<mongocxx::exception>(
         [&]() { back_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction)); });
 
     m_logger->debug("Reset all failed jobs in taskname {}", taskname);
