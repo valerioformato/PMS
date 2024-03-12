@@ -599,11 +599,16 @@ void Director::UpdateDeadPilots() {
                                                                 magic_enum::enum_name(JobStatus::InboundTransfer),
                                                                 magic_enum::enum_name(JobStatus::OutboundTransfer)};
 
+      json projectionOpt = R"({"_id":1, "hash":1})"_json;
+      mongocxx::options::find query_options;
+      query_options.projection(JsonUtils::json2bson(projectionOpt));
+
       auto queryJResult = RetryIfFailsWith<mongocxx::exception>(
-          [&]() { return handle["jobs"].find_one(JsonUtils::json2bson(jobQuery)); });
+          [&]() { return handle["jobs"].find_one(JsonUtils::json2bson(jobQuery), query_options); });
       if (queryJResult) {
-        m_logger->debug("Dead pilot {} had a running job, setting to Error...", pilot["uuid"]);
         json job = JsonUtils::bson2json(queryJResult.value());
+        m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", pilot["uuid"],
+                        job["hash"].get<std::string_view>());
         UpdateJobStatus(pilot["uuid"].get<std::string_view>(), job["hash"].get<std::string_view>(),
                         job["task"].get<std::string_view>(), JobStatus::Error);
       }
