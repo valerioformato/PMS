@@ -20,8 +20,11 @@ void Connection::Connect() {
     on_message(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
   });
 
-  // m_endpoint->set_access_channels(websocketpp::log::alevel::all);
-  // m_endpoint->clear_access_channels(websocketpp::log::alevel::frame_payload);
+#ifdef DEBUG_WEBSOCKETS
+  m_endpoint->set_access_channels(websocketpp::log::alevel::all);
+  m_endpoint->clear_access_channels(websocketpp::log::alevel::frame_payload);
+  m_endpoint->set_error_channels(websocketpp::log::alevel::all);
+#endif
 
   // manually increase open and close timeout
   m_endpoint->set_open_handshake_timeout(60000l);
@@ -108,6 +111,9 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
 }
 
 void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr msg) {
+#ifdef DEBUG_WEBSOCKETS
+  spdlog::trace("Received message: {}", msg->get_payload());
+#endif
   m_in_flight_message.set_value(msg->get_payload());
 }
 
@@ -123,11 +129,11 @@ std::string Connection::Send(const std::string &message) {
   }
 
   std::error_code ec;
-  spdlog::trace("Sending...");
   m_endpoint->send(get_hdl(), message, websocketpp::frame::opcode::text, ec);
-  spdlog::trace("... sent");
 
+#ifdef DEBUG_WEBSOCKETS
   spdlog::trace("waiting for message...");
+#endif
   return message_future.get();
 }
 

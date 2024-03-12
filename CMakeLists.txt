@@ -32,6 +32,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 option(ASAN "Enable Address sanitizer" OFF)
 option(TSAN "Enable Thread sanitizer" OFF)
+option(DEBUG_WEBSOCKETS "Enable debug output for websocketpp" OFF)
 
 if (ASAN)
     message(STATUS "Enabling Address sanitizer")
