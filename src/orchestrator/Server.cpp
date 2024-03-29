@@ -149,15 +149,11 @@ std::string Server::HandleCommand(UserCommand &&command) {
           },
           // reset jobs to pending status and 0 retries
           [this](const OrchCommand<ResetJobs> &ucmd) {
-            try {
-              return m_director
-                  ->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match,
-                                R"({"$set": {"status": "Pending", "retries": 0}})"_json)
-                  .msg;
-            } catch (std::exception &e) {
-              m_logger->error(e.what());
-              return std::string{e.what()};
-            }
+            json updateAction;
+            updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Pending);
+            updateAction["$set"]["retries"] = 0;
+
+            return m_director->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match, updateAction).msg;
           },
           // query db for pilot info
           [this](const OrchCommand<FindPilots> &ucmd) {
