@@ -20,9 +20,7 @@ using json = nlohmann::json;
 using namespace std::string_view_literals;
 
 namespace PMS::Orchestrator {
-template <class... Ts> struct overloaded : Ts... {
-  using Ts::operator()...;
-};
+template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 Server::~Server() {
@@ -151,10 +149,15 @@ std::string Server::HandleCommand(UserCommand &&command) {
           },
           // reset jobs to pending status and 0 retries
           [this](const OrchCommand<ResetJobs> &ucmd) {
-            return m_director
-                ->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match,
-                              R"({$set: {"status": "Pending", "retries": 0}})"_json)
-                .msg;
+            try {
+              return m_director
+                  ->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match,
+                                R"({"$set": {"status": "Pending", "retries": 0}})"_json)
+                  .msg;
+            } catch (std::exception &e) {
+              m_logger->error(e.what());
+              return std::string{e.what()};
+            }
           },
           // query db for pilot info
           [this](const OrchCommand<FindPilots> &ucmd) {
