@@ -754,12 +754,15 @@ std::string Director::Summary(const std::string &user) const {
 }
 
 Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json &match, const json &option) const {
-  auto handle = m_backPoolHandle->DBHandle();
+  auto backHandle = m_backPoolHandle->DBHandle();
+  auto frontHandle = m_frontPoolHandle->DBHandle();
 
   switch (operation) {
   case QueryOperation::UpdateOne: {
+    auto jobUpdateAction = option;
+    jobUpdateAction["$currentDate"]["lastUpdate"] = true;
     auto query_result = RetryIfFailsWith<mongocxx::exception>(
-        [&]() { return handle["jobs"].update_one(JsonUtils::json2bson(match), JsonUtils::json2bson(option)); });
+        [&]() { return frontHandle["jobs"].update_one(JsonUtils::json2bson(match), JsonUtils::json2bson(jobUpdateAction)); });
     if (query_result)
       return {OperationResult::Success, fmt::format("Updated job {}", match["hash"])};
     else {
@@ -767,8 +770,10 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
     }
   }
   case QueryOperation::UpdateMany: {
+    auto jobUpdateAction = option;
+    jobUpdateAction["$currentDate"]["lastUpdate"] = true;
     auto query_result = RetryIfFailsWith<mongocxx::exception>(
-        [&]() { return handle["jobs"].update_many(JsonUtils::json2bson(match), JsonUtils::json2bson(option)); });
+        [&]() { return backHandle["jobs"].update_many(JsonUtils::json2bson(match), JsonUtils::json2bson(jobUpdateAction)); });
     if (query_result)
       return {OperationResult::Success, fmt::format("Matched {} jobs. Updated {} jobs", query_result->matched_count(),
                                                     query_result->modified_count())};
@@ -777,19 +782,23 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
     }
   }
   case QueryOperation::DeleteOne: {
-    auto query_result =
-        RetryIfFailsWith<mongocxx::exception>([&]() { return handle["jobs"].delete_one(JsonUtils::json2bson(match)); });
-    if (query_result)
+    auto front_query_result =
+        RetryIfFailsWith<mongocxx::exception>([&]() { return frontHandle["jobs"].delete_one(JsonUtils::json2bson(match)); });
+    auto back_query_result =
+        RetryIfFailsWith<mongocxx::exception>([&]() { return backHandle["jobs"].delete_one(JsonUtils::json2bson(match)); });
+    if (front_query_result && back_query_result)
       return {OperationResult::Success, fmt::format("Deleted job {}", match["hash"])};
     else {
       return {OperationResult::DatabaseError, fmt::format("Could not update job {}", match["hash"])};
     }
   }
   case QueryOperation::DeleteMany: {
-    auto query_result = RetryIfFailsWith<mongocxx::exception>(
-        [&]() { return handle["jobs"].delete_many(JsonUtils::json2bson(match)); });
-    if (query_result)
-      return {OperationResult::Success, fmt::format("Deleted {} jobs.", query_result->deleted_count())};
+    auto back_query_result = RetryIfFailsWith<mongocxx::exception>(
+        [&]() { return backHandle["jobs"].delete_many(JsonUtils::json2bson(match)); });
+    auto front_query_result = RetryIfFailsWith<mongocxx::exception>(
+        [&]() { return frontHandle["jobs"].delete_many(JsonUtils::json2bson(match)); });
+    if (front_query_result && back_query_result)
+      return {OperationResult::Success, fmt::format("Deleted {} jobs.", back_query_result->deleted_count())};
     else {
       return {OperationResult::DatabaseError, "Could not delete jobs"};
     }
@@ -809,7 +818,7 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
     resp["result"] = json::array({});
 
     auto query_result = RetryIfFailsWith<mongocxx::exception>(
-        [&]() { return handle["jobs"].find(JsonUtils::json2bson(match), query_options); });
+        [&]() { return backHandle["jobs"].find(JsonUtils::json2bson(match), query_options); });
     std::transform(query_result.begin(), query_result.end(), std::back_inserter(resp["result"]),
                    [](const auto &job) { return JsonUtils::bson2json(job); });
 
