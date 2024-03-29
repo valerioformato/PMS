@@ -35,6 +35,8 @@ std::unordered_map<std::string_view, Server::UserCommandType> Server::m_commandL
     // user available commands
     {"submitJob"sv, UserCommandType::SubmitJob},
     {"findJobs"sv, UserCommandType::FindJobs},
+    {"resetJobs"sv, UserCommandType::ResetJobs},
+    {"resetJob"sv, UserCommandType::ResetJob},
     {"findPilots"sv, UserCommandType::FindPilots},
     {"createTask"sv, UserCommandType::CreateTask},
     {"clearTask"sv, UserCommandType::ClearTask},
