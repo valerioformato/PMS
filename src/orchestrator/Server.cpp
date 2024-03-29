@@ -159,6 +159,7 @@ std::string Server::HandleCommand(UserCommand &&command) {
           },
           // reset a job to pending status and 0 retries
           [this](const OrchCommand<ResetJob> &ucmd) {
+            m_logger->debug("Processing ResetJob command {}", ucmd.cmd.hash);
             return m_director
                 ->QueryBackDB(Director::QueryOperation::UpdateOne, fmt::format(R"({"hash": {}})", ucmd.cmd.hash),
                               R"({$set: {"status": "Pending", "retries": 0}})")

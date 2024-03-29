@@ -757,6 +757,8 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
   auto backHandle = m_backPoolHandle->DBHandle();
   auto frontHandle = m_frontPoolHandle->DBHandle();
 
+  m_logger->debug("QueryBackDB: {} {} {}", magic_enum::enum_name(operation), match.dump(), option.dump());
+
   switch (operation) {
   case QueryOperation::UpdateOne: {
     auto jobUpdateAction = option;
