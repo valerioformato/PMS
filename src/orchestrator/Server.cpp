@@ -253,6 +253,8 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
     return;
   }
 
+  m_logger->debug(parsedMessage.dump());
+
   if (!parsedMessage.contains("command")) {
     m_logger->error("No command in message. Sending back error...");
     m_endpoint.send(hdl, "Invalid message, missing \"command\" field", websocketpp::frame::opcode::text);
@@ -428,7 +430,7 @@ UserCommand Server::toUserCommand(const json &msg) {
     break;
   case UserCommandType::ResetJob:
     if (ValidateJsonCommand<ResetJobs>(msg))
-      return OrchCommand<ResetJob>{msg["hash"]};
+      return OrchCommand<ResetJob>{msg["match"]["hash"]};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);

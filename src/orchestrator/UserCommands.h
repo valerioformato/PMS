@@ -41,7 +41,7 @@ struct ResetJobs {
 struct ResetJob {
   json hash;
 
-  constexpr static std::array requiredFields{"hash"sv};
+  constexpr static std::array requiredFields{"match"sv, "hash"sv};
 };
 
 struct FindPilots {
