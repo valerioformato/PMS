@@ -49,7 +49,6 @@ private:
     SubmitJob,
     FindJobs,
     ResetJobs,
-    ResetJob,
     FindPilots,
     CreateTask,
     CleanTask,

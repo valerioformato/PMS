@@ -36,7 +36,6 @@ std::unordered_map<std::string_view, Server::UserCommandType> Server::m_commandL
     {"submitJob"sv, UserCommandType::SubmitJob},
     {"findJobs"sv, UserCommandType::FindJobs},
     {"resetJobs"sv, UserCommandType::ResetJobs},
-    {"resetJob"sv, UserCommandType::ResetJob},
     {"findPilots"sv, UserCommandType::FindPilots},
     {"createTask"sv, UserCommandType::CreateTask},
     {"clearTask"sv, UserCommandType::ClearTask},
@@ -154,20 +153,12 @@ std::string Server::HandleCommand(UserCommand &&command) {
           [this](const OrchCommand<ResetJobs> &ucmd) {
             return m_director
                 ->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match,
-                              R"({$set: {"status": "Pending", "retries": 0}})")
-                .msg;
-          },
-          // reset a job to pending status and 0 retries
-          [this](const OrchCommand<ResetJob> &ucmd) {
-            m_logger->debug("Processing ResetJob command {}", ucmd.cmd.hash);
-            return m_director
-                ->QueryBackDB(Director::QueryOperation::UpdateOne, fmt::format(R"({"hash": {}})", ucmd.cmd.hash),
-                              R"({$set: {"status": "Pending", "retries": 0}})")
+                              R"({$set: {"status": "Pending", "retries": 0}})"_json)
                 .msg;
           },
           // query db for pilot info
           [this](const OrchCommand<FindPilots> &ucmd) {
-            return m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter);
+            return m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter).msg;
           },
           // Get user summary
           [this](const OrchCommand<Summary> &ucmd) { return m_director->Summary(ucmd.cmd.user); },
@@ -425,13 +416,6 @@ UserCommand Server::toUserCommand(const json &msg) {
   case UserCommandType::ResetJobs:
     if (ValidateJsonCommand<ResetJobs>(msg))
       return OrchCommand<ResetJobs>{msg["match"]};
-
-    // handle invalid fields:
-    errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
-    break;
-  case UserCommandType::ResetJob:
-    if (ValidateJsonCommand<ResetJobs>(msg))
-      return OrchCommand<ResetJob>{msg["match"]["hash"]};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
