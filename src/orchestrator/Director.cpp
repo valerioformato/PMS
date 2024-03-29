@@ -776,7 +776,7 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
     auto jobUpdateAction = option;
     jobUpdateAction["$currentDate"]["lastUpdate"] = true;
     auto query_result = RetryIfFailsWith<mongocxx::exception>([&]() {
-      return backHandle["jobs"].update_many(JsonUtils::json2bson(match), JsonUtils::json2bson(jobUpdateAction));
+      return frontHandle["jobs"].update_many(JsonUtils::json2bson(match), JsonUtils::json2bson(jobUpdateAction));
     });
     if (query_result)
       return {OperationResult::Success, fmt::format("Matched {} jobs. Updated {} jobs", query_result->matched_count(),
