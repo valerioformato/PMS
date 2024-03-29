@@ -183,7 +183,10 @@ std::string Server::HandleCommand(UserCommand &&command) {
                                                                 : fmt::format("Jobs reset failed");
           },
           // Handle errors
-          [](const OrchCommand<InvalidCommand> &ucmd) { return ucmd.cmd.errorMessage; },
+          [this](const OrchCommand<InvalidCommand> &ucmd) {
+            m_logger->debug("Replying to invalid pilot command with {}", ucmd.cmd.errorMessage);
+            return ucmd.cmd.errorMessage;
+          },
       },
       command);
 }
@@ -229,7 +232,10 @@ std::string Server::HandleCommand(PilotCommand &&command) {
                                                                   : fmt::format("Failed to update heartbeat");
           },
           // Handle errors
-          [](const OrchCommand<InvalidCommand> &pcmd) { return pcmd.cmd.errorMessage; },
+          [this](const OrchCommand<InvalidCommand> &pcmd) {
+            m_logger->debug("Replying to invalid pilot command with {}", pcmd.cmd.errorMessage);
+            return pcmd.cmd.errorMessage;
+          },
       },
       command);
 }
