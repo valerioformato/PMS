@@ -763,8 +763,9 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
   case QueryOperation::UpdateOne: {
     auto jobUpdateAction = option;
     jobUpdateAction["$currentDate"]["lastUpdate"] = true;
-    auto query_result = RetryIfFailsWith<mongocxx::exception>(
-        [&]() { return frontHandle["jobs"].update_one(JsonUtils::json2bson(match), JsonUtils::json2bson(jobUpdateAction)); });
+    auto query_result = RetryIfFailsWith<mongocxx::exception>([&]() {
+      return frontHandle["jobs"].update_one(JsonUtils::json2bson(match), JsonUtils::json2bson(jobUpdateAction));
+    });
     if (query_result)
       return {OperationResult::Success, fmt::format("Updated job {}", match["hash"])};
     else {
@@ -774,8 +775,9 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
   case QueryOperation::UpdateMany: {
     auto jobUpdateAction = option;
     jobUpdateAction["$currentDate"]["lastUpdate"] = true;
-    auto query_result = RetryIfFailsWith<mongocxx::exception>(
-        [&]() { return backHandle["jobs"].update_many(JsonUtils::json2bson(match), JsonUtils::json2bson(jobUpdateAction)); });
+    auto query_result = RetryIfFailsWith<mongocxx::exception>([&]() {
+      return backHandle["jobs"].update_many(JsonUtils::json2bson(match), JsonUtils::json2bson(jobUpdateAction));
+    });
     if (query_result)
       return {OperationResult::Success, fmt::format("Matched {} jobs. Updated {} jobs", query_result->matched_count(),
                                                     query_result->modified_count())};
@@ -784,10 +786,10 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
     }
   }
   case QueryOperation::DeleteOne: {
-    auto front_query_result =
-        RetryIfFailsWith<mongocxx::exception>([&]() { return frontHandle["jobs"].delete_one(JsonUtils::json2bson(match)); });
-    auto back_query_result =
-        RetryIfFailsWith<mongocxx::exception>([&]() { return backHandle["jobs"].delete_one(JsonUtils::json2bson(match)); });
+    auto front_query_result = RetryIfFailsWith<mongocxx::exception>(
+        [&]() { return frontHandle["jobs"].delete_one(JsonUtils::json2bson(match)); });
+    auto back_query_result = RetryIfFailsWith<mongocxx::exception>(
+        [&]() { return backHandle["jobs"].delete_one(JsonUtils::json2bson(match)); });
     if (front_query_result && back_query_result)
       return {OperationResult::Success, fmt::format("Deleted job {}", match["hash"])};
     else {

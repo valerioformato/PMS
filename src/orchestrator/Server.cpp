@@ -248,8 +248,6 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
     return;
   }
 
-  m_logger->debug(parsedMessage.dump());
-
   if (!parsedMessage.contains("command")) {
     m_logger->error("No command in message. Sending back error...");
     m_endpoint.send(hdl, "Invalid message, missing \"command\" field", websocketpp::frame::opcode::text);
