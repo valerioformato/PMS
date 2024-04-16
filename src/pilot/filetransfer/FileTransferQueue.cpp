@@ -72,14 +72,14 @@ bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
   transfer_process.wait();
 
   std::string out, err;
-  out_stream >> out;
-  err_stream >> err;
+  while (std::getline(out_stream, out))
+    spdlog::trace("stdout: {}", out);
 
-  spdlog::trace("{}", out);
-  spdlog::trace("{}", err);
+  while (std::getline(err_stream, err))
+    spdlog::error("stderr: {}", err);
 
   if (proc_ec || transfer_process.exit_code()) {
-    return false;
+    throw(std::runtime_error("Error in GFAL copy"));
   }
 
   return true;
