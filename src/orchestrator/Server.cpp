@@ -33,6 +33,7 @@ std::unordered_map<std::string_view, Server::UserCommandType> Server::m_commandL
     // user available commands
     {"submitJob"sv, UserCommandType::SubmitJob},
     {"findJobs"sv, UserCommandType::FindJobs},
+    {"resetJobs"sv, UserCommandType::ResetJobs},
     {"findPilots"sv, UserCommandType::FindPilots},
     {"createTask"sv, UserCommandType::CreateTask},
     {"clearTask"sv, UserCommandType::ClearTask},
@@ -143,11 +144,20 @@ std::string Server::HandleCommand(UserCommand &&command) {
           },
           // query db for jobs info
           [this](const OrchCommand<FindJobs> &ucmd) {
-            return m_director->QueryBackDB(ucmd.cmd.match, ucmd.cmd.filter);
+            auto result = m_director->QueryBackDB(Director::QueryOperation::Find, ucmd.cmd.match, ucmd.cmd.filter);
+            return result.msg;
+          },
+          // reset jobs to pending status and 0 retries
+          [this](const OrchCommand<ResetJobs> &ucmd) {
+            json updateAction;
+            updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Pending);
+            updateAction["$set"]["retries"] = 0;
+
+            return m_director->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match, updateAction).msg;
           },
           // query db for pilot info
           [this](const OrchCommand<FindPilots> &ucmd) {
-            return m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter);
+            return m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter).msg;
           },
           // Get user summary
           [this](const OrchCommand<Summary> &ucmd) { return m_director->Summary(ucmd.cmd.user); },
@@ -164,7 +174,10 @@ std::string Server::HandleCommand(UserCommand &&command) {
                                                                 : fmt::format("Jobs reset failed");
           },
           // Handle errors
-          [](const OrchCommand<InvalidCommand> &ucmd) { return ucmd.cmd.errorMessage; },
+          [this](const OrchCommand<InvalidCommand> &ucmd) {
+            m_logger->debug("Replying to invalid pilot command with {}", ucmd.cmd.errorMessage);
+            return ucmd.cmd.errorMessage;
+          },
       },
       command);
 }
@@ -210,7 +223,10 @@ std::string Server::HandleCommand(PilotCommand &&command) {
                                                                   : fmt::format("Failed to update heartbeat");
           },
           // Handle errors
-          [](const OrchCommand<InvalidCommand> &pcmd) { return pcmd.cmd.errorMessage; },
+          [this](const OrchCommand<InvalidCommand> &pcmd) {
+            m_logger->debug("Replying to invalid pilot command with {}", pcmd.cmd.errorMessage);
+            return pcmd.cmd.errorMessage;
+          },
       },
       command);
 }
@@ -390,6 +406,13 @@ UserCommand Server::toUserCommand(const json &msg) {
   case UserCommandType::FindJobs:
     if (ValidateJsonCommand<FindJobs>(msg))
       return OrchCommand<FindJobs>{msg["match"], msg.contains("filter") ? msg["filter"] : json{}};
+
+    // handle invalid fields:
+    errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
+    break;
+  case UserCommandType::ResetJobs:
+    if (ValidateJsonCommand<ResetJobs>(msg))
+      return OrchCommand<ResetJobs>{msg["match"]};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
