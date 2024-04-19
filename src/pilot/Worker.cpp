@@ -296,21 +296,33 @@ void Worker::MainLoop() {
         nextJobStatus = JobStatus::Done;
       }
 
+      constexpr unsigned int max_transfer_tries{3};
+
       // check for outbound file transfers
       if (job.contains("output")) {
         FileTransferQueue ftQueue;
-        try {
-          auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
-          for (const auto &ftJob : fts) {
-            ftQueue.Add(ftJob);
-          }
+        auto fts = ParseFileTransferRequest(FileTransferType::Outbound, job["output"], wdPath.string());
+        for (const auto &ftJob : fts) {
+          ftQueue.Add(ftJob);
+        }
 
-          // UpdateJobStatus(job["hash"], job["task"], JobStatus::OutboundTransfer);
-          handleJobStatusChange(job, JobStatus::OutboundTransfer);
-          ftQueue.Process();
-        } catch (const std::exception &e) {
-          nextJobStatus = JobStatus::OutboundTransferError;
-          spdlog::error("{}", e.what());
+        // UpdateJobStatus(job["hash"], job["task"], JobStatus::OutboundTransfer);
+        handleJobStatusChange(job, JobStatus::OutboundTransfer);
+
+        unsigned int file_transfer_tries{0};
+        while (true) {
+          try {
+            ftQueue.Process();
+            break;
+          } catch (const std::exception &e) {
+            ++file_transfer_tries;
+
+            spdlog::error("{}", e.what());
+            if (file_transfer_tries == max_transfer_tries) {
+              nextJobStatus = JobStatus::OutboundTransferError;
+              break;
+            }
+          }
         }
       }
 
