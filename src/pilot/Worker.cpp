@@ -229,16 +229,16 @@ void Worker::MainLoop() {
       // check for inbound file transfers
       if (job.contains("input")) {
         FileTransferQueue ftQueue;
-        try {
-          auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"], wdPath.string());
-          for (const auto &ftJob : fts) {
-            ftQueue.Add(ftJob);
-          }
+        auto fts = ParseFileTransferRequest(FileTransferType::Inbound, job["input"], wdPath.string());
+        for (const auto &ftJob : fts) {
+          ftQueue.Add(ftJob);
+        }
 
-          handleJobStatusChange(job, JobStatus::InboundTransfer);
-          ftQueue.Process();
-        } catch (const std::exception &e) {
-          spdlog::error("{}", e.what());
+        handleJobStatusChange(job, JobStatus::InboundTransfer);
+
+        bool success = ftQueue.Process();
+        if (!success) {
+          spdlog::error("File transfer process failed");
           handleJobStatusChange(job, JobStatus::InboundTransferError);
           m_workerState = State::WAIT;
 
@@ -311,17 +311,18 @@ void Worker::MainLoop() {
 
         unsigned int file_transfer_tries{0};
         while (true) {
-          try {
-            ftQueue.Process();
-            break;
-          } catch (const std::exception &e) {
+          // Call the Process method and check the return value
+          bool success = ftQueue.Process();
+          if (!success) {
             ++file_transfer_tries;
 
-            spdlog::error("{}", e.what());
+            spdlog::error("File transfer process failed");
             if (file_transfer_tries == max_transfer_tries) {
               nextJobStatus = JobStatus::OutboundTransferError;
               break;
             }
+          } else {
+            break;
           }
         }
       }

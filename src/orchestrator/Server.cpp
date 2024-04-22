@@ -244,6 +244,14 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
     return;
   }
 
+  // if the message contains a liveness probe send back a HTTP 200 OK response
+  if (parsedMessage.contains("livenessProbe")) {
+    m_logger->trace("Received liveness probe. Sending back OK...");
+    m_endpoint.send(hdl, "OK", websocketpp::frame::opcode::text);
+    return;
+  }
+
+  // if the message does not contain a command, send back an error
   if (!parsedMessage.contains("command")) {
     m_logger->error("No command in message. Sending back error...");
     m_endpoint.send(hdl, "Invalid message, missing \"command\" field", websocketpp::frame::opcode::text);

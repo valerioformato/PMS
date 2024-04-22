@@ -85,15 +85,17 @@ bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
   return true;
 }
 
-void FileTransferQueue::Process() {
+bool FileTransferQueue::Process() {
+  bool result;
+
   // run the local file transfers
-  std::for_each(begin(m_queue), end(m_queue), [](const auto &ft) {
+  std::for_each(begin(m_queue), end(m_queue), [&result](const auto &ft) {
     switch (ft.protocol) {
     case FileTransferProtocol::local:
-      LocalFileTransfer(ft);
+      result = LocalFileTransfer(ft);
       break;
     case FileTransferProtocol::gfal:
-      GfalFileTransfer(ft);
+      result = GfalFileTransfer(ft);
       break;
     case FileTransferProtocol::xrootd:
       // handled later
@@ -108,11 +110,10 @@ void FileTransferQueue::Process() {
       AddXRootDFileTransfer(ft);
   });
 
-  auto result = RunXRootDFileTransfer();
-  if (!result) {
-    throw std::runtime_error("XRootD transfer failed, check previous messages");
-  }
+  result = RunXRootDFileTransfer();
 #endif
+
+  return result;
 }
 
 void FileTransferQueue::ProcessWildcards(std::string &fileName) {

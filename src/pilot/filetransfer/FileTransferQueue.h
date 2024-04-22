@@ -29,7 +29,7 @@ public:
   void Add(const FileTransferInfo &ft) { m_queue.push_back(ft); }
   void Add(FileTransferInfo &&ft) { m_queue.push_back(ft); }
 
-  void Process();
+  bool Process();
 
   static void ProcessWildcards(std::string &fileName);
   static std::vector<std::string> ExpandWildcard(const FileTransferInfo &ftInfo);
