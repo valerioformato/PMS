@@ -321,6 +321,9 @@ void Worker::MainLoop() {
               nextJobStatus = JobStatus::OutboundTransferError;
               break;
             }
+
+            // wait 3 seconds before retrying
+            std::this_thread::sleep_for(std::chrono::seconds(3));
           } else {
             break;
           }
