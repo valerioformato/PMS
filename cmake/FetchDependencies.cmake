@@ -83,6 +83,21 @@ add_library(PMSWebsockets INTERFACE)
 target_include_directories(PMSWebsockets INTERFACE ${websocketpp_SOURCE_DIR})
 target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost::regex)
 
+# === mongocxx ===
+FetchContent_Declare(mongo-cxx
+GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
+  GIT_TAG r3.9.0)
+FetchContent_GetProperties(mongo-cxx)
+if(NOT mongo-cxx_POPULATED)
+  FetchContent_Populate(mongo-cxx)
+  add_subdirectory(${mongo-cxx_SOURCE_DIR} ${mongo-cxx_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+# add interface library with all websocketpp dependencies
+# add_library(PMSWebsockets INTERFACE)
+# target_include_directories(PMSWebsockets INTERFACE ${websocketpp_SOURCE_DIR})
+# target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost::regex)
+
+# === XRootD ===
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake/Modules)
 find_package(XROOTD)
 add_library(PMSXrootd INTERFACE)
@@ -98,5 +113,5 @@ if(XROOTD_FOUND)
   target_link_libraries(PMSXrootd INTERFACE XrdCl)
 endif()
 
-find_package(bsoncxx REQUIRED)
-find_package(mongocxx REQUIRED 3.6.0)
+# find_package(bsoncxx REQUIRED)
+# find_package(mongocxx REQUIRED 3.6.0)
