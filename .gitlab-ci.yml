@@ -21,20 +21,20 @@ build-alma9:
   <<: *build-docker
   image: vformato/pms-ci:alma9
 
-build-ubuntu20.04:
+build-ubuntu24.04:
   <<: *build-docker
-  image: vformato/pms-ci:ubuntu20.04
+  image: vformato/pms-ci:ubuntu24.04
 
 build-ubuntu22.04:
   <<: *build-docker
   image: vformato/pms-ci:ubuntu22.04
 
-dockerize-ubuntu22.04:
+dockerize-ubuntu24.04:
   stage: dockerize
   image: docker:19.03.12
   services:
     - docker:19.03.12-dind
-  needs: ["build-ubuntu22.04"]
+  needs: ["build-ubuntu24.04"]
   tags:
     - docker
   only:
