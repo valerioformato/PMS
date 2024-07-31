@@ -32,6 +32,7 @@ set(CMAKE_CXX_STANDARD 20)
 option(ASAN "Enable Address sanitizer" OFF)
 option(TSAN "Enable Thread sanitizer" OFF)
 option(DEBUG_WEBSOCKETS "Enable debug output for websocketpp" OFF)
+option(ENABLE_TESTS "Enable unit test compilation" OFF)
 
 if (ASAN)
     message(STATUS "Enabling Address sanitizer")
@@ -68,4 +69,10 @@ execute_process(
 
 add_subdirectory(src)
 
-# add_subdirectory(doc)
+if(ENABLE_TESTS)
+include(CTest)
+include(Catch)
+
+add_subdirectory(testsuite)
+endif()
+

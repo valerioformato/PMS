@@ -92,10 +92,6 @@ if(NOT mongo-cxx_POPULATED)
   FetchContent_Populate(mongo-cxx)
   add_subdirectory(${mongo-cxx_SOURCE_DIR} ${mongo-cxx_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
-# add interface library with all websocketpp dependencies
-# add_library(PMSWebsockets INTERFACE)
-# target_include_directories(PMSWebsockets INTERFACE ${websocketpp_SOURCE_DIR})
-# target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost::regex)
 
 # === XRootD ===
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake/Modules)
@@ -115,3 +111,16 @@ endif()
 
 # find_package(bsoncxx REQUIRED)
 # find_package(mongocxx REQUIRED 3.6.0)
+
+# === Catch2 ===
+if(ENABLE_TESTS)
+FetchContent_Declare(catch2
+GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG v3.6.0)
+FetchContent_GetProperties(catch2)
+if(NOT catch2_POPULATED)
+  FetchContent_Populate(catch2)
+  add_subdirectory(${catch2_SOURCE_DIR} ${catch2_BINARY_DIR} EXCLUDE_FROM_ALL)
+  list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+endif()
+endif()
