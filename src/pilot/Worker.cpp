@@ -379,7 +379,7 @@ std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType 
     // We have an array: this means output depends on the pilot tag
     auto tmpIt = std::find_if(request.begin(), request.end(), [this](const json &element) {
       return std::any_of(begin(m_config.tags), end(m_config.tags),
-                         [&element](const auto &tag) { return tag == element["tag"]; });
+                         [&element](const auto &tag) { return tag == element["tag"].get<std::string>(); });
     });
 
     // if there is a tag matching this pilot we parse the associated request
