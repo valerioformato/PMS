@@ -1,9 +1,11 @@
 // c++ headers
 #include <algorithm>
+#include <ranges>
 
 // external headers
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <fmt/ostream.h>
 #include <fmt/ranges.h>
 #include <mongocxx/bulk_write.hpp>
 #include <mongocxx/exception/exception.hpp>
@@ -16,6 +18,7 @@
 #include "orchestrator/Director.h"
 
 using json = nlohmann::json;
+using namespace PMS::JsonUtils;
 
 namespace PMS::Orchestrator {
 
@@ -399,7 +402,7 @@ void Director::JobInsert() {
           queryResult)
         continue;
 
-      m_logger->trace("Queueing up job {} for insertion", job["hash"]);
+      m_logger->trace("Queueing up job {} for insertion", to_sv(job["hash"]));
 
       // job initial status should always be Pending :)
       job["status"] = magic_enum::enum_name(JobStatus::Pending);
@@ -485,15 +488,16 @@ void Director::UpdateTasks() {
       json tmpdoc = JsonUtils::bson2json(result);
 
       // find task in internal task list
-      std::string taskName = tmpdoc["name"];
+      std::string taskName = to_s(tmpdoc["name"]);
 
       Task &task = m_tasks[taskName];
       if (task.name.empty()) {
         m_logger->warn("Task {} is in DB but was not found in memory", taskName);
 
-        task.name = tmpdoc["name"];
-        task.token = tmpdoc["token"];
-        std::copy(tmpdoc["dependencies"].begin(), tmpdoc["dependencies"].end(), std::back_inserter(task.dependencies));
+        task.name = taskName;
+        task.token = to_s(tmpdoc["token"]);
+        std::ranges::transform(tmpdoc["dependencies"], std::back_inserter(task.dependencies),
+                               [](const auto &dep) { return to_s(dep); });
       }
 
       // skip stale failed tasks, since failed jobs won't be tried anymore
@@ -589,7 +593,7 @@ void Director::UpdateDeadPilots() {
     std::vector<mongocxx::model::write> requests;
     for (const auto &_pilot : queryResult) {
       json pilot = JsonUtils::bson2json(_pilot);
-      m_logger->debug("Removing dead pilot {}", pilot["uuid"]);
+      m_logger->debug("Removing dead pilot {}", to_sv(pilot["uuid"]));
 
       json deleteQuery;
       deleteQuery["uuid"] = pilot["uuid"];
@@ -608,17 +612,16 @@ void Director::UpdateDeadPilots() {
           [&]() { return handle["jobs"].find_one(JsonUtils::json2bson(jobQuery), query_options); });
       if (queryJResult) {
         json job = JsonUtils::bson2json(queryJResult.value());
-        m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", pilot["uuid"],
-                        job["hash"].get<std::string_view>());
-        UpdateJobStatus(pilot["uuid"].get<std::string_view>(), job["hash"].get<std::string_view>(),
-                        job["task"].get<std::string_view>(), JobStatus::Error);
+        m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_sv(pilot["uuid"]),
+                        to_sv(job["hash"]));
+        UpdateJobStatus(to_sv(pilot["uuid"]), to_sv(job["hash"]), to_sv(job["task"]), JobStatus::Error);
       }
 
       requests.push_back(mongocxx::model::delete_one(JsonUtils::json2bson(deleteQuery)));
       // RetryIfFailsWith<mongocxx::exception>([&]() { handle["pilots"].delete_one(JsonUtils::json2bson(deleteQuery));
       // });
 
-      if (auto pilotIt = m_activePilots.find(pilot["uuid"]); pilotIt != end(m_activePilots))
+      if (auto pilotIt = m_activePilots.find(to_s(pilot["uuid"])); pilotIt != end(m_activePilots))
         m_activePilots.erase(pilotIt);
     }
 
@@ -705,8 +708,9 @@ std::optional<Director::PilotInfo> Director::GetPilotInfo(std::string_view uuid)
             [&]() { return handle["pilots"].find_one(JsonUtils::json2bson(query)); });
         query_result) {
       json dummy = JsonUtils::bson2json(query_result.value());
-      std::copy(dummy["tasks"].begin(), dummy["tasks"].end(), std::back_inserter(result.tasks));
-      std::copy(dummy["tags"].begin(), dummy["tags"].end(), std::back_inserter(result.tags));
+      std::ranges::transform(dummy["tasks"], std::back_inserter(result.tasks),
+                             [](const auto &task) { return to_s(task); });
+      std::ranges::transform(dummy["tags"], std::back_inserter(result.tags), [](const auto &tag) { return to_s(tag); });
       m_activePilots[uuidString] = result;
       return result;
     }
@@ -734,7 +738,7 @@ std::string Director::Summary(const std::string &user) const {
       RetryIfFailsWith<mongocxx::exception>([&]() { return handle["jobs"].aggregate(aggregationPipeline); });
   for (auto item : tasksQueryResult) {
     json result = JsonUtils::bson2json(item);
-    auto taskName = result["_id"];
+    auto taskName = to_s(result["_id"]);
 
     if (m_tasks.find(taskName) == end(m_tasks)) {
       continue;
@@ -768,9 +772,9 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
       return frontHandle["jobs"].update_one(JsonUtils::json2bson(match), JsonUtils::json2bson(jobUpdateAction));
     });
     if (query_result)
-      return {OperationResult::Success, fmt::format("Updated job {}", match["hash"])};
+      return {OperationResult::Success, fmt::format("Updated job {}", to_sv(match["hash"]))};
     else {
-      return {OperationResult::DatabaseError, fmt::format("Could not update job {}", match["hash"])};
+      return {OperationResult::DatabaseError, fmt::format("Could not update job {}", to_sv(match["hash"]))};
     }
   }
   case QueryOperation::UpdateMany: {
@@ -792,9 +796,9 @@ Director::QueryResult Director::QueryBackDB(QueryOperation operation, const json
     auto back_query_result = RetryIfFailsWith<mongocxx::exception>(
         [&]() { return backHandle["jobs"].delete_one(JsonUtils::json2bson(match)); });
     if (front_query_result && back_query_result)
-      return {OperationResult::Success, fmt::format("Deleted job {}", match["hash"])};
+      return {OperationResult::Success, fmt::format("Deleted job {}", to_sv(match["hash"]))};
     else {
-      return {OperationResult::DatabaseError, fmt::format("Could not update job {}", match["hash"])};
+      return {OperationResult::DatabaseError, fmt::format("Could not update job {}", to_sv(match["hash"]))};
     }
   }
   case QueryOperation::DeleteMany: {

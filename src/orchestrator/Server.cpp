@@ -1,5 +1,6 @@
 // c++ headers
 #include <chrono>
+#include <ranges>
 #include <thread>
 #include <vector>
 
@@ -11,13 +12,15 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "common/JsonUtils.h"
 #include "orchestrator/Server.h"
 
-// https://github.com/okdshin/PicoSHA2
+// from https://github.com/okdshin/PicoSHA2
 #include "orchestrator/picosha2.h"
 
 using json = nlohmann::json;
 using namespace std::string_view_literals;
+using namespace PMS::JsonUtils;
 
 namespace PMS::Orchestrator {
 template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
@@ -232,7 +235,8 @@ std::string Server::HandleCommand(PilotCommand &&command) {
 }
 
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-  m_logger->trace("[{}] Received message {}", std::this_thread::get_id(), msg->get_payload());
+  m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
+                  msg->get_payload());
 
   json parsedMessage;
   try {
@@ -264,7 +268,8 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
 }
 
 void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-  m_logger->trace("[{}] Received pilot message {}", std::this_thread::get_id(), msg->get_payload());
+  m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
+                  msg->get_payload());
 
   json parsedMessage;
   try {
@@ -370,28 +375,28 @@ UserCommand Server::toUserCommand(const json &msg) {
   switch (cmdTypeP->second) {
   case UserCommandType::CreateTask:
     if (ValidateJsonCommand<CreateTask>(msg))
-      return OrchCommand<CreateTask>{msg["task"]};
+      return OrchCommand<CreateTask>{to_s(msg["task"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CreateTask::requiredFields);
     break;
   case UserCommandType::ClearTask:
     if (ValidateJsonCommand<ClearTask>(msg))
-      return OrchCommand<ClearTask>{msg["task"], msg["token"]};
+      return OrchCommand<ClearTask>{to_s(msg["task"]), to_s(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ClearTask::requiredFields);
     break;
   case UserCommandType::CleanTask:
     if (ValidateJsonCommand<CleanTask>(msg))
-      return OrchCommand<CleanTask>{msg["task"], msg["token"]};
+      return OrchCommand<CleanTask>{to_s(msg["task"]), to_s(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CleanTask::requiredFields);
     break;
   case UserCommandType::DeclareTaskDependency:
     if (ValidateJsonCommand<DeclareTaskDependency>(msg))
-      return OrchCommand<DeclareTaskDependency>{msg["task"], msg["dependsOn"], msg["token"]};
+      return OrchCommand<DeclareTaskDependency>{to_s(msg["task"]), to_s(msg["dependsOn"]), to_s(msg["token"])};
 
     // handle invalid fields:
     errorMessage =
@@ -399,14 +404,14 @@ UserCommand Server::toUserCommand(const json &msg) {
     break;
   case UserCommandType::CheckTaskToken:
     if (ValidateJsonCommand<CheckTaskToken>(msg))
-      return OrchCommand<CheckTaskToken>{msg["task"], msg["token"]};
+      return OrchCommand<CheckTaskToken>{to_s(msg["task"]), to_s(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CheckTaskToken::requiredFields);
     break;
   case UserCommandType::SubmitJob:
     if (ValidateJsonCommand<SubmitJob>(msg))
-      return OrchCommand<SubmitJob>{msg["job"], msg["task"], msg["token"]};
+      return OrchCommand<SubmitJob>{msg["job"], to_s(msg["task"]), to_s(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
@@ -434,14 +439,14 @@ UserCommand Server::toUserCommand(const json &msg) {
     break;
   case UserCommandType::Summary:
     if (ValidateJsonCommand<Summary>(msg))
-      return OrchCommand<Summary>{msg["user"]};
+      return OrchCommand<Summary>{to_s(msg["user"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", Summary::requiredFields);
     break;
   case UserCommandType::ResetFailedJobs:
     if (ValidateJsonCommand<ResetFailedJobs>(msg))
-      return OrchCommand<ResetFailedJobs>{msg["task"], msg["token"]};
+      return OrchCommand<ResetFailedJobs>{to_s(msg["task"]), to_s(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ResetFailedJobs::requiredFields);
@@ -463,17 +468,15 @@ PilotCommand Server::toPilotCommand(const json &msg) {
   switch (cmdTypeP->second) {
   case PilotCommandType::ClaimJob:
     if (ValidateJsonCommand<ClaimJob>(msg))
-      return OrchCommand<ClaimJob>{msg["pilotUuid"]};
+      return OrchCommand<ClaimJob>{to_s(msg["pilotUuid"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ClaimJob::requiredFields);
     break;
   case PilotCommandType::UpdateJobStatus:
-    if (ValidateJsonCommand<UpdateJobStatus>(msg) &&
-        magic_enum::enum_cast<JobStatus>(msg["status"].get<std::string_view>()).has_value())
-      return OrchCommand<UpdateJobStatus>{
-          magic_enum::enum_cast<JobStatus>(msg["status"].get<std::string_view>()).value(), msg["pilotUuid"],
-          msg["hash"], msg["task"]};
+    if (ValidateJsonCommand<UpdateJobStatus>(msg) && magic_enum::enum_cast<JobStatus>(to_sv(msg["status"])).has_value())
+      return OrchCommand<UpdateJobStatus>{magic_enum::enum_cast<JobStatus>(to_sv(msg["status"])).value(),
+                                          to_s(msg["pilotUuid"]), to_s(msg["hash"]), to_s(msg["task"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", UpdateJobStatus::requiredFields);
@@ -486,24 +489,24 @@ PilotCommand Server::toPilotCommand(const json &msg) {
       }
       std::vector<std::string> tags;
       if (msg.contains("tags")) {
-        std::copy(msg["tags"].begin(), msg["tags"].end(), std::back_inserter(tags));
+        std::ranges::transform(msg["tags"], std::back_inserter(tags), [](const auto &tag) { return to_s(tag); });
       }
-      return OrchCommand<RegisterNewPilot>{msg["pilotUuid"], msg["user"], std::move(tasks), std::move(tags),
-                                           msg["host"]};
+      return OrchCommand<RegisterNewPilot>{to_s(msg["pilotUuid"]), to_s(msg["user"]), std::move(tasks), std::move(tags),
+                                           to_s(msg["host"])};
     }
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", RegisterNewPilot::requiredFields);
     break;
   case PilotCommandType::UpdateHeartBeat:
     if (ValidateJsonCommand<UpdateHeartBeat>(msg))
-      return OrchCommand<UpdateHeartBeat>{msg["uuid"]};
+      return OrchCommand<UpdateHeartBeat>{to_s(msg["uuid"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", UpdateHeartBeat::requiredFields);
     break;
   case PilotCommandType::DeleteHeartBeat:
     if (ValidateJsonCommand<DeleteHeartBeat>(msg))
-      return OrchCommand<DeleteHeartBeat>{msg["uuid"]};
+      return OrchCommand<DeleteHeartBeat>{to_s(msg["uuid"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", DeleteHeartBeat::requiredFields);

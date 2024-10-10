@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-cmake_policy(SET CMP0111 OLD)
+# cmake_policy(SET CMP0111 OLD)
 
 # Pilot Management System
 project(PMS VERSION 0.0.2)
@@ -75,4 +75,3 @@ include(Catch)
 
 add_subdirectory(testsuite)
 endif()
-

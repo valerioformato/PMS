@@ -6,9 +6,11 @@
 #include <nlohmann/json.hpp>
 
 // our headers
+#include "common/JsonUtils.h"
 #include "orchestrator/OrchestratorConfig.h"
 
 using json = nlohmann::json;
+using namespace PMS::JsonUtils;
 
 namespace PMS::Orchestrator {
 Config::Config(std::string_view fileName) {
@@ -16,11 +18,11 @@ Config::Config(std::string_view fileName) {
   json configJson;
   infile >> configJson;
 
-  back_dbhost = configJson["back_dbhost"];
-  back_dbname = configJson["back_dbname"];
+  back_dbhost = to_s(configJson["back_dbhost"]);
+  back_dbname = to_s(configJson["back_dbname"]);
 
-  front_dbhost = configJson["front_dbhost"];
-  front_dbname = configJson["front_dbname"];
+  front_dbhost = to_s(configJson["front_dbhost"]);
+  front_dbname = to_s(configJson["front_dbname"]);
   // front_dbuser = configJson["front_dbuser"];
 
   // if (configJson["front_dbcredtype"] == "password") {
@@ -32,6 +34,6 @@ Config::Config(std::string_view fileName) {
   // }
   // front_dbcredentials = configJson["front_dbcredentials"];
 
-  listeningPort = configJson["listeningPort"];
+  listeningPort = configJson["listeningPort"].get<unsigned int>();
 }
 } // namespace PMS::Orchestrator
