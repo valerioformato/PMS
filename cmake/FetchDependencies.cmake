@@ -125,4 +125,13 @@ if(NOT catch2_POPULATED)
   add_subdirectory(${catch2_SOURCE_DIR} ${catch2_BINARY_DIR} EXCLUDE_FROM_ALL)
   list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 endif()
+
+FetchContent_Declare(trompeloeil
+GIT_REPOSITORY https://github.com/rollbear/trompeloeil.git
+  GIT_TAG v49)
+FetchContent_GetProperties(trompeloeil)
+if(NOT trompeloeil_POPULATED)
+  FetchContent_Populate(trompeloeil)
+  add_subdirectory(${trompeloeil_SOURCE_DIR} ${trompeloeil_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
 endif()
