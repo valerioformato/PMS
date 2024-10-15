@@ -4,12 +4,12 @@
 #include <variant>
 
 namespace PMS::DB::Queries {
-struct Find {
+
+struct FindOne {
   json match;
   json filter;
 };
-
-struct FindOne {
+struct FindMany {
   json match;
   json filter;
 };
@@ -26,6 +26,6 @@ struct DeleteMany {};
 struct Count {};
 struct Aggregate {};
 
-using Query =
-    std::variant<Find, FindOne, InsertOne, InsertMany, UpdateOne, UpdateMany, DeleteOne, DeleteMany, Count, Aggregate>;
+using Query = std::variant<FindOne, FindMany, InsertOne, InsertMany, UpdateOne, UpdateMany, DeleteOne, DeleteMany,
+                           Count, Aggregate>;
 } // namespace PMS::DB::Queries

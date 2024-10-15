@@ -11,6 +11,13 @@
 
 #include <fmt/format.h>
 
+#include <boost/outcome.hpp>
+namespace outcome = boost::outcome_v2;
+
+namespace PMS {
+template <typename T> using ErrorOr = outcome::result<T>;
+}
+
 namespace PMS::Utils {
 std::chrono::seconds ParseTimeString(const std::string_view tString) {
   static constexpr std::string_view digits = "0123456789";

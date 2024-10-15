@@ -1,22 +1,11 @@
 #pragma once
 
-#include <common/JsonUtils.h>
-#include <db/harness/Queries.h>
-
-#include <boost/outcome.hpp>
-namespace outcome = boost::outcome_v2;
-
-namespace PMS {
-template <typename T> using ErrorOr = outcome::result<T>;
-}
+#include "common/JsonUtils.h"
+#include "db/Queries.h"
+#include "db/backends/Backend.h"
 
 namespace PMS::DB {
 using QueryResult = json;
-
-class Backend {
-public:
-  virtual ErrorOr<void> Connect() = 0;
-};
 
 class Harness {
 public:
@@ -24,7 +13,7 @@ public:
 
   ErrorOr<void> Connect() { return m_backend->Connect(); }
 
-  ErrorOr<QueryResult> RunQuery(Queries::Query query) { return QueryResult{}; };
+  ErrorOr<QueryResult> RunQuery(Queries::Query query) { return m_backend->RunQuery(query); };
 
 private:
   std::unique_ptr<Backend> m_backend;
