@@ -8,7 +8,10 @@
 namespace PMS::Tests::Harness {
 class MockBackend : public trompeloeil::mock_interface<PMS::DB::Backend> {
 public:
-  IMPLEMENT_MOCK0(Connect);
+  MAKE_MOCK0(Connect, auto(void)->ErrorOr<void>, override);
+  MAKE_MOCK2(Connect, auto(std::string_view, std::string_view)->ErrorOr<void>, override);
+
+  IMPLEMENT_MOCK0(SetupIfNeeded);
 
   IMPLEMENT_MOCK1(RunQuery);
 };
@@ -35,7 +38,7 @@ SCENARIO("Harness Test", "[Harness]") {
     }
 
     WHEN("RunQuery is called") {
-      PMS::DB::Queries::Query query = PMS::DB::Queries::FindOne{};
+      PMS::DB::Queries::Query query = PMS::DB::Queries::Find{};
       REQUIRE_CALL(*mockBackendPtr, RunQuery(query)).RETURN(outcome::success(json{}));
       auto query_result = harness.RunQuery(query);
 
@@ -43,11 +46,25 @@ SCENARIO("Harness Test", "[Harness]") {
     }
 
     WHEN("The backend fails to run the query") {
-      PMS::DB::Queries::Query query = PMS::DB::Queries::FindOne{};
+      PMS::DB::Queries::Query query = PMS::DB::Queries::Find{};
       REQUIRE_CALL(*mockBackendPtr, RunQuery(query)).RETURN(outcome::failure(boost::system::error_code{}));
       auto query_result = harness.RunQuery(query);
 
       THEN("The query should fail") { REQUIRE(query_result.has_error()); }
+    }
+
+    WHEN("SetupIfNeeded is called") {
+      REQUIRE_CALL(*mockBackendPtr, SetupIfNeeded()).RETURN(outcome::success());
+      auto setup_result = harness.SetupIfNeeded();
+
+      THEN("The setup should be successful") { REQUIRE(setup_result.has_value()); }
+    }
+
+    WHEN("The backend fails to setup") {
+      REQUIRE_CALL(*mockBackendPtr, SetupIfNeeded()).RETURN(outcome::failure(boost::system::error_code{}));
+      auto setup_result = harness.SetupIfNeeded();
+
+      THEN("The setup should fail") { REQUIRE(setup_result.has_error()); }
     }
   }
 }

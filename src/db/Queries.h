@@ -5,27 +5,62 @@
 
 namespace PMS::DB::Queries {
 
-struct FindOne {
+#define GENERATE_QUERY_SPECIAL_MEMBERS(NAME)                                                                           \
+  NAME() = default;                                                                                                    \
+  NAME(const NAME &) = default;                                                                                        \
+  NAME(NAME &&) = default;                                                                                             \
+  NAME &operator=(const NAME &) = default;                                                                             \
+  NAME &operator=(NAME &&) = default;                                                                                  \
+  ~NAME() = default;                                                                                                   \
+  bool operator==(const NAME &other) const = default;                                                                  \
+  std::string collection;                                                                                              \
+  Options options;
+
+struct Options {
+  unsigned int limit{0};
+  unsigned int skip{0};
+  bool bypass_document_validation{false};
+
+  bool operator==(const Options &other) const = default;
+};
+
+struct Find {
+  GENERATE_QUERY_SPECIAL_MEMBERS(Find)
+
   json match;
   json filter;
 };
-struct FindMany {
-  json match;
-  json filter;
+
+struct Insert {
+  GENERATE_QUERY_SPECIAL_MEMBERS(Insert)
+
+  std::vector<json> documents;
 };
 
-struct InsertOne {};
-struct InsertMany {};
+struct Update {
+  GENERATE_QUERY_SPECIAL_MEMBERS(Update)
 
-struct UpdateOne {};
-struct UpdateMany {};
+  json match;
+  json update;
+};
 
-struct DeleteOne {};
-struct DeleteMany {};
+struct Delete {
+  GENERATE_QUERY_SPECIAL_MEMBERS(Delete)
 
-struct Count {};
-struct Aggregate {};
+  json match;
+};
 
-using Query = std::variant<FindOne, FindMany, InsertOne, InsertMany, UpdateOne, UpdateMany, DeleteOne, DeleteMany,
-                           Count, Aggregate>;
+struct Count {
+  GENERATE_QUERY_SPECIAL_MEMBERS(Count)
+
+  json match;
+};
+
+struct Aggregate {
+  GENERATE_QUERY_SPECIAL_MEMBERS(Aggregate)
+
+  json pipeline;
+};
+
+using Query = std::variant<Find, Insert, Update, Delete, Count, Aggregate>;
 } // namespace PMS::DB::Queries

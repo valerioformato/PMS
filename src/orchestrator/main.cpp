@@ -10,7 +10,7 @@
 // our headers
 #include "PMSVersion.h"
 #include "db/CredType.h"
-#include "db/PoolHandle.h"
+#include "db/backends/MongoDB/PoolHandle.h"
 #include "orchestrator/Director.h"
 #include "orchestrator/OrchestratorConfig.h"
 #include "orchestrator/Server.h"

@@ -13,6 +13,7 @@
 
 // our headers
 #include "common/JsonUtils.h"
+#include "common/Utils.h"
 #include "orchestrator/Server.h"
 
 // from https://github.com/okdshin/PicoSHA2
@@ -23,9 +24,6 @@ using namespace std::string_view_literals;
 using namespace PMS::JsonUtils;
 
 namespace PMS::Orchestrator {
-template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
-
 Server::~Server() {
   if (m_isRunning) {
     Stop();
@@ -74,7 +72,7 @@ std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, st
 
 std::string Server::HandleCommand(UserCommand &&command) {
   return std::visit(
-      overloaded{
+      PMS::Utils::overloaded{
           // Create a new task
           [this](const OrchCommand<CreateTask> &ucmd) {
             auto [result, token] = m_director->CreateTask(ucmd.cmd.task);
@@ -187,7 +185,7 @@ std::string Server::HandleCommand(UserCommand &&command) {
 
 std::string Server::HandleCommand(PilotCommand &&command) {
   return std::visit(
-      overloaded{
+      PMS::Utils::overloaded{
           // request a new job
           [this](const OrchCommand<ClaimJob> &pcmd) { return m_director->ClaimJob(pcmd.cmd.uuid).dump(); },
           // update job status

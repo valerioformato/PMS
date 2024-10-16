@@ -17,7 +17,7 @@
 
 // our headers
 #include "common/queue.h"
-#include "db/PoolHandle.h"
+#include "db/backends/MongoDB/PoolHandle.h"
 #include "orchestrator/Task.h"
 
 using json = nlohmann::json;

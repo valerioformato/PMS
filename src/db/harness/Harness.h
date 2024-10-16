@@ -13,6 +13,8 @@ public:
 
   ErrorOr<void> Connect() { return m_backend->Connect(); }
 
+  ErrorOr<void> SetupIfNeeded() { return m_backend->SetupIfNeeded(); }
+
   ErrorOr<QueryResult> RunQuery(Queries::Query query) { return m_backend->RunQuery(query); };
 
 private:
