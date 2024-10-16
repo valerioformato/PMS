@@ -9,23 +9,23 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_Declare(
         magic_enum
         GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
-        GIT_TAG v0.7.3)
+        GIT_TAG v0.7.3
+        EXCLUDE_FROM_ALL)
 FetchContent_GetProperties(magic_enum)
 if(NOT magic_enum_POPULATED)
-  FetchContent_Populate(magic_enum)
-  add_subdirectory(${magic_enum_SOURCE_DIR} ${magic_enum_BINARY_DIR} EXCLUDE_FROM_ALL)
+  FetchContent_MakeAvailable(magic_enum)
 endif()
 
 # === fmt ===
 FetchContent_Declare(
   fmt
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG 11.0.2)
+  GIT_TAG 11.0.2
+  EXCLUDE_FROM_ALL)
 FetchContent_GetProperties(fmt)
 if(NOT fmt_POPULATED)
   set(FMT_INSTALL ON)
-  FetchContent_Populate(fmt)
-  add_subdirectory(${fmt_SOURCE_DIR} ${fmt_BINARY_DIR} EXCLUDE_FROM_ALL)
+  FetchContent_MakeAvailable(fmt)
 endif()
 
 # === spdlog ===
@@ -36,12 +36,12 @@ set(SPDLOG_FMT_EXTERNAL
 FetchContent_Declare(
   spdlog
   GIT_REPOSITORY https://github.com/gabime/spdlog.git
-  GIT_TAG v1.14.1)
+  GIT_TAG v1.14.1
+  EXCLUDE_FROM_ALL)
 FetchContent_GetProperties(spdlog)
 if(NOT spdlog_POPULATED)
   set(SPDLOG_INSTALL ON)
-  FetchContent_Populate(spdlog)
-  add_subdirectory(${spdlog_SOURCE_DIR} ${spdlog_BINARY_DIR} EXCLUDE_FROM_ALL)
+  FetchContent_MakeAvailable(spdlog)
 endif()
 
 # === boost ===
@@ -52,21 +52,21 @@ set(JSON_ImplicitConversions OFF CACHE INTERNAL "")
 
 FetchContent_Declare(json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG v3.11.3)
+  GIT_TAG v3.11.3
+  EXCLUDE_FROM_ALL)
 FetchContent_GetProperties(json)
 if(NOT json_POPULATED)
-  FetchContent_Populate(json)
-  add_subdirectory(${json_SOURCE_DIR} ${json_BINARY_DIR})
+  FetchContent_MakeAvailable(json)
 endif()
 
 # === docopt ===
 FetchContent_Declare(docopt
 GIT_REPOSITORY https://github.com/docopt/docopt.cpp
-  GIT_TAG v0.6.3)
+  GIT_TAG v0.6.3
+  EXCLUDE_FROM_ALL)
 FetchContent_GetProperties(docopt)
 if(NOT docopt_POPULATED)
-  FetchContent_Populate(docopt)
-  add_subdirectory(${docopt_SOURCE_DIR} ${docopt_BINARY_DIR} EXCLUDE_FROM_ALL)
+  FetchContent_MakeAvailable(docopt)
 endif()
 install(TARGETS docopt DESTINATION lib)
 
@@ -74,11 +74,11 @@ install(TARGETS docopt DESTINATION lib)
 # === websocket++ ===
 FetchContent_Declare(websocketpp
 GIT_REPOSITORY https://github.com/valerioformato/websocketpp.git
-  GIT_TAG master)
+  GIT_TAG master
+  EXCLUDE_FROM_ALL)
 FetchContent_GetProperties(websocketpp)
 if(NOT websocketpp_POPULATED)
-  FetchContent_Populate(websocketpp)
-  add_subdirectory(${websocketpp_SOURCE_DIR} ${websocketpp_BINARY_DIR} EXCLUDE_FROM_ALL)
+  FetchContent_MakeAvailable(websocketpp)
 endif()
 # add interface library with all websocketpp dependencies
 add_library(PMSWebsockets INTERFACE)
@@ -88,11 +88,11 @@ target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost:
 # === mongocxx ===
 FetchContent_Declare(mongo-cxx
 GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
-  GIT_TAG r3.9.0)
+  GIT_TAG r3.9.0
+  EXCLUDE_FROM_ALL)
 FetchContent_GetProperties(mongo-cxx)
 if(NOT mongo-cxx_POPULATED)
-  FetchContent_Populate(mongo-cxx)
-  add_subdirectory(${mongo-cxx_SOURCE_DIR} ${mongo-cxx_BINARY_DIR} EXCLUDE_FROM_ALL)
+  FetchContent_MakeAvailable(mongo-cxx)
 endif()
 
 # === XRootD ===
@@ -115,23 +115,23 @@ endif()
 # find_package(mongocxx REQUIRED 3.6.0)
 
 # === Catch2 ===
-if(ENABLE_TESTS)
+if(ENABLE_PMS_TESTS)
 FetchContent_Declare(catch2
 GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG v3.6.0)
+  GIT_TAG v3.6.0
+  EXCLUDE_FROM_ALL)
 FetchContent_GetProperties(catch2)
 if(NOT catch2_POPULATED)
-  FetchContent_Populate(catch2)
-  add_subdirectory(${catch2_SOURCE_DIR} ${catch2_BINARY_DIR} EXCLUDE_FROM_ALL)
+  FetchContent_MakeAvailable(catch2)
   list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 endif()
 
 FetchContent_Declare(trompeloeil
 GIT_REPOSITORY https://github.com/rollbear/trompeloeil.git
-  GIT_TAG v49)
+  GIT_TAG v49
+  EXCLUDE_FROM_ALL)
 FetchContent_GetProperties(trompeloeil)
 if(NOT trompeloeil_POPULATED)
-  FetchContent_Populate(trompeloeil)
-  add_subdirectory(${trompeloeil_SOURCE_DIR} ${trompeloeil_BINARY_DIR} EXCLUDE_FROM_ALL)
+  FetchContent_MakeAvailable(trompeloeil)
 endif()
 endif()

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.14)
 
 # cmake_policy(SET CMP0111 OLD)
 
@@ -32,7 +32,7 @@ set(CMAKE_CXX_STANDARD 20)
 option(ASAN "Enable Address sanitizer" OFF)
 option(TSAN "Enable Thread sanitizer" OFF)
 option(DEBUG_WEBSOCKETS "Enable debug output for websocketpp" OFF)
-option(ENABLE_TESTS "Enable unit test compilation" OFF)
+option(ENABLE_PMS_TESTS "Enable unit test compilation" OFF)
 
 if (ASAN)
     message(STATUS "Enabling Address sanitizer")
@@ -69,7 +69,7 @@ execute_process(
 
 add_subdirectory(src)
 
-if(ENABLE_TESTS)
+if(ENABLE_PMS_TESTS)
 include(CTest)
 include(Catch)
 
