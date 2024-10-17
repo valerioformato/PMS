@@ -17,7 +17,9 @@
 
 // our headers
 #include "common/queue.h"
+#include "db/backends/MongoDB/MongoDBBackend.h"
 #include "db/backends/MongoDB/PoolHandle.h"
+#include "db/harness/Harness.h"
 #include "orchestrator/Task.h"
 
 using json = nlohmann::json;
@@ -29,12 +31,29 @@ public:
 
   enum class OperationResult { Success, ProcessError, DatabaseError };
 
-  Director(std::shared_ptr<DB::PoolHandle> frontPoolHandle, std::shared_ptr<DB::PoolHandle> backPoolHandle)
-      : m_logger{spdlog::stdout_color_st("Director")}, m_frontPoolHandle{std::move(frontPoolHandle)},
-        m_backPoolHandle{std::move(backPoolHandle)} {}
+  Director() : m_logger{spdlog::stdout_color_st("Director")} {}
 
   void Start();
   void Stop();
+
+  // TODO: remove these
+  void SetFrontDBOld(std::string_view dbhost, std::string_view dbname) {
+    spdlog::info("Connecting to frontend DB: {}/{}", dbhost, dbname);
+    m_frontPoolHandle = std::make_unique<DB::PoolHandle>(dbhost, dbname);
+  }
+  void SetBackDBOld(std::string_view dbhost, std::string_view dbname) {
+    spdlog::info("Connecting to backend DB: {}/{}", dbhost, dbname);
+    m_backPoolHandle = std::make_unique<DB::PoolHandle>(dbhost, dbname);
+  }
+  // TODO: and use these
+  void SetFrontDB(std::string_view dbhost, std::string_view dbname) {
+    spdlog::info("Connecting to frontend DB: {}/{}", dbhost, dbname);
+    m_frontDB = std::make_unique<DB::Harness>(std::make_unique<DB::MongoDBBackend>(dbhost, dbname));
+  }
+  void SetBackDB(std::string_view dbhost, std::string_view dbname) {
+    spdlog::info("Connecting to backend DB: {}/{}", dbhost, dbname);
+    m_backDB = std::make_unique<DB::Harness>(std::make_unique<DB::MongoDBBackend>(dbhost, dbname));
+  }
 
   OperationResult AddNewJob(const json &job);
   OperationResult AddNewJob(json &&job);
@@ -96,8 +115,13 @@ private:
 
   std::shared_ptr<spdlog::logger> m_logger;
 
-  std::shared_ptr<DB::PoolHandle> m_frontPoolHandle;
-  std::shared_ptr<DB::PoolHandle> m_backPoolHandle;
+  // TODO: remove these
+  std::unique_ptr<DB::PoolHandle> m_frontPoolHandle;
+  std::unique_ptr<DB::PoolHandle> m_backPoolHandle;
+
+  // TODO: and use these
+  std::unique_ptr<DB::Harness> m_frontDB;
+  std::unique_ptr<DB::Harness> m_backDB;
 
   ts_queue<json> m_incomingJobs;
 
