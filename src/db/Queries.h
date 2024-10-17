@@ -20,6 +20,7 @@ struct Options {
   unsigned int limit{0};
   unsigned int skip{0};
   bool bypass_document_validation{false};
+  bool upsert{false};
 
   bool operator==(const Options &other) const = default;
 };

@@ -109,43 +109,106 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                           options.bypass_document_validation(query.options.bypass_document_validation);
                           QueryResult result;
 
-                          switch (query.documents.size()) {
-                          case 1:
-                            // If we're inserting only one document we use insert_one
-                            try {
+                          try {
+                            switch (query.documents.size()) {
+                            case 1: {
+                              // If we're inserting only one document we use insert_one
                               auto query_result =
                                   db[query.collection].insert_one(JsonUtils::json2bson(query.documents[0]));
                               if (!query_result) {
                                 return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
                               }
                               result["inserted_id"] = query_result.value().inserted_id().get_string();
-                            } catch (const mongocxx::exception &e) {
-                              return ErrorOr<QueryResult>{outcome::failure(e.code())};
-                            }
-                            break;
-                          default: {
-                            // If we're inserting more than one document we use insert_many
-                            std::vector<bsoncxx::document::view_or_value> to_be_inserted;
-                            std::ranges::transform(query.documents, std::back_inserter(to_be_inserted),
-                                                   [&](const auto &doc) { return JsonUtils::json2bson(doc); });
-                            try {
+                            } break;
+                            default: {
+                              // If we're inserting more than one document we use insert_many
+                              std::vector<bsoncxx::document::view_or_value> to_be_inserted;
+                              std::ranges::transform(query.documents, std::back_inserter(to_be_inserted),
+                                                     [&](const auto &doc) { return JsonUtils::json2bson(doc); });
                               auto query_result = db[query.collection].insert_many(to_be_inserted);
                               if (!query_result) {
                                 return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
                               }
                               result["inserted_count"] = query_result.value().inserted_count();
-                            } catch (const mongocxx::exception &e) {
-                              return ErrorOr<QueryResult>{outcome::failure(e.code())};
+                            } break;
                             }
-                            break;
+                          } catch (const mongocxx::exception &e) {
+                            return ErrorOr<QueryResult>{outcome::failure(e.code())};
                           }
-                          }
+
                           return ErrorOr<QueryResult>{result};
                         },
-                        [&](const Queries::Update &query) {},
-                        [&](const Queries::Delete &query) {},
-                        [&](const Queries::Count &query) {},
-                        [&](const Queries::Aggregate &query) {},
+                        // ------------ Update queries ------------
+                        [&](const Queries::Update &query) {
+                          mongocxx::options::update options;
+                          options.upsert(query.options.upsert);
+                          QueryResult result;
+
+                          try {
+                            switch (query.options.limit) {
+                            case 1: {
+                              // If we're updating only one document we use update_one
+                              auto query_result = db[query.collection].update_one(
+                                  JsonUtils::json2bson(query.match), JsonUtils::json2bson(query.update), options);
+                              if (!query_result) {
+                                return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                              }
+                              result["matched_count"] = query_result.value().matched_count();
+                              result["modified_count"] = query_result.value().modified_count();
+                            } break;
+                            default: {
+                              // If we're updating more than one document we use update_many
+                              auto query_result = db[query.collection].update_many(
+                                  JsonUtils::json2bson(query.match), JsonUtils::json2bson(query.update), options);
+                              if (!query_result) {
+                                return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                              }
+                              result["matched_count"] = query_result.value().matched_count();
+                              result["modified_count"] = query_result.value().modified_count();
+                            } break;
+                            }
+                          } catch (const mongocxx::exception &e) {
+                            return ErrorOr<QueryResult>{outcome::failure(e.code())};
+                          }
+
+                          return ErrorOr<QueryResult>{result};
+                        },
+                        [&](const Queries::Delete &query) {
+                          QueryResult result;
+
+                          try {
+                            switch (query.options.limit) {
+                            case 1: {
+                              // If we're deleting only one document we use delete_one
+                              auto query_result = db[query.collection].delete_one(JsonUtils::json2bson(query.match));
+                              if (!query_result) {
+                                return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                              }
+                              result["deleted_count"] = query_result.value().deleted_count();
+                            } break;
+                            default: {
+                              // If we're deleting more than one document we use delete_many
+                              auto query_result = db[query.collection].delete_many(JsonUtils::json2bson(query.match));
+                              if (!query_result) {
+                                return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                              }
+                              result["deleted_count"] = query_result.value().deleted_count();
+                            } break;
+                            }
+                          } catch (const mongocxx::exception &e) {
+                            return ErrorOr<QueryResult>{outcome::failure(e.code())};
+                          }
+
+                          return ErrorOr<QueryResult>{result};
+                        },
+                        [&](const Queries::Count &query) {
+                          // TODO: Implement count queries
+                          return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::not_supported)};
+                        },
+                        [&](const Queries::Aggregate &query) {
+                          // TODO: Implement aggregate queries
+                          return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::not_supported)};
+                        },
                     },
                     query);
 }
