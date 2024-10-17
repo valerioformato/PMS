@@ -1,5 +1,7 @@
 #pragma once
 
+#include <spdlog/spdlog.h>
+
 #include "common/JsonUtils.h"
 #include "db/Queries.h"
 #include "db/backends/Backend.h"
@@ -15,7 +17,10 @@ public:
 
   ErrorOr<void> SetupIfNeeded() { return m_backend->SetupIfNeeded(); }
 
-  ErrorOr<QueryResult> RunQuery(Queries::Query query) { return m_backend->RunQuery(query); };
+  ErrorOr<QueryResult> RunQuery(Queries::Query query) {
+    spdlog::trace("[Harness] Running query {}", PMS::DB::Queries::to_string(query));
+    return m_backend->RunQuery(query);
+  };
 
 private:
   std::unique_ptr<Backend> m_backend;

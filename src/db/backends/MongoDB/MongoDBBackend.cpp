@@ -212,5 +212,4 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                     },
                     query);
 }
-
 } // namespace PMS::DB

@@ -22,7 +22,7 @@ namespace PMS::Utils {
 template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
-std::chrono::seconds ParseTimeString(const std::string_view tString) {
+inline std::chrono::seconds ParseTimeString(const std::string_view tString) {
   static constexpr std::string_view digits = "0123456789";
   std::chrono::seconds result{};
 

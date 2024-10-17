@@ -1,7 +1,9 @@
 #pragma once
 
-#include <common/JsonUtils.h>
 #include <variant>
+
+#include "common/JsonUtils.h"
+#include "common/Utils.h"
 
 namespace PMS::DB::Queries {
 
@@ -63,5 +65,18 @@ struct Aggregate {
   json pipeline;
 };
 
+#undef GENERATE_QUERY_SPECIAL_MEMBERS
+
 using Query = std::variant<Find, Insert, Update, Delete, Count, Aggregate>;
+
+inline constexpr std::string to_string(const Query &query) {
+  return std::visit(PMS::Utils::overloaded{
+                        [](const Find &q) { return fmt::format("Find: {}, {}", q.match.dump(), q.filter.dump()); },
+                        [](const Insert &q) { return fmt::format("Insert: {}", json(q.documents).dump()); },
+                        [](const Update &q) { return fmt::format("Update: {}, {}", q.match.dump(), q.update.dump()); },
+                        [](const Delete &q) { return fmt::format("Delete: {}", q.match.dump()); },
+                        [](const Count &q) { return fmt::format("Count: {}", q.match.dump()); },
+                        [](const Aggregate &q) { return fmt::format("Aggregate: {}", q.pipeline.dump()); }},
+                    query);
+}
 } // namespace PMS::DB::Queries
