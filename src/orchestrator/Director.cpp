@@ -41,16 +41,6 @@ decltype(auto) RetryIfFailsWith(Callable callable) {
   std::rethrow_exception(last_exception);
 }
 
-// adapted from https://github.com/SerenityOS/serenity/blob/master/AK/Try.h
-// FIXME: At some point we should use the AK implementation or at least make this one more robust
-#define TRY(expression)                                                                                                \
-  ({                                                                                                                   \
-    auto &&_temporary_result = (expression);                                                                           \
-    if (_temporary_result.has_error()) [[unlikely]]                                                                    \
-      return _temporary_result.error();                                                                                \
-    _temporary_result.value();                                                                                         \
-  })
-
 void Director::Start() {
   auto &&tmpresult = m_backDB->Connect();
   tmpresult = m_frontDB->Connect();
