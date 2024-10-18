@@ -7,16 +7,10 @@
 
 namespace PMS::DB::Queries {
 
-#define GENERATE_QUERY_SPECIAL_MEMBERS(NAME)                                                                           \
-  NAME() = default;                                                                                                    \
-  NAME(const NAME &) = default;                                                                                        \
-  NAME(NAME &&) = default;                                                                                             \
-  NAME &operator=(const NAME &) = default;                                                                             \
-  NAME &operator=(NAME &&) = default;                                                                                  \
-  ~NAME() = default;                                                                                                   \
+#define GENERATE_QUERY_MEMBERS(NAME)                                                                                   \
   bool operator==(const NAME &other) const = default;                                                                  \
-  std::string collection;                                                                                              \
-  Options options;
+  std::string collection{};                                                                                            \
+  Options options{};
 
 struct Options {
   unsigned int limit{0};
@@ -28,44 +22,44 @@ struct Options {
 };
 
 struct Find {
-  GENERATE_QUERY_SPECIAL_MEMBERS(Find)
+  GENERATE_QUERY_MEMBERS(Find)
 
   json match;
   json filter;
 };
 
 struct Insert {
-  GENERATE_QUERY_SPECIAL_MEMBERS(Insert)
+  GENERATE_QUERY_MEMBERS(Insert)
 
   std::vector<json> documents;
 };
 
 struct Update {
-  GENERATE_QUERY_SPECIAL_MEMBERS(Update)
+  GENERATE_QUERY_MEMBERS(Update)
 
   json match;
   json update;
 };
 
 struct Delete {
-  GENERATE_QUERY_SPECIAL_MEMBERS(Delete)
+  GENERATE_QUERY_MEMBERS(Delete)
 
   json match;
 };
 
 struct Count {
-  GENERATE_QUERY_SPECIAL_MEMBERS(Count)
+  GENERATE_QUERY_MEMBERS(Count)
 
   json match;
 };
 
 struct Aggregate {
-  GENERATE_QUERY_SPECIAL_MEMBERS(Aggregate)
+  GENERATE_QUERY_MEMBERS(Aggregate)
 
   json pipeline;
 };
 
-#undef GENERATE_QUERY_SPECIAL_MEMBERS
+#undef GENERATE_QUERY_MEMBERS
 
 using Query = std::variant<Find, Insert, Update, Delete, Count, Aggregate>;
 

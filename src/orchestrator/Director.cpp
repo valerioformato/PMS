@@ -22,7 +22,6 @@ using namespace PMS::JsonUtils;
 
 namespace PMS::Orchestrator {
 
-// FIXME: find a better solution for decorating DB queries. We don't want exceptions bringing the server down
 template <class ErrorType, unsigned int max_retries = 10, typename Callable>
 decltype(auto) RetryIfFailsWith(Callable callable) {
   unsigned int retries = 0;
@@ -42,7 +41,20 @@ decltype(auto) RetryIfFailsWith(Callable callable) {
   std::rethrow_exception(last_exception);
 }
 
+// adapted from https://github.com/SerenityOS/serenity/blob/master/AK/Try.h
+// FIXME: At some point we should use the AK implementation or at least make this one more robust
+#define TRY(expression)                                                                                                \
+  ({                                                                                                                   \
+    auto &&_temporary_result = (expression);                                                                           \
+    if (_temporary_result.has_error()) [[unlikely]]                                                                    \
+      return _temporary_result.error();                                                                                \
+    _temporary_result.value();                                                                                         \
+  })
+
 void Director::Start() {
+  auto &&tmpresult = m_backDB->Connect();
+  tmpresult = m_frontDB->Connect();
+
   m_backPoolHandle->DBHandle().SetupDBCollections();
   m_frontPoolHandle->DBHandle().SetupDBCollections();
 
@@ -169,15 +181,6 @@ Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, 
 
   return OperationResult::Success;
 }
-
-// TODO: This has never been really needed in a long time. Consider removing it.
-// struct WJU_PerfCounters {
-//  WJU_PerfCounters(std::chrono::system_clock::duration time_, unsigned int jobWrites_)
-//      : time{time_}, jobWrites{jobWrites_} {}
-//
-//  std::chrono::system_clock::duration time;
-//  unsigned int jobWrites;
-//};
 
 void Director::WriteJobUpdates() {
   static constexpr auto coolDown = std::chrono::seconds(1);
@@ -471,7 +474,7 @@ void Director::JobTransfer() {
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
-void Director::UpdateTasks() {
+ErrorOr<void> Director::UpdateTasks() {
   static constexpr auto coolDown = std::chrono::seconds(60);
 
   auto backHandle = m_backPoolHandle->DBHandle();
@@ -481,11 +484,13 @@ void Director::UpdateTasks() {
     m_logger->debug("Updating tasks");
 
     // get list of all tasks
-    auto tasksResult = RetryIfFailsWith<mongocxx::exception>([&]() { return backHandle["tasks"].find({}); });
+    auto tasksResult = TRY(m_backDB->RunQuery(DB::Queries::Find{
+        .collection = "tasks",
+        .match = "{}"_json,
+        .filter = "{}"_json,
+    }));
 
-    // beware: cursors cannot be reused as-is
-    for (const auto &result : tasksResult) {
-      json tmpdoc = JsonUtils::bson2json(result);
+    for (const auto &tmpdoc : tasksResult) {
 
       // find task in internal task list
       std::string taskName = to_s(tmpdoc["name"]);
@@ -496,8 +501,10 @@ void Director::UpdateTasks() {
 
         task.name = taskName;
         task.token = to_s(tmpdoc["token"]);
-        std::ranges::transform(tmpdoc["dependencies"], std::back_inserter(task.dependencies),
-                               [](const auto &dep) { return to_s(dep); });
+        if (tmpdoc.contains("dependencies")) {
+          std::ranges::transform(tmpdoc["dependencies"], std::back_inserter(task.dependencies),
+                                 [](const auto &dep) { return to_s(dep); });
+        }
       }
 
       // skip stale failed tasks, since failed jobs won't be tried anymore

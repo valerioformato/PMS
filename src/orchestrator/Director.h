@@ -47,11 +47,11 @@ public:
   }
   // TODO: and use these
   void SetFrontDB(std::string_view dbhost, std::string_view dbname) {
-    spdlog::info("Connecting to frontend DB: {}/{}", dbhost, dbname);
+    spdlog::info("Using frontend DB: {}/{}", dbhost, dbname);
     m_frontDB = std::make_unique<DB::Harness>(std::make_unique<DB::MongoDBBackend>(dbhost, dbname));
   }
   void SetBackDB(std::string_view dbhost, std::string_view dbname) {
-    spdlog::info("Connecting to backend DB: {}/{}", dbhost, dbname);
+    spdlog::info("Using backend DB: {}/{}", dbhost, dbname);
     m_backDB = std::make_unique<DB::Harness>(std::make_unique<DB::MongoDBBackend>(dbhost, dbname));
   }
 
@@ -99,7 +99,7 @@ public:
 private:
   void JobInsert();
   void JobTransfer();
-  void UpdateTasks();
+  ErrorOr<void> UpdateTasks();
   void UpdateDeadPilots();
   void UpdateTaskCounts(Task &task);
   void WriteJobUpdates();

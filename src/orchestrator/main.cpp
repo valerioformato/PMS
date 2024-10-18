@@ -78,6 +78,9 @@ int main(int argc, const char **argv) {
   director->SetFrontDBOld(config.front_dbhost, config.front_dbname);
   director->SetBackDBOld(config.back_dbhost, config.back_dbname);
 
+  director->SetFrontDB(config.front_dbhost, config.front_dbname);
+  director->SetBackDB(config.back_dbhost, config.back_dbname);
+
   Orchestrator::Server server{config.listeningPort, director};
 
   // prepare to run everything...

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string_view>
+
 #include <mongocxx/instance.hpp>
 #include <mongocxx/pool.hpp>
 
@@ -8,6 +10,10 @@
 namespace PMS::DB {
 class MongoDBBackend : public Backend {
 public:
+  MongoDBBackend(std::string_view dbhost, std::string_view dbname);
+
+  virtual ~MongoDBBackend() = default;
+
   virtual ErrorOr<void> Connect() override;
   virtual ErrorOr<void> Connect(std::string_view user, std::string_view password) override;
 

@@ -8,6 +8,11 @@
 #include "db/backends/MongoDB/MongoDBBackend.h"
 
 namespace PMS::DB {
+mongocxx::instance m_mongo_instance{};
+
+MongoDBBackend::MongoDBBackend(std::string_view dbhost, std::string_view dbname)
+    : Backend(), m_dbhost{dbhost}, m_dbname{dbname}, m_pool{nullptr} {}
+
 ErrorOr<void> MongoDBBackend::Connect() {
   try {
     m_pool = std::make_unique<mongocxx::pool>(mongocxx::uri{fmt::format("mongodb://{}/{}", m_dbhost, m_dbname)});
