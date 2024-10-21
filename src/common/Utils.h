@@ -26,6 +26,17 @@ namespace outcome = boost::outcome_v2;
       return _temporary_result.error();                                                                                \
     _temporary_result.value();                                                                                         \
   })
+
+#define TRY_WRAPPED(expression)                                                                                        \
+  ({                                                                                                                   \
+    auto &&_temporary_result = (expression);                                                                           \
+    static_assert(!std::is_lvalue_reference_v<std::remove_cvref_t<decltype(_temporary_result)>::value_type>,           \
+                  "Do not return a reference from a fallible expression");                                             \
+    if (_temporary_result.has_error()) [[unlikely]]                                                                    \
+      return _temporary_result;                                                                                        \
+    _temporary_result.value();                                                                                         \
+  })
+
 namespace PMS {
 template <typename T> using ErrorOr = outcome::result<T>;
 }

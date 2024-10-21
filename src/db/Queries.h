@@ -6,10 +6,13 @@
 #include "common/Utils.h"
 
 namespace PMS::DB::Queries {
+enum class ComparisonOp { NE, GT, GTE, LT, LTE };
+using OverriddenComparisons = std::unordered_map<std::string_view, ComparisonOp>;
 
 #define GENERATE_QUERY_MEMBERS(NAME)                                                                                   \
   bool operator==(const NAME &other) const = default;                                                                  \
   std::string collection{};                                                                                            \
+  OverriddenComparisons comparisons{};                                                                                 \
   Options options{};
 
 struct Options {

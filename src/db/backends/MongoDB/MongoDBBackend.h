@@ -21,6 +21,8 @@ public:
 
   ErrorOr<QueryResult> RunQuery(Queries::Query query) override;
 
+  static ErrorOr<json> ApplyCustomComparisons(json match, const Queries::OverriddenComparisons &comparisons);
+
 private:
   std::string m_dbhost;
   std::string m_dbname;

@@ -18,11 +18,11 @@ Config::Config(std::string_view fileName) {
   json configJson;
   infile >> configJson;
 
-  back_dbhost = to_s(configJson["back_dbhost"]);
-  back_dbname = to_s(configJson["back_dbname"]);
+  back_dbhost = to_string(configJson["back_dbhost"]);
+  back_dbname = to_string(configJson["back_dbname"]);
 
-  front_dbhost = to_s(configJson["front_dbhost"]);
-  front_dbname = to_s(configJson["front_dbname"]);
+  front_dbhost = to_string(configJson["front_dbhost"]);
+  front_dbname = to_string(configJson["front_dbname"]);
   // front_dbuser = configJson["front_dbuser"];
 
   // if (configJson["front_dbcredtype"] == "password") {

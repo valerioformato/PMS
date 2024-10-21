@@ -18,8 +18,8 @@
 using json = nlohmann::json;
 
 namespace PMS::JsonUtils {
-constexpr std::string_view to_sv(const json &j) { return j.get<std::string_view>(); }
-constexpr std::string to_s(const json &j) { return j.get<std::string>(); }
+constexpr std::string_view to_string_view(const json &j) { return j.get<std::string_view>(); }
+constexpr std::string to_string(const json &j) { return j.get<std::string>(); }
 inline json bson2json(bsoncxx::document::view bsonDoc) { return json::parse(bsoncxx::to_json(bsonDoc)); }
 inline bsoncxx::document::value json2bson(const json &jsonDoc) { return bsoncxx::from_json(jsonDoc.dump()); }
 

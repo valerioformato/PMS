@@ -105,7 +105,7 @@ void Worker::MainLoop() {
   std::deque<json> queued_job_updates;
 
   auto handleJobStatusChange = [&queued_job_updates, this](const json &job, JobStatus status) {
-    if (!UpdateJobStatus(to_s(job["hash"]), to_s(job["task"]), status)) {
+    if (!UpdateJobStatus(to_string(job["hash"]), to_string(job["task"]), status)) {
       spdlog::error("Can't reach server while trying to set job status as {}. Queueing up job status update for later.",
                     magic_enum::enum_name(status));
 
@@ -153,8 +153,9 @@ void Worker::MainLoop() {
       while (!queued_job_updates.empty()) {
         auto &job = queued_job_updates.front();
 
-        JobStatus status = magic_enum::enum_cast<JobStatus>(to_sv(job["status"])).value();
-        spdlog::debug("Sending queued job status update {} to {}", to_sv(job["hash"]), to_sv(job["status"]));
+        JobStatus status = magic_enum::enum_cast<JobStatus>(to_string_view(job["status"])).value();
+        spdlog::debug("Sending queued job status update {} to {}", to_string_view(job["hash"]),
+                      to_string_view(job["status"]));
         handleJobStatusChange(job, status);
 
         queued_job_updates.pop_front();
@@ -189,7 +190,7 @@ void Worker::MainLoop() {
         executable = job["executable"].get<std::string>();
         auto exeArgs = job["exe_args"];
 
-        std::ranges::transform(exeArgs, std::back_inserter(arguments), [](const auto &arg) { return to_s(arg); });
+        std::ranges::transform(exeArgs, std::back_inserter(arguments), [](const auto &arg) { return to_string(arg); });
       } catch (...) {
         spdlog::error("Worker: Error fetching the executable and its arguments");
         break;
@@ -197,26 +198,27 @@ void Worker::MainLoop() {
 
       jobSTDIO jobIO;
       if (job.contains("stdout") && job["stdout"] != "")
-        jobIO.stdout = fmt::format("{}/{}", wdPath.string(), to_sv(job["stdout"]));
+        jobIO.stdout = fmt::format("{}/{}", wdPath.string(), to_string_view(job["stdout"]));
       if (job.contains("stderr") && job["stderr"] != "")
-        jobIO.stderr = fmt::format("{}/{}", wdPath.string(), to_sv(job["stderr"]));
+        jobIO.stderr = fmt::format("{}/{}", wdPath.string(), to_string_view(job["stderr"]));
       if (job.contains("stdin") && job["stdin"] != "")
-        jobIO.stdin = fmt::format("{}/{}", wdPath.string(), to_sv(job["stdin"]));
+        jobIO.stdin = fmt::format("{}/{}", wdPath.string(), to_string_view(job["stdin"]));
 
       // TODO: factorize env preparation in helper function
       if (!job["env"].empty()) {
-        EnvInfoType envType = GetEnvType(to_s(job["env"]["type"]));
+        EnvInfoType envType = GetEnvType(to_string(job["env"]["type"]));
         switch (envType) {
         case EnvInfoType::Script:
           try {
             if (!job["env"].contains("args")) {
-              shellScript.print(". {}\n", fs::canonical(to_s(job["env"]["file"])).string());
+              shellScript.print(". {}\n", fs::canonical(to_string(job["env"]["file"])).string());
             } else {
               std::vector<std::string> dummy;
               auto scriptArgs = job["env"]["args"];
-              std::ranges::transform(scriptArgs, std::back_inserter(dummy), [](const auto &arg) { return to_s(arg); });
+              std::ranges::transform(scriptArgs, std::back_inserter(dummy),
+                                     [](const auto &arg) { return to_string(arg); });
               std::string scriptWithArgs =
-                  fmt::format("{} {}\n", fs::canonical(to_s(job["env"]["file"])).string(), fmt::join(dummy, " "));
+                  fmt::format("{} {}\n", fs::canonical(to_string(job["env"]["file"])).string(), fmt::join(dummy, " "));
               shellScript.print(". {}", scriptWithArgs);
             }
           } catch (const fs::filesystem_error &e) {
@@ -225,7 +227,7 @@ void Worker::MainLoop() {
           }
           break;
         case EnvInfoType::NONE:
-          spdlog::error("Invalid env type {} is not supported", to_sv(job["env"]["type"]));
+          spdlog::error("Invalid env type {} is not supported", to_string_view(job["env"]["type"]));
         default:
           break;
         }
@@ -425,17 +427,18 @@ std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType 
       }
     }
 
-    std::string fileName = to_s(doc["file"]);
+    std::string fileName = to_string(doc["file"]);
     bool hasWildcard = fileName.find("*") != std::string::npos;
     if (hasWildcard)
       FileTransferQueue::ProcessWildcards(fileName);
 
     auto protocol = magic_enum::enum_cast<FileTransferProtocol>(doc["protocol"].get<std::string_view>());
     if (!protocol.has_value()) {
-      spdlog::error("Invalid file transfer protocol: {}", to_sv(doc["protocol"]));
+      spdlog::error("Invalid file transfer protocol: {}", to_string_view(doc["protocol"]));
     }
 
-    std::string remotePath = type == FileTransferType::Inbound ? to_s(doc["source"]) : to_s(doc["destination"]);
+    std::string remotePath =
+        type == FileTransferType::Inbound ? to_string(doc["source"]) : to_string(doc["destination"]);
 
     FileTransferInfo ftInfo{type, protocol.value(), fileName, remotePath, std::string{currentPath}};
     if (hasWildcard) {

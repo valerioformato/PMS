@@ -1,5 +1,6 @@
 #include <ranges>
 
+#include <magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
 #include <mongocxx/client.hpp>
@@ -85,18 +86,59 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
   return outcome::success();
 }
 
+ErrorOr<json> MongoDBBackend::ApplyCustomComparisons(json match, const Queries::OverriddenComparisons &comps) {
+  for (const auto &[field, op] : comps) {
+    // let's split the field by dots
+    auto sub_keys = field | std::views::split('.');
+
+    // let's get the json element we want to modify, following the sub_keys path
+    auto *current = &match;
+    for (const auto key_v : sub_keys) {
+      std::string_view key{key_v.begin(), key_v.size()};
+
+      // let's walk down the json hierarchy key by key, we only care about objects
+      if (current->is_object()) {
+        if (current->contains(key)) {
+          current = &(*current)[key];
+        } else {
+          return ErrorOr<json>{outcome::failure(boost::system::errc::invalid_argument)};
+          break;
+        }
+      } else if (current->empty()) {
+        return ErrorOr<json>{outcome::failure(boost::system::errc::invalid_argument)};
+        break;
+      } else {
+        break;
+      }
+    }
+
+    // we're at the right place, let's replace the value with the right comparison operation
+    std::string op_name{magic_enum::enum_name(op)};
+    std::ranges::transform(op_name, op_name.begin(), ::tolower);
+
+    json original_value = *current;
+    *current = json{{fmt::format("${}", op_name), original_value}};
+  }
+
+  return outcome::success(match);
+};
+
 ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
   auto poolEntry = m_pool->acquire();
   auto db = (*poolEntry)[m_dbname];
 
   return std::visit(PMS::Utils::overloaded{
                         // ------------ Find queries ------------
-                        [&](const Queries::Find &query) -> ErrorOr<QueryResult> {
+                        [&](Queries::Find &query) -> ErrorOr<QueryResult> {
                           mongocxx::options::find options;
                           options.limit(query.options.limit);
                           options.skip(query.options.skip);
                           if (!query.filter.empty())
                             options.projection(JsonUtils::json2bson(query.filter));
+
+                          if (!query.comparisons.empty()) {
+                            query.match = TRY(ApplyCustomComparisons(query.match, query.comparisons));
+                          }
 
                           QueryResult result;
                           try {
@@ -144,10 +186,14 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                           return ErrorOr<QueryResult>{result};
                         },
                         // ------------ Update queries ------------
-                        [&](const Queries::Update &query) {
+                        [&](Queries::Update &query) {
                           mongocxx::options::update options;
                           options.upsert(query.options.upsert);
                           QueryResult result;
+
+                          if (!query.comparisons.empty()) {
+                            query.match = TRY_WRAPPED(ApplyCustomComparisons(query.match, query.comparisons));
+                          }
 
                           try {
                             switch (query.options.limit) {
@@ -178,8 +224,12 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
 
                           return ErrorOr<QueryResult>{result};
                         },
-                        [&](const Queries::Delete &query) {
+                        [&](Queries::Delete &query) {
                           QueryResult result;
+
+                          if (!query.comparisons.empty()) {
+                            query.match = TRY_WRAPPED(ApplyCustomComparisons(query.match, query.comparisons));
+                          }
 
                           try {
                             switch (query.options.limit) {

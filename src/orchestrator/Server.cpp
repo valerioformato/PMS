@@ -373,28 +373,29 @@ UserCommand Server::toUserCommand(const json &msg) {
   switch (cmdTypeP->second) {
   case UserCommandType::CreateTask:
     if (ValidateJsonCommand<CreateTask>(msg))
-      return OrchCommand<CreateTask>{to_s(msg["task"])};
+      return OrchCommand<CreateTask>{to_string(msg["task"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CreateTask::requiredFields);
     break;
   case UserCommandType::ClearTask:
     if (ValidateJsonCommand<ClearTask>(msg))
-      return OrchCommand<ClearTask>{to_s(msg["task"]), to_s(msg["token"])};
+      return OrchCommand<ClearTask>{to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ClearTask::requiredFields);
     break;
   case UserCommandType::CleanTask:
     if (ValidateJsonCommand<CleanTask>(msg))
-      return OrchCommand<CleanTask>{to_s(msg["task"]), to_s(msg["token"])};
+      return OrchCommand<CleanTask>{to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CleanTask::requiredFields);
     break;
   case UserCommandType::DeclareTaskDependency:
     if (ValidateJsonCommand<DeclareTaskDependency>(msg))
-      return OrchCommand<DeclareTaskDependency>{to_s(msg["task"]), to_s(msg["dependsOn"]), to_s(msg["token"])};
+      return OrchCommand<DeclareTaskDependency>{to_string(msg["task"]), to_string(msg["dependsOn"]),
+                                                to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage =
@@ -402,14 +403,14 @@ UserCommand Server::toUserCommand(const json &msg) {
     break;
   case UserCommandType::CheckTaskToken:
     if (ValidateJsonCommand<CheckTaskToken>(msg))
-      return OrchCommand<CheckTaskToken>{to_s(msg["task"]), to_s(msg["token"])};
+      return OrchCommand<CheckTaskToken>{to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CheckTaskToken::requiredFields);
     break;
   case UserCommandType::SubmitJob:
     if (ValidateJsonCommand<SubmitJob>(msg))
-      return OrchCommand<SubmitJob>{msg["job"], to_s(msg["task"]), to_s(msg["token"])};
+      return OrchCommand<SubmitJob>{msg["job"], to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
@@ -437,14 +438,14 @@ UserCommand Server::toUserCommand(const json &msg) {
     break;
   case UserCommandType::Summary:
     if (ValidateJsonCommand<Summary>(msg))
-      return OrchCommand<Summary>{to_s(msg["user"])};
+      return OrchCommand<Summary>{to_string(msg["user"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", Summary::requiredFields);
     break;
   case UserCommandType::ResetFailedJobs:
     if (ValidateJsonCommand<ResetFailedJobs>(msg))
-      return OrchCommand<ResetFailedJobs>{to_s(msg["task"]), to_s(msg["token"])};
+      return OrchCommand<ResetFailedJobs>{to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ResetFailedJobs::requiredFields);
@@ -466,15 +467,16 @@ PilotCommand Server::toPilotCommand(const json &msg) {
   switch (cmdTypeP->second) {
   case PilotCommandType::ClaimJob:
     if (ValidateJsonCommand<ClaimJob>(msg))
-      return OrchCommand<ClaimJob>{to_s(msg["pilotUuid"])};
+      return OrchCommand<ClaimJob>{to_string(msg["pilotUuid"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ClaimJob::requiredFields);
     break;
   case PilotCommandType::UpdateJobStatus:
-    if (ValidateJsonCommand<UpdateJobStatus>(msg) && magic_enum::enum_cast<JobStatus>(to_sv(msg["status"])).has_value())
-      return OrchCommand<UpdateJobStatus>{magic_enum::enum_cast<JobStatus>(to_sv(msg["status"])).value(),
-                                          to_s(msg["pilotUuid"]), to_s(msg["hash"]), to_s(msg["task"])};
+    if (ValidateJsonCommand<UpdateJobStatus>(msg) &&
+        magic_enum::enum_cast<JobStatus>(to_string_view(msg["status"])).has_value())
+      return OrchCommand<UpdateJobStatus>{magic_enum::enum_cast<JobStatus>(to_string_view(msg["status"])).value(),
+                                          to_string(msg["pilotUuid"]), to_string(msg["hash"]), to_string(msg["task"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", UpdateJobStatus::requiredFields);
@@ -487,24 +489,24 @@ PilotCommand Server::toPilotCommand(const json &msg) {
       }
       std::vector<std::string> tags;
       if (msg.contains("tags")) {
-        std::ranges::transform(msg["tags"], std::back_inserter(tags), [](const auto &tag) { return to_s(tag); });
+        std::ranges::transform(msg["tags"], std::back_inserter(tags), [](const auto &tag) { return to_string(tag); });
       }
-      return OrchCommand<RegisterNewPilot>{to_s(msg["pilotUuid"]), to_s(msg["user"]), std::move(tasks), std::move(tags),
-                                           to_s(msg["host"])};
+      return OrchCommand<RegisterNewPilot>{to_string(msg["pilotUuid"]), to_string(msg["user"]), std::move(tasks),
+                                           std::move(tags), to_string(msg["host"])};
     }
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", RegisterNewPilot::requiredFields);
     break;
   case PilotCommandType::UpdateHeartBeat:
     if (ValidateJsonCommand<UpdateHeartBeat>(msg))
-      return OrchCommand<UpdateHeartBeat>{to_s(msg["uuid"])};
+      return OrchCommand<UpdateHeartBeat>{to_string(msg["uuid"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", UpdateHeartBeat::requiredFields);
     break;
   case PilotCommandType::DeleteHeartBeat:
     if (ValidateJsonCommand<DeleteHeartBeat>(msg))
-      return OrchCommand<DeleteHeartBeat>{to_s(msg["uuid"])};
+      return OrchCommand<DeleteHeartBeat>{to_string(msg["uuid"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", DeleteHeartBeat::requiredFields);
