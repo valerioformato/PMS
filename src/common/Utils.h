@@ -8,6 +8,7 @@
 #include <charconv>
 #include <chrono>
 #include <string_view>
+#include <type_traits>
 
 #include <fmt/format.h>
 
@@ -19,6 +20,8 @@ namespace outcome = boost::outcome_v2;
 #define TRY(expression)                                                                                                \
   ({                                                                                                                   \
     auto &&_temporary_result = (expression);                                                                           \
+    static_assert(!std::is_lvalue_reference_v<std::remove_cvref_t<decltype(_temporary_result)>::value_type>,           \
+                  "Do not return a reference from a fallible expression");                                             \
     if (_temporary_result.has_error()) [[unlikely]]                                                                    \
       return _temporary_result.error();                                                                                \
     _temporary_result.value();                                                                                         \
@@ -30,6 +33,36 @@ template <typename T> using ErrorOr = outcome::result<T>;
 namespace PMS::Utils {
 template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+inline std::vector<std::string_view> TokenizeString(const std::string_view str, const char delimiter) {
+  std::vector<std::string_view> tokens;
+  size_t start = 0;
+  size_t end = str.find(delimiter);
+
+  while (end != std::string_view::npos) {
+    tokens.emplace_back(str.substr(start, end - start));
+    start = end + 1;
+    end = str.find(delimiter, start);
+  }
+
+  tokens.emplace_back(str.substr(start));
+  return tokens;
+}
+
+inline std::vector<std::string> TokenizeString(const std::string str, const char delimiter) {
+  std::vector<std::string> tokens;
+  size_t start = 0;
+  size_t end = str.find(delimiter);
+
+  while (end != std::string::npos) {
+    tokens.emplace_back(str.substr(start, end - start));
+    start = end + 1;
+    end = str.find(delimiter, start);
+  }
+
+  tokens.emplace_back(str.substr(start));
+  return tokens;
+}
 
 inline std::chrono::seconds ParseTimeString(const std::string_view tString) {
   static constexpr std::string_view digits = "0123456789";
