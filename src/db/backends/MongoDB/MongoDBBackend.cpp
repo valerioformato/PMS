@@ -97,16 +97,16 @@ ErrorOr<json> MongoDBBackend::ApplyCustomComparisons(json match, const Queries::
       std::string_view key{key_v.begin(), key_v.size()};
 
       // let's walk down the json hierarchy key by key, we only care about objects
-      if (current->is_object()) {
+      if (current->empty()) {
+        return ErrorOr<json>{outcome::failure(boost::system::errc::invalid_argument)};
+        break;
+      } else if (current->is_object()) {
         if (current->contains(key)) {
           current = &(*current)[key];
         } else {
           return ErrorOr<json>{outcome::failure(boost::system::errc::invalid_argument)};
           break;
         }
-      } else if (current->empty()) {
-        return ErrorOr<json>{outcome::failure(boost::system::errc::invalid_argument)};
-        break;
       } else {
         break;
       }
