@@ -2,7 +2,7 @@
 
 #include "common/JsonUtils.h"
 #include "common/Utils.h"
-#include "db/Queries.h"
+#include "db/queries/Queries.h"
 
 namespace PMS::DB {
 using QueryResult = json;

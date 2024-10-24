@@ -58,7 +58,7 @@ public:
   OperationResult AddNewJob(const json &job);
   OperationResult AddNewJob(json &&job);
 
-  json ClaimJob(std::string_view pilotUuid);
+  ErrorOr<json> ClaimJob(std::string_view pilotUuid);
   OperationResult UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
                                   JobStatus status);
 
@@ -110,7 +110,7 @@ private:
     std::vector<std::string> tasks;
     std::vector<std::string> tags;
   };
-  std::optional<PilotInfo> GetPilotInfo(std::string_view uuid);
+  ErrorOr<PilotInfo> GetPilotInfo(std::string_view uuid);
   std::unordered_map<std::string, PilotInfo> m_activePilots;
 
   std::shared_ptr<spdlog::logger> m_logger;

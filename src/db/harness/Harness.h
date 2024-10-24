@@ -3,8 +3,8 @@
 #include <spdlog/spdlog.h>
 
 #include "common/JsonUtils.h"
-#include "db/Queries.h"
 #include "db/backends/Backend.h"
+#include "db/queries/Queries.h"
 
 namespace PMS::DB {
 using QueryResult = json;

@@ -74,7 +74,7 @@ Director::OperationResult Director::AddNewJob(json &&job) {
   return OperationResult::Success;
 }
 
-json Director::ClaimJob(std::string_view pilotUuid) {
+ErrorOr<json> Director::ClaimJob(std::string_view pilotUuid) {
   auto handle = m_frontPoolHandle->DBHandle();
 
   auto maybe_pilotInfo = GetPilotInfo(pilotUuid);
@@ -97,34 +97,39 @@ json Director::ClaimJob(std::string_view pilotUuid) {
   std::copy_if(begin(pilotInfo.tasks), end(pilotInfo.tasks), std::back_inserter(activeTasks),
                [this](const auto &taskName) { return m_tasks[taskName].IsActive(); });
 
-  json filter;
-  filter["status"]["$in"] = std::vector<std::string_view>{
-      magic_enum::enum_name(JobStatus::Pending), magic_enum::enum_name(JobStatus::Error),
-      magic_enum::enum_name(JobStatus::OutboundTransferError), magic_enum::enum_name(JobStatus::InboundTransferError)};
-  filter["task"]["$in"] = activeTasks;
+  DB::Queries::Matches matches{
+      {"status",
+       std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Pending), magic_enum::enum_name(JobStatus::Error),
+                                     magic_enum::enum_name(JobStatus::OutboundTransferError),
+                                     magic_enum::enum_name(JobStatus::InboundTransferError)},
+       DB::Queries::ComparisonOp::IN},
+      {"task", activeTasks, DB::Queries::ComparisonOp::IN},
+  };
   if (pilotInfo.tags.empty()) {
-    filter["tags"]["$type"] = "array";
-    filter["tags"]["$eq"] = std::vector<std::string>{};
-  } else
-    filter["tags"]["$all"] = pilotInfo.tags;
+    matches.emplace_back("tags", "array", DB::Queries::ComparisonOp::TYPE);
+    matches.emplace_back("tags", std::vector<std::string>(), DB::Queries::ComparisonOp::EQ);
+  } else {
+    matches.emplace_back("tags", pilotInfo.tags, DB::Queries::ComparisonOp::ALL);
+  }
 
-  json updateAction;
-  updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Claimed);
-  updateAction["$set"]["pilotUuid"] = pilotUuid;
-  updateAction["$inc"]["retries"] = 1;
+  DB::Queries::Updates update_action{
+      {"status", magic_enum::enum_name(JobStatus::Claimed)},
+      {"pilotUuid", pilotUuid},
+      {"retries", 1, DB::Queries::UpdateOp::INC},
+  };
 
   // NOTE(vformato): only keep fields that the pilot will actually need... This alleviates load on the DB
   json projectionOpt = R"({"_id":0, "dataset":0, "jobName":0, "status":0, "tags":0, "user":0})"_json;
-  mongocxx::options::find_one_and_update query_options;
-  query_options.bypass_document_validation(true).projection(JsonUtils::json2bson(projectionOpt));
 
-  auto query_result = RetryIfFailsWith<mongocxx::exception>([&]() {
-    return handle["jobs"].find_one_and_update(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction),
-                                              query_options);
-  });
+  auto query_result = TRY(m_frontDB->RunQuery(DB::Queries::FindOneAndUpdate{
+      .collection = "jobs",
+      .match = matches,
+      .update = update_action,
+      .filter = projectionOpt,
+  }));
 
-  if (query_result) {
-    return JsonUtils::bson2json(query_result.value());
+  if (!query_result.empty()) {
+    return query_result;
   } else {
     return R"({"sleep": true})"_json;
   }
@@ -476,7 +481,6 @@ ErrorOr<void> Director::UpdateTasks() {
     // get list of all tasks
     auto tasksResult = TRY(m_backDB->RunQuery(DB::Queries::Find{
         .collection = "tasks",
-        .match = "{}"_json,
         .filter = "{}"_json,
     }));
 
@@ -696,29 +700,25 @@ Director::OperationResult Director::ValidateTaskToken(std::string_view task, std
   return OperationResult::DatabaseError;
 }
 
-std::optional<Director::PilotInfo> Director::GetPilotInfo(std::string_view uuid) {
+ErrorOr<Director::PilotInfo> Director::GetPilotInfo(std::string_view uuid) {
   if (auto uuidString = std::string{uuid}; m_activePilots.find(uuidString) != end(m_activePilots)) {
     return m_activePilots[uuidString];
   } else {
     auto handle = m_frontPoolHandle->DBHandle();
     PilotInfo result;
 
-    json query;
-    query["uuid"] = uuid;
+    auto query_result = TRY(m_frontDB->RunQuery(DB::Queries::Find{
+        .collection = "pilots",
+        .options{.limit = 1},
+        .match = {{"uuid", uuid}},
+    }));
 
-    if (auto query_result = RetryIfFailsWith<mongocxx::exception>(
-            [&]() { return handle["pilots"].find_one(JsonUtils::json2bson(query)); });
-        query_result) {
-      json dummy = JsonUtils::bson2json(query_result.value());
-      std::ranges::transform(dummy["tasks"], std::back_inserter(result.tasks),
-                             [](const auto &task) { return to_string(task); });
-      std::ranges::transform(dummy["tags"], std::back_inserter(result.tags),
-                             [](const auto &tag) { return to_string(tag); });
-      m_activePilots[uuidString] = result;
-      return result;
-    }
-
-    return {};
+    std::ranges::transform(query_result["tasks"], std::back_inserter(result.tasks),
+                           [](const auto &task) { return to_string(task); });
+    std::ranges::transform(query_result["tags"], std::back_inserter(result.tags),
+                           [](const auto &tag) { return to_string(tag); });
+    m_activePilots[uuidString] = result;
+    return result;
   }
 }
 
