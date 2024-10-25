@@ -266,6 +266,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
 
             return ErrorOr<QueryResult>{result};
           },
+          // ------------ Delete queries ------------
           [&](Queries::Delete &query) {
             QueryResult result;
 
@@ -273,7 +274,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
               switch (query.options.limit) {
               case 1: {
                 // If we're deleting only one document we use delete_one
-                auto query_result = db[query.collection].delete_one(JsonUtils::json2bson(query.match));
+                auto query_result = db[query.collection].delete_one(JsonUtils::json2bson(MatchesToJson(query.match)));
                 if (!query_result) {
                   return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
                 }
@@ -281,7 +282,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
               } break;
               default: {
                 // If we're deleting more than one document we use delete_many
-                auto query_result = db[query.collection].delete_many(JsonUtils::json2bson(query.match));
+                auto query_result = db[query.collection].delete_many(JsonUtils::json2bson(MatchesToJson(query.match)));
                 if (!query_result) {
                   return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
                 }

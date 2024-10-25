@@ -39,10 +39,12 @@ namespace outcome = boost::outcome_v2;
 
 namespace PMS {
 template <typename T> using ErrorOr = outcome::result<T>;
-}
+} // namespace PMS
 
 namespace PMS::Utils {
-template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template <class... Ts> struct overloaded : Ts... {
+  using Ts::operator()...;
+};
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 inline std::vector<std::string_view> TokenizeString(const std::string_view str, const char delimiter) {

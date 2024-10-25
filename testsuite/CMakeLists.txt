@@ -2,6 +2,8 @@ add_executable(run_tests
 run_tests.cpp
 db/testHarness.cpp
 db/testMongoDBBackend.cpp
+db/queries/testMatch.cpp
+db/queries/testUpdateAction.cpp
 utils/testUtils.cpp
 )
 target_include_directories(run_tests PRIVATE ${CMAKE_SOURCE_DIR}/testsuite)

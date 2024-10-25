@@ -3,6 +3,7 @@
 #include <magic_enum.hpp>
 
 #include "common/JsonUtils.h"
+#include "common/Utils.h"
 
 namespace PMS::DB::Queries {
 enum class UpdateOp { SET, INC, MUL, MIN, MAX, CURRENT_DATE };
@@ -18,4 +19,8 @@ struct UpdateAction {
     return key == other.key && value == other.value && op == other.op;
   }
 };
+
+using Updates = std::vector<UpdateAction>;
+ErrorOr<DB::Queries::Updates> ToUpdates(const json &match_json);
+
 } // namespace PMS::DB::Queries

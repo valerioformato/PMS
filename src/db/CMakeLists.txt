@@ -10,6 +10,8 @@ install(TARGETS MongoDBUtils DESTINATION lib)
 
 set(DBUtils_src
     harness/Harness.cpp
+    queries/Match.cpp
+    queries/Update.cpp
     backends/MongoDB/MongoDBBackend.cpp
     )
 add_library(DBUtils SHARED ${DBUtils_src})

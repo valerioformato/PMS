@@ -71,7 +71,7 @@ public:
                                   const std::vector<std::pair<std::string, std::string>> &tasks,
                                   const std::vector<std::string> &tags, const json &host_info);
   OperationResult UpdateHeartBeat(std::string_view pilotUuid);
-  OperationResult DeleteHeartBeat(std::string_view pilotUuid);
+  ErrorOr<void> DeleteHeartBeat(std::string_view pilotUuid);
 
   OperationResult AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
 
@@ -80,7 +80,7 @@ public:
     std::string token;
   };
   CreateTaskResult CreateTask(const std::string &task);
-  OperationResult ClearTask(const std::string &task, bool deleteTask = true);
+  ErrorOr<void> ClearTask(const std::string &task, bool deleteTask = true);
 
   std::string Summary(const std::string &user) const;
 
@@ -90,7 +90,7 @@ public:
   };
   enum class DBCollection { Jobs, Pilots };
   enum class QueryOperation { Find, UpdateOne, UpdateMany, DeleteOne, DeleteMany };
-  QueryResult QueryBackDB(QueryOperation operation, const json &match, const json &option) const;
+  ErrorOr<std::string> QueryBackDB(QueryOperation operation, const json &match, const json &option) const;
   QueryResult QueryFrontDB(DBCollection collection, const json &match, const json &filter) const;
 
   OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const;

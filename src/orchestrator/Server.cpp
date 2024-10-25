@@ -88,9 +88,8 @@ std::string Server::HandleCommand(UserCommand &&command) {
             }
 
             auto result = m_director->ClearTask(ucmd.cmd.task);
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
-                       : fmt::format("Failed to clear task \"{}\"", ucmd.cmd.task);
+            return result ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
+                          : fmt::format("Failed to clear task \"{}\"", ucmd.cmd.task);
           },
           // Remove jobs from an existing task
           [this](const OrchCommand<CleanTask> &ucmd) {
@@ -100,9 +99,8 @@ std::string Server::HandleCommand(UserCommand &&command) {
             }
 
             auto result = m_director->ClearTask(ucmd.cmd.task, false);
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
-                       : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
+            return result ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
+                          : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
           },
           // Declare a dependency between tasks
           [this](const OrchCommand<DeclareTaskDependency> &ucmd) {
@@ -146,7 +144,7 @@ std::string Server::HandleCommand(UserCommand &&command) {
           // query db for jobs info
           [this](const OrchCommand<FindJobs> &ucmd) {
             auto result = m_director->QueryBackDB(Director::QueryOperation::Find, ucmd.cmd.match, ucmd.cmd.filter);
-            return result.msg;
+            return result ? result.value() : result.error().message();
           },
           // reset jobs to pending status and 0 retries
           [this](const OrchCommand<ResetJobs> &ucmd) {
@@ -154,7 +152,8 @@ std::string Server::HandleCommand(UserCommand &&command) {
             updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Pending);
             updateAction["$set"]["retries"] = 0;
 
-            return m_director->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match, updateAction).msg;
+            auto result = m_director->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match, updateAction);
+            return result ? result.value() : result.error().message();
           },
           // query db for pilot info
           [this](const OrchCommand<FindPilots> &ucmd) {
@@ -187,7 +186,10 @@ std::string Server::HandleCommand(PilotCommand &&command) {
   return std::visit(
       PMS::Utils::overloaded{
           // request a new job
-          [this](const OrchCommand<ClaimJob> &pcmd) { return m_director->ClaimJob(pcmd.cmd.uuid).dump(); },
+          [this](const OrchCommand<ClaimJob> &pcmd) {
+            auto result = m_director->ClaimJob(pcmd.cmd.uuid);
+            return result ? result.value().dump() : result.error().message();
+          },
           // update job status
           [this](const OrchCommand<UpdateJobStatus> &pcmd) {
             auto result = m_director->UpdateJobStatus(pcmd.cmd.uuid, pcmd.cmd.hash, pcmd.cmd.task, pcmd.cmd.status);
@@ -220,8 +222,7 @@ std::string Server::HandleCommand(PilotCommand &&command) {
           [this](const OrchCommand<DeleteHeartBeat> &pcmd) {
             auto result = m_director->DeleteHeartBeat(pcmd.cmd.uuid);
 
-            return (result == Director::OperationResult::Success) ? fmt::format("Ok")
-                                                                  : fmt::format("Failed to update heartbeat");
+            return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
           },
           // Handle errors
           [this](const OrchCommand<InvalidCommand> &pcmd) {

@@ -26,9 +26,6 @@ struct Options {
   bool operator==(const Options &other) const = default;
 };
 
-using Matches = std::vector<Match>;
-using Updates = std::vector<UpdateAction>;
-
 struct Find {
   GENERATE_QUERY_MEMBERS(Find)
 
@@ -60,7 +57,7 @@ struct Update {
 struct Delete {
   GENERATE_QUERY_MEMBERS(Delete)
 
-  json match;
+  Matches match;
 };
 
 struct Count {
@@ -105,7 +102,7 @@ inline constexpr std::string to_string(const Query &query) {
           },
           [](const Insert &q) { return fmt::format("Insert: {}", json(q.documents).dump()); },
           [](const Update &q) { return fmt::format("Update: {}, {}", DumpMatches(q.match), DumpUpdates(q.update)); },
-          [](const Delete &q) { return fmt::format("Delete: {}", q.match.dump()); },
+          [](const Delete &q) { return fmt::format("Delete: {}", DumpMatches(q.match)); },
           [](const Count &q) { return fmt::format("Count: {}", q.match.dump()); },
           [](const Aggregate &q) { return fmt::format("Aggregate: {}", q.pipeline.dump()); }},
       query);
