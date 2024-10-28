@@ -75,10 +75,9 @@ std::string Server::HandleCommand(UserCommand &&command) {
       PMS::Utils::overloaded{
           // Create a new task
           [this](const OrchCommand<CreateTask> &ucmd) {
-            auto [result, token] = m_director->CreateTask(ucmd.cmd.task);
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Task {} created. Token: {}", ucmd.cmd.task, token)
-                       : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
+            auto result = m_director->CreateTask(ucmd.cmd.task);
+            return result ? fmt::format("Task {} created. Token: {}", ucmd.cmd.task, result.value())
+                          : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
           },
           // Remove an existing task
           [this](const OrchCommand<ClearTask> &ucmd) {
@@ -110,9 +109,8 @@ std::string Server::HandleCommand(UserCommand &&command) {
             }
 
             auto result = m_director->AddTaskDependency(ucmd.cmd.task, ucmd.cmd.dependsOn);
-            return result == Director::OperationResult::Success
-                       ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task, ucmd.cmd.dependsOn)
-                       : fmt::format("Failed to add task dependency");
+            return result ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task, ucmd.cmd.dependsOn)
+                          : fmt::format("Failed to add task dependency");
           },
           // Check if a task/token pair is valid
           [this](const OrchCommand<CheckTaskToken> &ucmd) {
@@ -198,18 +196,19 @@ std::string Server::HandleCommand(PilotCommand &&command) {
           },
           // register a new pilot
           [this](const OrchCommand<RegisterNewPilot> &pcmd) {
-            const auto &[result, validTasks, invalidTasks] = m_director->RegisterNewPilot(
-                pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks, pcmd.cmd.tags, pcmd.cmd.host_info);
+            const auto result = m_director->RegisterNewPilot(pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks,
+                                                             pcmd.cmd.tags, pcmd.cmd.host_info);
+
+            if (!result)
+              return fmt::format("Could not register pilot {}", pcmd.cmd.uuid);
 
             json replyDoc;
             replyDoc["validTasks"] = json::array({});
-            for (const auto &task : validTasks) {
+            for (const auto &task : result.value().validTasks) {
               replyDoc["validTasks"].push_back(task);
             }
 
-            return (result == Director::OperationResult::Success)
-                       ? replyDoc.dump()
-                       : fmt::format("Could not register pilot {}", pcmd.cmd.uuid);
+            return replyDoc.dump();
           },
           // update pilot heartbeat
           [this](const OrchCommand<UpdateHeartBeat> &pcmd) {

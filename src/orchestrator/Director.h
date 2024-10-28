@@ -67,19 +67,15 @@ public:
     std::vector<std::string> validTasks;
     std::vector<std::string> invalidTasks;
   };
-  NewPilotResult RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
-                                  const std::vector<std::pair<std::string, std::string>> &tasks,
-                                  const std::vector<std::string> &tags, const json &host_info);
+  ErrorOr<NewPilotResult> RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
+                                           const std::vector<std::pair<std::string, std::string>> &tasks,
+                                           const std::vector<std::string> &tags, const json &host_info);
   OperationResult UpdateHeartBeat(std::string_view pilotUuid);
   ErrorOr<void> DeleteHeartBeat(std::string_view pilotUuid);
 
-  OperationResult AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
+  ErrorOr<void> AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
 
-  struct CreateTaskResult {
-    OperationResult result;
-    std::string token;
-  };
-  CreateTaskResult CreateTask(const std::string &task);
+  ErrorOr<std::string> CreateTask(const std::string &task);
   ErrorOr<void> ClearTask(const std::string &task, bool deleteTask = true);
 
   std::string Summary(const std::string &user) const;

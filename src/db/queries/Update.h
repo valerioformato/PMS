@@ -6,7 +6,7 @@
 #include "common/Utils.h"
 
 namespace PMS::DB::Queries {
-enum class UpdateOp { SET, INC, MUL, MIN, MAX, CURRENT_DATE };
+enum class UpdateOp { SET, INC, MUL, MIN, MAX, PUSH, CURRENT_DATE };
 
 struct UpdateAction {
   std::string key;
