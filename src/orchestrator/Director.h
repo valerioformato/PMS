@@ -95,12 +95,13 @@ public:
 private:
   void JobInsert();
   void JobTransfer();
-  ErrorOr<void> UpdateTasks();
+  void UpdateTasks();
   void UpdateDeadPilots();
-  void UpdateTaskCounts(Task &task);
   void WriteJobUpdates();
   void WriteHeartBeatUpdates();
   void DBSync();
+
+  ErrorOr<void> UpdateTaskCounts(Task &task);
 
   struct PilotInfo {
     std::vector<std::string> tasks;

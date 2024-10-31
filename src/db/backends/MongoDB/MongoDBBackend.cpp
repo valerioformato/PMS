@@ -88,7 +88,7 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
 
 json MongoDBBackend::MatchesToJson(const Queries::Matches &matches) {
   if (matches.empty())
-    return {};
+    return "{}"_json;
 
   json result = json::object();
 
@@ -209,7 +209,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                 if (!query_result) {
                   return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
                 }
-                result["inserted_id"] = query_result.value().inserted_id().get_string();
+                result["inserted_id"] = query_result.value().inserted_id().get_oid().value.to_string();
               } break;
               default: {
                 // If we're inserting more than one document we use insert_many
@@ -296,8 +296,12 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
             return ErrorOr<QueryResult>{result};
           },
           [&](const Queries::Count &query) {
-            // TODO: Implement count queries
-            return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::not_supported)};
+            try {
+              auto result = db[query.collection].count_documents(JsonUtils::json2bson(MatchesToJson(query.match)));
+              return ErrorOr<QueryResult>{json{{"count", result}}};
+            } catch (const mongocxx::exception &e) {
+              return ErrorOr<QueryResult>{outcome::failure(e.code())};
+            }
           },
           [&](const Queries::Aggregate &query) {
             // TODO: Implement aggregate queries

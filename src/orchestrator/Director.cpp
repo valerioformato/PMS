@@ -221,7 +221,7 @@ Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
                            const std::vector<std::string> &tags, const json &host_info) {
   NewPilotResult result{OperationResult::Success, {}, {}};
 
-  auto handle = m_frontPoolHandle->DBHandle();
+  m_logger->trace("Registering new pilot: {}", pilotUuid);
 
   json query;
   query["uuid"] = pilotUuid;
@@ -240,13 +240,21 @@ Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
 
   m_activePilots[std::string(pilotUuid)] = PilotInfo{result.validTasks, tags};
 
-  auto query_result = TRY(m_frontDB->RunQuery(DB::Queries::Insert{
-      .collection = "pilots",
-      .documents = {query},
-  }));
+  try {
+    auto query_result = TRY(m_frontDB->RunQuery(DB::Queries::Insert{
+        .collection = "pilots",
+        .documents = {query},
+    }));
 
-  return query_result ? outcome::success(result)
-                      : ErrorOr<Director::NewPilotResult>{outcome::failure(boost::system::errc::invalid_argument)};
+    m_logger->trace("Query result: {}", query_result.dump(2));
+
+    return !query_result.empty()
+               ? outcome::success(result)
+               : ErrorOr<Director::NewPilotResult>{outcome::failure(boost::system::errc::invalid_argument)};
+  } catch (const std::exception &e) {
+    m_logger->error("Failed to register new pilot: {}", e.what());
+    return ErrorOr<Director::NewPilotResult>{outcome::failure(boost::system::errc::invalid_argument)};
+  }
 }
 
 Director::OperationResult Director::UpdateHeartBeat(std::string_view pilotUuid) {
@@ -297,7 +305,6 @@ void Director::WriteHeartBeatUpdates() {
 }
 
 ErrorOr<void> Director::DeleteHeartBeat(std::string_view pilotUuid) {
-  auto handle = m_frontPoolHandle->DBHandle();
 
   if (auto pilotIt = m_activePilots.find(std::string{pilotUuid}); pilotIt != end(m_activePilots))
     m_activePilots.erase(pilotIt);
@@ -395,8 +402,6 @@ ErrorOr<void> Director::ClearTask(const std::string &task, bool deleteTask) {
 void Director::JobInsert() {
   static constexpr auto coolDown = std::chrono::milliseconds(10);
 
-  auto handle = m_backPoolHandle->DBHandle();
-
   std::vector<json> toBeInserted;
   do {
     while (!m_incomingJobs.empty()) {
@@ -436,7 +441,7 @@ void Director::JobInsert() {
     if (!toBeInserted.empty()) {
       m_logger->trace("Inserting {} new jobs into backend DB", toBeInserted.size());
 
-      m_backDB->RunQuery(DB::Queries::Insert{
+      auto result = m_backDB->RunQuery(DB::Queries::Insert{
           .collection = "jobs",
           .documents = toBeInserted,
       });
@@ -452,36 +457,51 @@ void Director::JobTransfer() {
   auto bHandle = m_backPoolHandle->DBHandle();
   auto fHandle = m_frontPoolHandle->DBHandle();
 
-  std::vector<bsoncxx::document::view_or_value> toBeInserted;
+  std::vector<json> toBeInserted;
   std::vector<mongocxx::model::write> writeOps;
 
   do {
     // collect jobs from each active task
-    for (const auto &task : m_tasks) {
-      if (!task.second.readyForScheduling || !task.second.IsActive()) {
+    for (const auto &[name, task] : m_tasks) {
+      if (!task.readyForScheduling || !task.IsActive()) {
         continue;
       }
 
-      json getJobsQuery;
-      getJobsQuery["task"] = task.second.name;
-      getJobsQuery["inFrontDB"]["$exists"] = false;
+      DB::Queries::Matches matches{
+          {"task", task.name},
+          {"inFrontDB", false, DB::Queries::ComparisonOp::EXISTS},
+      };
 
-      auto queryResult = RetryIfFailsWith<mongocxx::exception>(
-          [&]() { return bHandle["jobs"].find(JsonUtils::json2bson(getJobsQuery)); });
-      for (const auto &job : queryResult) {
+      auto maybe_query_result = m_backDB->RunQuery(DB::Queries::Find{
+          .collection = "jobs",
+          .match = matches,
+      });
+
+      if (!maybe_query_result) {
+        m_logger->error("Failed to query backend DB for jobs");
+        continue;
+      }
+
+      for (auto &job : maybe_query_result.value()) {
         // filtering out the _id field
-        toBeInserted.push_back(
-            JsonUtils::filter(job, [](const bsoncxx::document::element &el) { return el.key() == "_id"; }));
+        job.erase("_id");
+        toBeInserted.push_back(job);
       }
     }
 
     if (!toBeInserted.empty()) {
       m_logger->debug("Inserting {} new jobs into frontend DB", toBeInserted.size());
-      RetryIfFailsWith<mongocxx::exception>([&]() { fHandle["jobs"].insert_many(toBeInserted); });
+      auto insert_result = m_frontDB->RunQuery(DB::Queries::Insert{
+          .collection = "jobs",
+          .documents = toBeInserted,
+      });
 
-      std::transform(begin(toBeInserted), end(toBeInserted), std::back_inserter(writeOps), [](const auto &jobIt) {
-        json job = JsonUtils::bson2json(jobIt);
+      if (!insert_result) {
+        m_logger->error("Failed to insert jobs into frontend DB");
+        continue;
+      }
 
+      std::transform(begin(toBeInserted), end(toBeInserted), std::back_inserter(writeOps), [](const auto &job) {
         json updateFilter;
         updateFilter["hash"] = job["hash"];
 
@@ -499,17 +519,24 @@ void Director::JobTransfer() {
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
-ErrorOr<void> Director::UpdateTasks() {
+void Director::UpdateTasks() {
   static constexpr auto coolDown = std::chrono::seconds(60);
 
   do {
     m_logger->debug("Updating tasks");
 
     // get list of all tasks
-    auto tasksResult = TRY(m_backDB->RunQuery(DB::Queries::Find{
+    auto maybe_tasksResult = m_backDB->RunQuery(DB::Queries::Find{
         .collection = "tasks",
         .filter = "{}"_json,
-    }));
+    });
+
+    if (!maybe_tasksResult) {
+      m_logger->error("Failed to query backend DB for tasks");
+      continue;
+    }
+
+    auto tasksResult = maybe_tasksResult.value();
 
     for (const auto &tmpdoc : tasksResult) {
 
@@ -565,7 +592,9 @@ ErrorOr<void> Director::UpdateTasks() {
           }
 
           if (requiredTaskIt->second.IsFailed()) {
-            TRY(markTaskAsFailed(task.name));
+            if (auto maybe_result = markTaskAsFailed(task.name); !maybe_result) {
+              m_logger->error("Failed to mark task {} as failed", task.name);
+            }
             continue;
           }
 
@@ -575,7 +604,10 @@ ErrorOr<void> Director::UpdateTasks() {
         task.readyForScheduling = taskIsReady;
       }
 
-      UpdateTaskCounts(task);
+      if (auto update_result = UpdateTaskCounts(task); !update_result) {
+        m_logger->error("Failed to update task counts for task {}", task.name);
+      }
+
       std::vector<std::string> statusSummary;
       for (auto status : magic_enum::enum_values<JobStatus>()) {
         statusSummary.push_back(fmt::format("{} {}", task.jobs[status], magic_enum::enum_name(status)));
@@ -589,19 +621,26 @@ ErrorOr<void> Director::UpdateTasks() {
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
-void Director::UpdateTaskCounts(Task &task) { // update job counters in task
+ErrorOr<void> Director::UpdateTaskCounts(Task &task) { // update job counters in task
   auto backHandle = m_backPoolHandle->DBHandle();
 
-  json countQuery;
-  countQuery["task"] = task.name;
-  task.totJobs = RetryIfFailsWith<mongocxx::exception>(
-      [&]() { return backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery)); });
+  DB::Queries::Matches matches{{"task", task.name}};
+  auto query_result = TRY(m_backDB->RunQuery(DB::Queries::Count{
+      .collection = "jobs",
+      .match = matches,
+  }));
+  task.totJobs = query_result["count"].get<unsigned int>();
 
   for (auto status : magic_enum::enum_values<JobStatus>()) {
-    countQuery["status"] = magic_enum::enum_name(status);
-    task.jobs[status] = RetryIfFailsWith<mongocxx::exception>(
-        [&]() { return backHandle["jobs"].count_documents(JsonUtils::json2bson(countQuery)); });
+    matches = {{"task", task.name}, {"status", magic_enum::enum_name(status)}};
+    query_result = TRY(m_backDB->RunQuery(DB::Queries::Count{
+        .collection = "jobs",
+        .match = matches,
+    }));
+    task.jobs[status] = query_result["count"].get<unsigned int>();
   }
+
+  return outcome::success();
 }
 
 void Director::UpdateDeadPilots() {

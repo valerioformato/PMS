@@ -63,7 +63,7 @@ struct Delete {
 struct Count {
   GENERATE_QUERY_MEMBERS(Count)
 
-  json match;
+  Matches match;
 };
 
 struct Aggregate {
@@ -77,6 +77,10 @@ struct Aggregate {
 using Query = std::variant<Find, FindOneAndUpdate, Insert, Update, Delete, Count, Aggregate>;
 
 inline std::string DumpMatches(const Matches &matches) {
+  if (matches.empty()) {
+    return "{}";
+  }
+
   std::string result;
   for (const auto &match : matches) {
     result += match.dump() + ", ";
@@ -103,7 +107,7 @@ inline constexpr std::string to_string(const Query &query) {
           [](const Insert &q) { return fmt::format("Insert: {}", json(q.documents).dump()); },
           [](const Update &q) { return fmt::format("Update: {}, {}", DumpMatches(q.match), DumpUpdates(q.update)); },
           [](const Delete &q) { return fmt::format("Delete: {}", DumpMatches(q.match)); },
-          [](const Count &q) { return fmt::format("Count: {}", q.match.dump()); },
+          [](const Count &q) { return fmt::format("Count: {}", DumpMatches(q.match)); },
           [](const Aggregate &q) { return fmt::format("Aggregate: {}", q.pipeline.dump()); }},
       query);
 }

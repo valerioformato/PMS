@@ -6,7 +6,7 @@
 #include "common/Utils.h"
 
 namespace PMS::DB::Queries {
-enum class ComparisonOp { EQ, NE, GT, GTE, LT, LTE, IN, TYPE, ALL };
+enum class ComparisonOp { EQ, NE, GT, GTE, LT, LTE, IN, TYPE, ALL, EXISTS };
 
 struct Match {
   std::string key;

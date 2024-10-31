@@ -196,6 +196,7 @@ std::string Server::HandleCommand(PilotCommand &&command) {
           },
           // register a new pilot
           [this](const OrchCommand<RegisterNewPilot> &pcmd) {
+            m_logger->trace("Registering new pilot: {}", pcmd.cmd.uuid);
             const auto result = m_director->RegisterNewPilot(pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks,
                                                              pcmd.cmd.tags, pcmd.cmd.host_info);
 
@@ -285,7 +286,8 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
     return;
   }
 
-  std::string reply = HandleCommand(toPilotCommand(parsedMessage));
+  auto &&pcommand = toPilotCommand(parsedMessage);
+  std::string reply = HandleCommand(std::move(pcommand));
 
   m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
@@ -492,7 +494,7 @@ PilotCommand Server::toPilotCommand(const json &msg) {
         std::ranges::transform(msg["tags"], std::back_inserter(tags), [](const auto &tag) { return to_string(tag); });
       }
       return OrchCommand<RegisterNewPilot>{to_string(msg["pilotUuid"]), to_string(msg["user"]), std::move(tasks),
-                                           std::move(tags), to_string(msg["host"])};
+                                           std::move(tags), msg["host"]};
     }
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", RegisterNewPilot::requiredFields);
