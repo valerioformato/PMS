@@ -39,6 +39,7 @@ namespace outcome = boost::outcome_v2;
 
 namespace PMS {
 struct Error {
+  Error() = default;
   Error(std::error_code code, std::string_view msg) : m_code(code), m_msg(msg) {}
   Error(std::errc code, std::string_view msg) : m_code(std::make_error_code(code)), m_msg(msg) {}
 
@@ -49,6 +50,7 @@ private:
   std::error_code m_code;
   std::string m_msg;
 };
+static_assert(std::is_default_constructible_v<Error>, "PMS::Error must be default constructible");
 
 inline std::error_code make_error_code(Error e) { return e.Code(); }
 static_assert(outcome::trait::is_error_code_available_v<Error>, "Error must have a make_error_code function");

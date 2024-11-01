@@ -86,6 +86,9 @@ target_include_directories(PMSWebsockets INTERFACE ${websocketpp_SOURCE_DIR})
 target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost::regex)
 
 # === mongocxx ===
+set(ENABLE_TESTS
+    OFF
+    CACHE INTERNAL "") # Forces the value
 FetchContent_Declare(mongo-cxx
 GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
   GIT_TAG r3.9.0
