@@ -114,4 +114,84 @@ SCENARIO("MatchesToJson function converts match objects to JSON format", "[Match
     }
   }
 }
+SCENARIO("MongoDBBackend::UpdatesToJson", "[MongoDBBackend]") {
+  GIVEN("An empty updates list") {
+    Queries::Updates updates;
+
+    WHEN("UpdatesToJson is called") {
+      auto result = ::PMS::DB::MongoDBBackend::UpdatesToJson(updates);
+
+      THEN("The result should be an empty JSON object") { REQUIRE(result.empty()); }
+    }
+  }
+
+  GIVEN("A single update with SET operation") {
+    Queries::Updates updates = {{"field1", "value1", Queries::UpdateOp::SET}};
+
+    WHEN("UpdatesToJson is called") {
+      auto result = ::PMS::DB::MongoDBBackend::UpdatesToJson(updates);
+
+      THEN("The result should contain the correct update operation") {
+        json expected = {{"$set", {{"field1", "value1"}}}};
+        REQUIRE(result == expected);
+      }
+    }
+  }
+
+  GIVEN("Multiple updates with different operations") {
+    Queries::Updates updates = {
+        {"field1", "value1", Queries::UpdateOp::SET},
+        {"field2", 42, Queries::UpdateOp::INC},
+    };
+
+    WHEN("UpdatesToJson is called") {
+      auto result = ::PMS::DB::MongoDBBackend::UpdatesToJson(updates);
+
+      THEN("The result should contain all the update operations") {
+        json expected = {{"$set", {{"field1", "value1"}}}, {"$inc", {{"field2", 42}}}};
+        REQUIRE(result == expected);
+      }
+    }
+  }
+
+  GIVEN("An update with a nested field") {
+    Queries::Updates updates = {{"nested.field", "value", Queries::UpdateOp::SET}};
+
+    WHEN("UpdatesToJson is called") {
+      auto result = ::PMS::DB::MongoDBBackend::UpdatesToJson(updates);
+
+      THEN("The result should contain the correct nested update operation") {
+        json expected = {{"$set", {{"nested.field", "value"}}}};
+        REQUIRE(result == expected);
+      }
+    }
+  }
+
+  GIVEN("An update with multiple nested fields") {
+    Queries::Updates updates = {{"nested.field1", "value1", Queries::UpdateOp::SET},
+                                {"nested.field2", 100, Queries::UpdateOp::INC}};
+
+    WHEN("UpdatesToJson is called") {
+      auto result = ::PMS::DB::MongoDBBackend::UpdatesToJson(updates);
+
+      THEN("The result should contain the correct nested update operations") {
+        json expected = {{"$set", {{"nested.field1", "value1"}}}, {"$inc", {{"nested.field2", 100}}}};
+        REQUIRE(result == expected);
+      }
+    }
+  }
+
+  GIVEN("An update with a complex nested field structure") {
+    Queries::Updates updates = {{"nested.level1.level2.field", "value", Queries::UpdateOp::SET}};
+
+    WHEN("UpdatesToJson is called") {
+      auto result = ::PMS::DB::MongoDBBackend::UpdatesToJson(updates);
+
+      THEN("The result should contain the correct complex nested update operation") {
+        json expected = {{"$set", {{"nested.level1.level2.field", "value"}}}};
+        REQUIRE(result == expected);
+      }
+    }
+  }
+}
 } // namespace PMS::Tests::MongoDBBackend

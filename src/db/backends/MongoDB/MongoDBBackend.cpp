@@ -132,6 +132,7 @@ json MongoDBBackend::UpdatesToJson(const Queries::Updates &updates) {
   for (const auto &[field, value, op] : updates) {
     std::string op_name{magic_enum::enum_name(op)};
     std::ranges::transform(op_name, op_name.begin(), ::tolower);
+    op_name.insert(0, "$");
     result[op_name] = json{{field, value}};
   }
 
