@@ -50,7 +50,8 @@ SCENARIO("ToMatches function", "[ToMatches]") {
 
       THEN("It should return a failure outcome") {
         REQUIRE(result.has_error());
-        REQUIRE(result.assume_error() == boost::system::errc::invalid_argument);
+        REQUIRE(result.assume_error().Code() == std::errc::invalid_argument);
+        REQUIRE(result.assume_error().Message() == "Invalid comparison operator: $invalid");
       }
     }
   }

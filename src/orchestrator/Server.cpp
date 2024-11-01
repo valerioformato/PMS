@@ -142,7 +142,7 @@ std::string Server::HandleCommand(UserCommand &&command) {
           // query db for jobs info
           [this](const OrchCommand<FindJobs> &ucmd) {
             auto result = m_director->QueryBackDB(Director::QueryOperation::Find, ucmd.cmd.match, ucmd.cmd.filter);
-            return result ? result.value() : result.error().message();
+            return result ? result.value() : std::string{result.error().Message()};
           },
           // reset jobs to pending status and 0 retries
           [this](const OrchCommand<ResetJobs> &ucmd) {
@@ -151,11 +151,12 @@ std::string Server::HandleCommand(UserCommand &&command) {
             updateAction["$set"]["retries"] = 0;
 
             auto result = m_director->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match, updateAction);
-            return result ? result.value() : result.error().message();
+            return result ? result.value() : std::string{result.error().Message()};
           },
           // query db for pilot info
           [this](const OrchCommand<FindPilots> &ucmd) {
-            return m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter).msg;
+            auto result = m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter);
+            return result ? result.value() : std::string{result.error().Message()};
           },
           // Get user summary
           [this](const OrchCommand<Summary> &ucmd) { return m_director->Summary(ucmd.cmd.user); },
@@ -168,8 +169,7 @@ std::string Server::HandleCommand(UserCommand &&command) {
 
             auto result = m_director->ResetFailedJobs(ucmd.cmd.task);
 
-            return result == Director::OperationResult::Success ? fmt::format("Jobs reset")
-                                                                : fmt::format("Jobs reset failed");
+            return result ? fmt::format("Jobs reset") : result.error().Message().data();
           },
           // Handle errors
           [this](const OrchCommand<InvalidCommand> &ucmd) {
@@ -186,7 +186,7 @@ std::string Server::HandleCommand(PilotCommand &&command) {
           // request a new job
           [this](const OrchCommand<ClaimJob> &pcmd) {
             auto result = m_director->ClaimJob(pcmd.cmd.uuid);
-            return result ? result.value().dump() : result.error().message();
+            return result ? result.value().dump() : std::string{result.error().Message()};
           },
           // update job status
           [this](const OrchCommand<UpdateJobStatus> &pcmd) {

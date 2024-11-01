@@ -18,7 +18,7 @@ ErrorOr<void> MongoDBBackend::Connect() {
   try {
     m_pool = std::make_unique<mongocxx::pool>(mongocxx::uri{fmt::format("mongodb://{}/{}", m_dbhost, m_dbname)});
   } catch (const mongocxx::exception &e) {
-    return outcome::failure(e.code());
+    return Error{e.code(), e.what()};
   }
   return outcome::success();
 }
@@ -28,7 +28,7 @@ ErrorOr<void> MongoDBBackend::Connect(std::string_view user, std::string_view pa
     m_pool = std::make_unique<mongocxx::pool>(
         mongocxx::uri{fmt::format("mongodb://{}:{}@{}/{}", user, password, m_dbhost, m_dbname)});
   } catch (const mongocxx::exception &e) {
-    return outcome::failure(e.code());
+    return Error{e.code(), e.what()};
   }
   return outcome::success();
 }
@@ -48,7 +48,7 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
     try {
       db["jobs"].create_index(make_document(kvp("hash", 1)), index_options);
     } catch (const mongocxx::exception &e) {
-      return outcome::failure(e.code());
+      return Error{e.code(), e.what()};
     }
 
     // task is not a unique index :)
@@ -56,7 +56,7 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
     try {
       db["jobs"].create_index(make_document(kvp("task", 1)), index_options);
     } catch (const mongocxx::exception &e) {
-      return outcome::failure(e.code());
+      return Error{e.code(), e.what()};
     }
   }
   if (!db.has_collection("tasks")) {
@@ -67,7 +67,7 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
     try {
       db["tasks"].create_index(make_document(kvp("name", 1)), index_options);
     } catch (const mongocxx::exception &e) {
-      return outcome::failure(e.code());
+      return Error{e.code(), e.what()};
     }
   }
   if (!db.has_collection("pilots")) {
@@ -79,7 +79,7 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
     try {
       db["pilots"].create_index(make_document(kvp("uuid", 1)), index_options);
     } catch (const mongocxx::exception &e) {
-      return outcome::failure(e.code());
+      return Error{e.code(), e.what()};
     }
   }
 
@@ -173,9 +173,9 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
               std::transform(query_result.begin(), query_result.end(), std::back_inserter(result),
                              [](const auto &doc) { return JsonUtils::bson2json(doc); });
             } catch (const mongocxx::exception &e) {
-              return ErrorOr<QueryResult>{outcome::failure(e.code())};
+              return Error{e.code(), e.what()};
             }
-            return ErrorOr<QueryResult>{result};
+            return result;
           },
           // ------------ FindOneAndUpdate queries ------------
           [&](Queries::FindOneAndUpdate &query) -> ErrorOr<QueryResult> {
@@ -191,12 +191,12 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                                                            JsonUtils::json2bson(UpdatesToJson(query.update)), options);
               result = JsonUtils::bson2json(query_result.value());
             } catch (const mongocxx::exception &e) {
-              return ErrorOr<QueryResult>{outcome::failure(e.code())};
+              return Error{e.code(), e.what()};
             }
-            return ErrorOr<QueryResult>{result};
+            return result;
           },
           // ------------ Insert queries ------------
-          [&](const Queries::Insert &query) {
+          [&](const Queries::Insert &query) -> ErrorOr<QueryResult> {
             mongocxx::options::insert options;
             options.bypass_document_validation(query.options.bypass_document_validation);
             QueryResult result;
@@ -207,7 +207,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                 // If we're inserting only one document we use insert_one
                 auto query_result = db[query.collection].insert_one(JsonUtils::json2bson(query.documents[0]));
                 if (!query_result) {
-                  return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                  return Error{std::errc::operation_canceled, "Insert not acknowledged"};
                 }
                 result["inserted_id"] = query_result.value().inserted_id().get_oid().value.to_string();
               } break;
@@ -218,19 +218,19 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                                        [&](const auto &doc) { return JsonUtils::json2bson(doc); });
                 auto query_result = db[query.collection].insert_many(to_be_inserted);
                 if (!query_result) {
-                  return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                  return Error{std::errc::operation_canceled, "Insert not acknowledged"};
                 }
                 result["inserted_count"] = query_result.value().inserted_count();
               } break;
               }
             } catch (const mongocxx::exception &e) {
-              return ErrorOr<QueryResult>{outcome::failure(e.code())};
+              return Error{e.code(), e.what()};
             }
 
-            return ErrorOr<QueryResult>{result};
+            return result;
           },
           // ------------ Update queries ------------
-          [&](Queries::Update &query) {
+          [&](Queries::Update &query) -> ErrorOr<QueryResult> {
             mongocxx::options::update options;
             options.upsert(query.options.upsert);
             QueryResult result;
@@ -243,7 +243,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                     db[query.collection].update_one(JsonUtils::json2bson(MatchesToJson(query.match)),
                                                     JsonUtils::json2bson(UpdatesToJson(query.update)), options);
                 if (!query_result) {
-                  return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                  return Error{std::errc::operation_canceled, "Update not acknowledged"};
                 }
                 result["matched_count"] = query_result.value().matched_count();
                 result["modified_count"] = query_result.value().modified_count();
@@ -254,20 +254,20 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                     db[query.collection].update_many(JsonUtils::json2bson(MatchesToJson(query.match)),
                                                      JsonUtils::json2bson(UpdatesToJson(query.update)), options);
                 if (!query_result) {
-                  return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                  return Error{std::errc::operation_canceled, "Update not acknowledged"};
                 }
                 result["matched_count"] = query_result.value().matched_count();
                 result["modified_count"] = query_result.value().modified_count();
               } break;
               }
             } catch (const mongocxx::exception &e) {
-              return ErrorOr<QueryResult>{outcome::failure(e.code())};
+              return Error{e.code(), e.what()};
             }
 
-            return ErrorOr<QueryResult>{result};
+            return result;
           },
           // ------------ Delete queries ------------
-          [&](Queries::Delete &query) {
+          [&](Queries::Delete &query) -> ErrorOr<QueryResult> {
             QueryResult result;
 
             try {
@@ -276,7 +276,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                 // If we're deleting only one document we use delete_one
                 auto query_result = db[query.collection].delete_one(JsonUtils::json2bson(MatchesToJson(query.match)));
                 if (!query_result) {
-                  return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                  return Error{std::errc::operation_canceled, "Delete not acknowledged"};
                 }
                 result["deleted_count"] = query_result.value().deleted_count();
               } break;
@@ -284,28 +284,28 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                 // If we're deleting more than one document we use delete_many
                 auto query_result = db[query.collection].delete_many(JsonUtils::json2bson(MatchesToJson(query.match)));
                 if (!query_result) {
-                  return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::invalid_argument)};
+                  return Error{std::errc::operation_canceled, "Delete not acknowledged"};
                 }
                 result["deleted_count"] = query_result.value().deleted_count();
               } break;
               }
             } catch (const mongocxx::exception &e) {
-              return ErrorOr<QueryResult>{outcome::failure(e.code())};
+              return Error{e.code(), e.what()};
             }
 
-            return ErrorOr<QueryResult>{result};
+            return result;
           },
-          [&](const Queries::Count &query) {
+          [&](const Queries::Count &query) -> ErrorOr<QueryResult> {
             try {
               auto result = db[query.collection].count_documents(JsonUtils::json2bson(MatchesToJson(query.match)));
-              return ErrorOr<QueryResult>{json{{"count", result}}};
+              return json{{"count", result}};
             } catch (const mongocxx::exception &e) {
-              return ErrorOr<QueryResult>{outcome::failure(e.code())};
+              return Error{e.code(), e.what()};
             }
           },
-          [&](const Queries::Aggregate &query) {
+          [&](const Queries::Aggregate &query) -> ErrorOr<QueryResult> {
             // TODO: Implement aggregate queries
-            return ErrorOr<QueryResult>{outcome::failure(boost::system::errc::not_supported)};
+            return Error{std::errc::not_supported, "Aggregate queries not supported yet"};
           },
       },
       query);

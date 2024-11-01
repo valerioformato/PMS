@@ -18,7 +18,7 @@ auto ToMatches(const json &match_json) -> ErrorOr<DB::Queries::Matches> {
         if (comp.has_value()) {
           matches.emplace_back(key, val, comp.value());
         } else {
-          return outcome::failure(boost::system::errc::invalid_argument);
+          return Error(std::errc::invalid_argument, fmt::format("Invalid comparison operator: {}", op));
         }
       }
     } else {
@@ -26,7 +26,7 @@ auto ToMatches(const json &match_json) -> ErrorOr<DB::Queries::Matches> {
     }
   }
 
-  return outcome::success(matches);
+  return matches;
 };
 
 } // namespace PMS::DB::Queries

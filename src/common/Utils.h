@@ -38,13 +38,32 @@ namespace outcome = boost::outcome_v2;
   })
 
 namespace PMS {
-template <typename T> using ErrorOr = outcome::result<T>;
+struct Error {
+  Error(std::error_code code, std::string_view msg) : m_code(code), m_msg(msg) {}
+  Error(std::errc code, std::string_view msg) : m_code(std::make_error_code(code)), m_msg(msg) {}
+
+  const std::string_view Message() const { return m_msg; }
+  std::error_code Code() const { return m_code; }
+
+private:
+  std::error_code m_code;
+  std::string m_msg;
+};
+
+inline std::error_code make_error_code(Error e) { return e.Code(); }
+static_assert(outcome::trait::is_error_code_available_v<Error>, "Error must have a make_error_code function");
+
+inline void outcome_throw_as_system_error_with_payload(const ::PMS::Error &error) {
+  BOOST_OUTCOME_THROW_EXCEPTION(std::system_error(error.Code())); // NOLINT
+}
+} // namespace PMS
+
+namespace PMS {
+template <typename T> using ErrorOr = outcome::result<T, Error>;
 } // namespace PMS
 
 namespace PMS::Utils {
-template <class... Ts> struct overloaded : Ts... {
-  using Ts::operator()...;
-};
+template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 inline std::vector<std::string_view> TokenizeString(const std::string_view str, const char delimiter) {

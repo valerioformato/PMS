@@ -15,13 +15,13 @@ auto ToUpdates(const json &match_json) -> ErrorOr<DB::Queries::Updates> {
         if (comp.has_value()) {
           updates.emplace_back(key, val, comp.value());
         } else {
-          return outcome::failure(boost::system::errc::invalid_argument);
+          return Error(std::errc::invalid_argument, fmt::format("Invalid comparison operator: {}", op));
         }
       }
     }
   }
 
-  return outcome::success(updates);
+  return updates;
 };
 
 } // namespace PMS::DB::Queries

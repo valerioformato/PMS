@@ -80,17 +80,13 @@ public:
 
   std::string Summary(const std::string &user) const;
 
-  struct QueryResult {
-    OperationResult result;
-    std::string msg;
-  };
   enum class DBCollection { Jobs, Pilots };
   enum class QueryOperation { Find, UpdateOne, UpdateMany, DeleteOne, DeleteMany };
   ErrorOr<std::string> QueryBackDB(QueryOperation operation, const json &match, const json &option) const;
-  QueryResult QueryFrontDB(DBCollection collection, const json &match, const json &filter) const;
+  ErrorOr<std::string> QueryFrontDB(DBCollection collection, const json &match, const json &filter) const;
 
   OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const;
-  OperationResult ResetFailedJobs(std::string_view taskname);
+  ErrorOr<void> ResetFailedJobs(std::string_view taskname);
 
 private:
   void JobInsert();

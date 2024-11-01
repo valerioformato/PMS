@@ -240,21 +240,12 @@ Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
 
   m_activePilots[std::string(pilotUuid)] = PilotInfo{result.validTasks, tags};
 
-  try {
-    auto query_result = TRY(m_frontDB->RunQuery(DB::Queries::Insert{
-        .collection = "pilots",
-        .documents = {query},
-    }));
+  auto query_result = TRY(m_frontDB->RunQuery(DB::Queries::Insert{
+      .collection = "pilots",
+      .documents = {query},
+  }));
 
-    m_logger->trace("Query result: {}", query_result.dump(2));
-
-    return !query_result.empty()
-               ? outcome::success(result)
-               : ErrorOr<Director::NewPilotResult>{outcome::failure(boost::system::errc::invalid_argument)};
-  } catch (const std::exception &e) {
-    m_logger->error("Failed to register new pilot: {}", e.what());
-    return ErrorOr<Director::NewPilotResult>{outcome::failure(boost::system::errc::invalid_argument)};
-  }
+  return result;
 }
 
 Director::OperationResult Director::UpdateHeartBeat(std::string_view pilotUuid) {
@@ -317,7 +308,7 @@ ErrorOr<void> Director::DeleteHeartBeat(std::string_view pilotUuid) {
       .match = matches,
   }));
 
-  return query_result ? ErrorOr<void>{outcome::success()} : outcome::failure(boost::system::errc::invalid_argument);
+  return outcome::success();
 }
 
 ErrorOr<void> Director::AddTaskDependency(const std::string &task, const std::string &dependsOn) {
@@ -349,7 +340,7 @@ ErrorOr<void> Director::AddTaskDependency(const std::string &task, const std::st
 
 ErrorOr<std::string> Director::CreateTask(const std::string &task) {
   if (m_tasks.find(task) != end(m_tasks)) {
-    return outcome::failure(boost::system::errc::invalid_argument);
+    return Error{std::errc::file_exists, "Task already exists"};
   }
 
   m_logger->trace("Creating task {}", task);
@@ -371,7 +362,7 @@ ErrorOr<std::string> Director::CreateTask(const std::string &task) {
       .documents = {insertQuery},
   }));
 
-  return outcome::success(token);
+  return token;
 }
 
 ErrorOr<void> Director::ClearTask(const std::string &task, bool deleteTask) {
@@ -848,10 +839,7 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
         .update = update_action,
     }));
 
-    if (!result)
-      return outcome::failure(boost::system::errc::invalid_argument);
-
-    return outcome::success(fmt::format("Updated job {}", to_string_view(match["hash"])));
+    return fmt::format("Updated job {}", to_string_view(match["hash"]));
   }
   case QueryOperation::UpdateMany: {
     auto matches = TRY(PMS::DB::Queries::ToMatches(match));
@@ -864,11 +852,8 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
         .update = update_action,
     }));
 
-    if (!result)
-      return outcome::failure(boost::system::errc::invalid_argument);
-
-    return outcome::success(fmt::format("Matched {} jobs. Updated {} jobs", to_string(result["matched_count"]),
-                                        to_string(result["modified_count"])));
+    return fmt::format("Matched {} jobs. Updated {} jobs", to_string(result["matched_count"]),
+                       to_string(result["modified_count"]));
   }
   case QueryOperation::DeleteOne: {
     auto matches = TRY(PMS::DB::Queries::ToMatches(match));
@@ -885,7 +870,7 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
         .match = matches,
     }));
 
-    return outcome::success(fmt::format("Deleted job {}", to_string_view(match["hash"])));
+    return fmt::format("Deleted job {}", to_string_view(match["hash"]));
   }
   case QueryOperation::DeleteMany: {
     auto matches = TRY(PMS::DB::Queries::ToMatches(match));
@@ -900,7 +885,7 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
         .match = matches,
     }));
 
-    return outcome::success(fmt::format("Deleted {} jobs", to_string_view(result["deleted_count"])));
+    return fmt::format("Deleted {} jobs", to_string_view(result["deleted_count"]));
   }
   case QueryOperation::Find: {
     json projectionOpt;
@@ -920,15 +905,14 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
         .filter = projectionOpt,
     }));
 
-    return outcome::success(resp.dump());
+    return resp.dump();
   }
   }
 
-  return outcome::failure(boost::system::errc::not_supported);
+  return Error(std::errc::not_supported, "Operation not supported");
 }
 
-Director::QueryResult Director::QueryFrontDB(DBCollection collection, const json &match, const json &filter) const {
-  auto handle = m_frontPoolHandle->DBHandle();
+ErrorOr<std::string> Director::QueryFrontDB(DBCollection collection, const json &match, const json &filter) const {
 
   std::string_view collection_name;
   switch (collection) {
@@ -947,54 +931,54 @@ Director::QueryResult Director::QueryFrontDB(DBCollection collection, const json
     projectionOpt = filter;
     projectionOpt["_id"] = 0;
   }
-  mongocxx::options::find query_options;
-  query_options.projection(JsonUtils::json2bson(projectionOpt));
+
+  DB::Queries::Matches matches = TRY(PMS::DB::Queries::ToMatches(match));
+  auto query_result = TRY(m_frontDB->RunQuery(DB::Queries::Find{
+      .collection = collection_name.data(),
+      .match = matches,
+      .filter = projectionOpt,
+  }));
 
   json resp;
-  resp["result"] = json::array({});
+  resp["result"] = query_result;
 
-  auto query_result = RetryIfFailsWith<mongocxx::exception>(
-      [&]() { return handle[collection_name.data()].find(JsonUtils::json2bson(match), query_options); });
-  std::transform(query_result.begin(), query_result.end(), std::back_inserter(resp["result"]),
-                 [](const auto &job) { return JsonUtils::bson2json(job); });
-
-  return {OperationResult::Success, resp.dump()};
+  return resp.dump();
 }
 
-Director::OperationResult Director::ResetFailedJobs(std::string_view taskname) {
-  json filter;
-  filter["task"] = taskname;
-  filter["status"] = magic_enum::enum_name(JobStatus::Failed);
+ErrorOr<void> Director::ResetFailedJobs(std::string_view taskname) {
 
-  json updateAction;
-  updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Pending);
-  updateAction["$set"]["retries"] = 0;
+  DB::Queries::Matches matches = {
+      {"task", taskname},
+      {"status", magic_enum::enum_name(JobStatus::Failed)},
+  };
 
-  try {
-    auto front_handle = m_frontPoolHandle->DBHandle();
-    auto n_docs = RetryIfFailsWith<mongocxx::exception>(
-        [&]() { return front_handle["jobs"].count_documents(JsonUtils::json2bson(filter)); });
-    m_logger->debug("ResetFailedJobs: Found {} documents in front DB to update", n_docs);
-    RetryIfFailsWith<mongocxx::exception>(
-        [&]() { front_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction)); });
+  DB::Queries::Updates update_action{
+      {"status", magic_enum::enum_name(JobStatus::Pending)},
+      {"retries", 0},
+  };
 
-    auto back_handle = m_backPoolHandle->DBHandle();
-    n_docs = RetryIfFailsWith<mongocxx::exception>(
-        [&]() { return back_handle["jobs"].count_documents(JsonUtils::json2bson(filter)); });
-    m_logger->debug("ResetFailedJobs: Found {} documents in back DB to update", n_docs);
-    RetryIfFailsWith<mongocxx::exception>(
-        [&]() { back_handle["jobs"].update_many(JsonUtils::json2bson(filter), JsonUtils::json2bson(updateAction)); });
+  auto result = TRY(m_frontDB->RunQuery(DB::Queries::Update{
+      .collection = "jobs",
+      .match = matches,
+      .update = update_action,
+  }));
+  m_logger->debug("ResetFailedJobs: Found {} documents in front DB to update",
+                  result["matched_count"].get<unsigned int>());
 
-    m_logger->debug("Reset all failed jobs in taskname {}", taskname);
-  } catch (const std::exception &e) {
-    m_logger->error("Server query failed with error {}", e.what());
-    return OperationResult::DatabaseError;
-  }
+  result = TRY(m_backDB->RunQuery(DB::Queries::Update{
+      .collection = "jobs",
+      .match = matches,
+      .update = update_action,
+  }));
+  m_logger->debug("ResetFailedJobs: Found {} documents in back DB to update",
+                  result["matched_count"].get<unsigned int>());
+
+  m_logger->debug("Reset all failed jobs in taskname {}", taskname);
 
   std::string s_taskname{taskname};
-  UpdateTaskCounts(m_tasks.at(s_taskname));
+  TRY(UpdateTaskCounts(m_tasks.at(s_taskname)));
 
-  return Director::OperationResult::Success;
+  return outcome::success();
 }
 
 } // namespace PMS::Orchestrator

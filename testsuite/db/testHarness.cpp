@@ -31,7 +31,7 @@ SCENARIO("Harness Test", "[Harness]") {
     }
 
     WHEN("The backend fails to connect") {
-      REQUIRE_CALL(*mockBackendPtr, Connect()).RETURN(outcome::failure(boost::system::error_code{}));
+      REQUIRE_CALL(*mockBackendPtr, Connect()).RETURN(Error(std::errc::connection_refused, "Connection refused"));
       auto connection_result = harness.Connect();
 
       THEN("The connection should fail") { REQUIRE(connection_result.has_error()); }
@@ -39,7 +39,7 @@ SCENARIO("Harness Test", "[Harness]") {
 
     WHEN("RunQuery is called") {
       PMS::DB::Queries::Query query = PMS::DB::Queries::Find{};
-      REQUIRE_CALL(*mockBackendPtr, RunQuery(query)).RETURN(outcome::success(json{}));
+      REQUIRE_CALL(*mockBackendPtr, RunQuery(query)).RETURN(json{});
       auto query_result = harness.RunQuery(query);
 
       THEN("The query should be successful") { REQUIRE(query_result.has_value()); }
@@ -47,7 +47,7 @@ SCENARIO("Harness Test", "[Harness]") {
 
     WHEN("The backend fails to run the query") {
       PMS::DB::Queries::Query query = PMS::DB::Queries::Find{};
-      REQUIRE_CALL(*mockBackendPtr, RunQuery(query)).RETURN(outcome::failure(boost::system::error_code{}));
+      REQUIRE_CALL(*mockBackendPtr, RunQuery(query)).RETURN(Error(std::errc::operation_canceled, "Operation canceled"));
       auto query_result = harness.RunQuery(query);
 
       THEN("The query should fail") { REQUIRE(query_result.has_error()); }
@@ -61,7 +61,7 @@ SCENARIO("Harness Test", "[Harness]") {
     }
 
     WHEN("The backend fails to setup") {
-      REQUIRE_CALL(*mockBackendPtr, SetupIfNeeded()).RETURN(outcome::failure(boost::system::error_code{}));
+      REQUIRE_CALL(*mockBackendPtr, SetupIfNeeded()).RETURN(Error(std::errc::operation_canceled, "Operation canceled"));
       auto setup_result = harness.SetupIfNeeded();
 
       THEN("The setup should fail") { REQUIRE(setup_result.has_error()); }
