@@ -1,5 +1,6 @@
 stages:
   - build
+  - test
   - dockerize
 
 # TEMPLATES
@@ -8,9 +9,12 @@ stages:
   script:
       - mkdir build
       - cd build
-      - cmake -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_TESTS=ON ../
+      - cmake -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DPMS_ENABLE_TESTS=ON ../
       - ninja
   needs: []
+  artifacts:
+    paths:
+      - build
 
 .build-docker: &build-docker
   <<: *build
@@ -28,6 +32,27 @@ build-ubuntu24.04:
 build-ubuntu22.04:
   <<: *build-docker
   image: vformato/pms-ci:ubuntu22.04
+
+.test: &test
+  stage: test
+  script:
+    - cd build
+    - ./testsuite/run_tests
+
+test-alma9:
+  <<: *test
+  image: vformato/pms-ci:alma9
+  needs: ["build-alma9"]
+
+test-ubuntu22.04:
+  <<: *test
+  image: vformato/pms-ci:ubuntu22.04
+  needs: ["build-ubuntu22.04"]
+
+test-ubuntu24.04:
+  <<: *test
+  image: vformato/pms-ci:ubuntu24.04
+  needs: ["build-ubuntu24.04"]
 
 dockerize-ubuntu24.04:
   stage: dockerize
