@@ -62,7 +62,7 @@ SCENARIO("MatchesToJson function converts match objects to JSON format", "[Match
       json result = ::PMS::DB::MongoDBBackend::MatchesToJson(match);
 
       THEN("The result should be an empty JSON object") {
-        json expected = {};
+        json expected = "{}"_json;
 
         REQUIRE(result == expected);
       }
