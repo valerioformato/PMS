@@ -9,7 +9,7 @@ stages:
   script:
       - mkdir build
       - cd build
-      - cmake -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DPMS_ENABLE_TESTS=ON ../
+      - cmake -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=ON ../
       - ninja
   needs: []
   artifacts:
