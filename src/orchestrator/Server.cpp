@@ -186,6 +186,9 @@ std::string Server::HandleCommand(PilotCommand &&command) {
           // request a new job
           [this](const OrchCommand<ClaimJob> &pcmd) {
             auto result = m_director->ClaimJob(pcmd.cmd.uuid);
+            if (result.has_error()) {
+              m_logger->error("{}", result.error().Message());
+            }
             return result ? result.value().dump() : std::string{result.error().Message()};
           },
           // update job status

@@ -1,8 +1,12 @@
 #include <catch2/catch_all.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <nlohmann/json.hpp>
+#include <ranges>
 
+#include "db/queries/Queries.h"
 #include "db/queries/Update.h"
+
+#include "TestUtils.h"
 
 using namespace PMS::DB::Queries;
 using json = nlohmann::json;
@@ -10,12 +14,12 @@ using json = nlohmann::json;
 SCENARIO("ToUpdates function converts JSON to Updates correctly", "[ToUpdates]") {
   GIVEN("A valid JSON with update operations") {
     json match_json = R"({
-      "field1": {"$set": "value1"},
-      "field2": {"$inc": 10},
-      "field3": {"$mul": 2},
-      "field4": {"$min": 5},
-      "field5": {"$max": 100},
-      "field6": {"$current_date": true}
+      "$set" : {"field1": "value1"},
+      "$inc" : {"field2": 10},
+      "$mul" : {"field3": 2},
+      "$min" : {"field4": 5},
+      "$max" : {"field5": 100},
+      "$current_date" : {"field6": true}
     })"_json;
 
     WHEN("ToUpdates is called") {
@@ -27,19 +31,19 @@ SCENARIO("ToUpdates function converts JSON to Updates correctly", "[ToUpdates]")
         auto updates = result.value();
         REQUIRE(updates.size() == 6);
 
-        REQUIRE(updates[0] == UpdateAction{"field1", "value1", UpdateOp::SET});
-        REQUIRE(updates[1] == UpdateAction{"field2", 10, UpdateOp::INC});
-        REQUIRE(updates[2] == UpdateAction{"field3", 2, UpdateOp::MUL});
-        REQUIRE(updates[3] == UpdateAction{"field4", 5, UpdateOp::MIN});
-        REQUIRE(updates[4] == UpdateAction{"field5", 100, UpdateOp::MAX});
-        REQUIRE(updates[5] == UpdateAction{"field6", true, UpdateOp::CURRENT_DATE});
+        REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field1", "value1", UpdateOp::SET}));
+        REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field2", 10, UpdateOp::INC}));
+        REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field3", 2, UpdateOp::MUL}));
+        REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field4", 5, UpdateOp::MIN}));
+        REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field5", 100, UpdateOp::MAX}));
+        REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field6", true, UpdateOp::CURRENT_DATE}));
       }
     }
   }
 
   GIVEN("An invalid JSON with unknown update operations") {
     json match_json = R"({
-      "field1": {"$unknown": "value1"}
+      "$unknown" : {"field1": "value1"}
     })"_json;
 
     WHEN("ToUpdates is called") {

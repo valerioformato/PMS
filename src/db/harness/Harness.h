@@ -18,9 +18,11 @@ public:
   ErrorOr<void> SetupIfNeeded() { return m_backend->SetupIfNeeded(); }
 
   ErrorOr<QueryResult> RunQuery(Queries::Query query) {
-    spdlog::trace("[Harness] Running query {}", PMS::DB::Queries::to_string(query));
+    m_logger->trace("Running query {}", PMS::DB::Queries::to_string(query));
     return m_backend->RunQuery(query);
   };
+
+  static std::shared_ptr<spdlog::logger> m_logger;
 
 private:
   std::unique_ptr<Backend> m_backend;

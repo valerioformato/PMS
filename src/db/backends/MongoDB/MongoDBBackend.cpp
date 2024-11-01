@@ -130,24 +130,9 @@ json MongoDBBackend::UpdatesToJson(const Queries::Updates &updates) {
   json result = json::object();
 
   for (const auto &[field, value, op] : updates) {
-    // let's split the field by dots
-    auto sub_keys = std::string_view{field} | std::views::split('.');
-
-    // let's add the json element at the right depth, following the sub_keys path
-    auto *current = &result;
-    for (const auto key_v : sub_keys) {
-      std::string_view key{key_v.begin(), key_v.size()};
-
-      // let's walk down the json hierarchy key by key, creating objects if needed
-      if (current->empty()) {
-        (*current)[key] = json::object();
-      }
-      current = &(*current)[key];
-    }
-
     std::string op_name{magic_enum::enum_name(op)};
     std::ranges::transform(op_name, op_name.begin(), ::tolower);
-    *current = json{{fmt::format("${}", op_name), value}};
+    result[op_name] = json{{field, value}};
   }
 
   return result;
@@ -186,6 +171,8 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
 
             QueryResult result;
             try {
+              spdlog::trace("match: {}", MatchesToJson(query.match).dump());
+              spdlog::trace("update: {}", UpdatesToJson(query.update).dump());
               auto query_result =
                   db[query.collection].find_one_and_update(JsonUtils::json2bson(MatchesToJson(query.match)),
                                                            JsonUtils::json2bson(UpdatesToJson(query.update)), options);

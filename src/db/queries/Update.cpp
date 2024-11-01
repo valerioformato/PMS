@@ -4,21 +4,16 @@ namespace PMS::DB::Queries {
 
 auto ToUpdates(const json &match_json) -> ErrorOr<DB::Queries::Updates> {
   DB::Queries::Updates updates;
-  for (const auto &[key, value] : match_json.items()) {
-    if (value.is_object()) {
-      const auto &[op, val] = value.items().begin();
-      if (op.front() == '$') {
-        auto opname = op.substr(1);
-        std::ranges::transform(opname, opname.begin(), ::toupper);
-
-        auto comp = magic_enum::enum_cast<DB::Queries::UpdateOp>(opname);
-        if (comp.has_value()) {
-          updates.emplace_back(key, val, comp.value());
-        } else {
-          return Error(std::errc::invalid_argument, fmt::format("Invalid comparison operator: {}", op));
-        }
-      }
+  for (const auto &[full_op, field_update] : match_json.items()) {
+    auto op_name = full_op.substr(1);
+    std::ranges::transform(op_name, op_name.begin(), ::toupper);
+    auto op = magic_enum::enum_cast<DB::Queries::UpdateOp>(op_name);
+    if (!op.has_value()) {
+      return Error(std::errc::invalid_argument, fmt::format("Invalid comparison operator: {}", full_op));
     }
+
+    const auto &[key, value] = field_update.items().begin();
+    updates.emplace_back(UpdateAction{.key = key, .value = value, .op = op.value()});
   }
 
   return updates;

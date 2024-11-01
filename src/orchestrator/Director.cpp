@@ -45,8 +45,8 @@ void Director::Start() {
   auto &&tmpresult = m_backDB->Connect();
   tmpresult = m_frontDB->Connect();
 
-  m_backPoolHandle->DBHandle().SetupDBCollections();
-  m_frontPoolHandle->DBHandle().SetupDBCollections();
+  tmpresult = m_backDB->SetupIfNeeded();
+  tmpresult = m_frontDB->SetupIfNeeded();
 
   m_threads.emplace_back(&Director::UpdateDeadPilots, this);
   m_threads.emplace_back(&Director::UpdateTasks, this);
@@ -766,15 +766,15 @@ ErrorOr<Director::PilotInfo> Director::GetPilotInfo(std::string_view uuid) {
     auto handle = m_frontPoolHandle->DBHandle();
     PilotInfo result;
 
-    auto query_result = TRY(m_frontDB->RunQuery(DB::Queries::Find{
+    auto pilot_info_from_db = TRY(m_frontDB->RunQuery(DB::Queries::Find{
         .collection = "pilots",
         .options{.limit = 1},
         .match = {{"uuid", uuid}},
-    }));
+    }))[0];
 
-    std::ranges::transform(query_result["tasks"], std::back_inserter(result.tasks),
+    std::ranges::transform(pilot_info_from_db["tasks"], std::back_inserter(result.tasks),
                            [](const auto &task) { return to_string(task); });
-    std::ranges::transform(query_result["tags"], std::back_inserter(result.tags),
+    std::ranges::transform(pilot_info_from_db["tags"], std::back_inserter(result.tags),
                            [](const auto &tag) { return to_string(tag); });
     m_activePilots[uuidString] = result;
     return result;

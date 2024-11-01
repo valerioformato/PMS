@@ -81,18 +81,20 @@ inline std::string DumpMatches(const Matches &matches) {
     return "{}";
   }
 
-  std::string result;
+  std::string result{"["};
   for (const auto &match : matches) {
     result += match.dump() + ", ";
   }
+  result += "]";
   return result;
 }
 
 inline std::string DumpUpdates(const Updates &updates) {
-  std::string result;
+  std::string result{"["};
   for (const auto &update : updates) {
     result += update.dump() + ", ";
   }
+  result += "]";
   return result;
 }
 
