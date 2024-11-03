@@ -36,16 +36,6 @@ public:
   void Start();
   void Stop();
 
-  // TODO: remove these
-  void SetFrontDBOld(std::string_view dbhost, std::string_view dbname) {
-    spdlog::info("Connecting to frontend DB: {}/{}", dbhost, dbname);
-    m_frontPoolHandle = std::make_unique<DB::PoolHandle>(dbhost, dbname);
-  }
-  void SetBackDBOld(std::string_view dbhost, std::string_view dbname) {
-    spdlog::info("Connecting to backend DB: {}/{}", dbhost, dbname);
-    m_backPoolHandle = std::make_unique<DB::PoolHandle>(dbhost, dbname);
-  }
-  // TODO: and use these
   void SetFrontDB(std::string_view dbhost, std::string_view dbname) {
     spdlog::info("Using frontend DB: {}/{}", dbhost, dbname);
     m_frontDB = std::make_unique<DB::Harness>(std::make_unique<DB::MongoDBBackend>(dbhost, dbname));
@@ -70,7 +60,7 @@ public:
   ErrorOr<NewPilotResult> RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
                                            const std::vector<std::pair<std::string, std::string>> &tasks,
                                            const std::vector<std::string> &tags, const json &host_info);
-  OperationResult UpdateHeartBeat(std::string_view pilotUuid);
+  ErrorOr<void> UpdateHeartBeat(std::string_view pilotUuid);
   ErrorOr<void> DeleteHeartBeat(std::string_view pilotUuid);
 
   ErrorOr<void> AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
@@ -78,7 +68,7 @@ public:
   ErrorOr<std::string> CreateTask(const std::string &task);
   ErrorOr<void> ClearTask(const std::string &task, bool deleteTask = true);
 
-  std::string Summary(const std::string &user) const;
+  ErrorOr<std::string> Summary(const std::string &user) const;
 
   enum class DBCollection { Jobs, Pilots };
   enum class QueryOperation { Find, UpdateOne, UpdateMany, DeleteOne, DeleteMany };
@@ -108,11 +98,6 @@ private:
 
   std::shared_ptr<spdlog::logger> m_logger;
 
-  // TODO: remove these
-  std::unique_ptr<DB::PoolHandle> m_frontPoolHandle;
-  std::unique_ptr<DB::PoolHandle> m_backPoolHandle;
-
-  // TODO: and use these
   std::unique_ptr<DB::Harness> m_frontDB;
   std::unique_ptr<DB::Harness> m_backDB;
 

@@ -15,7 +15,6 @@ using OverriddenComparisons = std::unordered_map<std::string_view, ComparisonOp>
   bool operator==(const NAME &other) const = default;                                                                  \
   static constexpr std::string_view name{#NAME};                                                                       \
   std::string collection{};                                                                                            \
-  OverriddenComparisons comparisons{};                                                                                 \
   Options options{};
 
 struct Options {
@@ -73,9 +72,16 @@ struct Aggregate {
   json pipeline;
 };
 
+struct Distinct {
+  GENERATE_QUERY_MEMBERS(Distinct)
+
+  std::string field;
+  Matches match;
+};
+
 #undef GENERATE_QUERY_MEMBERS
 
-using Query = std::variant<Find, FindOneAndUpdate, Insert, Update, Delete, Count, Aggregate>;
+using Query = std::variant<Find, FindOneAndUpdate, Insert, Update, Delete, Count, Distinct>;
 
 inline std::string DumpMatches(const Matches &matches) {
   if (matches.empty()) {
@@ -111,7 +117,7 @@ inline constexpr std::string to_string(const Query &query) {
           [](const Update &q) { return fmt::format("Update: {}, {}", DumpMatches(q.match), DumpUpdates(q.update)); },
           [](const Delete &q) { return fmt::format("Delete: {}", DumpMatches(q.match)); },
           [](const Count &q) { return fmt::format("Count: {}", DumpMatches(q.match)); },
-          [](const Aggregate &q) { return fmt::format("Aggregate: {}", q.pipeline.dump()); }},
+          [](const Distinct &q) { return fmt::format("Distinct: {} {}", q.field, DumpMatches(q.match)); }},
       query);
 }
 } // namespace PMS::DB::Queries

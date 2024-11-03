@@ -159,7 +159,10 @@ std::string Server::HandleCommand(UserCommand &&command) {
             return result ? result.value() : std::string{result.error().Message()};
           },
           // Get user summary
-          [this](const OrchCommand<Summary> &ucmd) { return m_director->Summary(ucmd.cmd.user); },
+          [this](const OrchCommand<Summary> &ucmd) {
+            auto result = m_director->Summary(ucmd.cmd.user);
+            return result ? result.value() : std::string{result.error().Message()};
+          },
           // Reset jobs in a given task that have status Failed
           [this](const OrchCommand<ResetFailedJobs> &ucmd) {
             auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
@@ -217,9 +220,7 @@ std::string Server::HandleCommand(PilotCommand &&command) {
                         [this](const OrchCommand<UpdateHeartBeat> &pcmd) {
                           auto result = m_director->UpdateHeartBeat(pcmd.cmd.uuid);
 
-                          return (result == Director::OperationResult::Success)
-                                     ? fmt::format("Ok")
-                                     : fmt::format("Failed to update heartbeat");
+                          return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
                         },
                         // delete pilot
                         [this](const OrchCommand<DeleteHeartBeat> &pcmd) {

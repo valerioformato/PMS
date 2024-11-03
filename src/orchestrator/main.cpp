@@ -75,9 +75,6 @@ int main(int argc, const char **argv) {
   const Orchestrator::Config config{configFileName};
 
   auto director = std::make_shared<Orchestrator::Director>();
-  director->SetFrontDBOld(config.front_dbhost, config.front_dbname);
-  director->SetBackDBOld(config.back_dbhost, config.back_dbname);
-
   director->SetFrontDB(config.front_dbhost, config.front_dbname);
   director->SetBackDB(config.back_dbhost, config.back_dbname);
 

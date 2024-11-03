@@ -173,7 +173,7 @@ ErrorOr<mongocxx::model::write> MongoDBBackend::QueryToWriteOp(const Queries::Qu
                             return mongocxx::model::delete_many{JsonUtils::json2bson(MatchesToJson(query.match))};
                           }
                         },
-                        [](auto &&query) -> ErrorOr<mongocxx::model::write> {
+                        [](auto &query) -> ErrorOr<mongocxx::model::write> {
                           return Error{std::errc::not_supported,
                                        fmt::format("Query type {} not supported in bulk writes", query.name)};
                         },
@@ -331,9 +331,19 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
               return Error{e.code(), e.what()};
             }
           },
-          [&](const Queries::Aggregate &query) -> ErrorOr<QueryResult> {
-            // TODO: Implement aggregate queries
-            return Error{std::errc::not_supported, "Aggregate queries not supported yet"};
+          [&](const Queries::Distinct &query) -> ErrorOr<QueryResult> {
+            QueryResult result;
+
+            try {
+              auto query_result =
+                  db[query.collection].distinct(query.field, JsonUtils::json2bson(MatchesToJson(query.match)));
+              std::transform(query_result.begin(), query_result.end(), std::back_inserter(result),
+                             [](const auto &doc) { return JsonUtils::bson2json(doc); });
+            } catch (const mongocxx::exception &e) {
+              return Error{e.code(), e.what()};
+            }
+
+            return result;
           },
       },
       query);
@@ -341,8 +351,6 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
 
 ErrorOr<QueryResult> MongoDBBackend::BulkWrite(std::string_view collection, std::vector<Queries::Query> queries) {
   std::vector<mongocxx::model::write> write_ops;
-
-  spdlog::trace("[MongoDBBackend] Bulk writing {} queries to collection {}", queries.size(), collection);
 
   auto wops = queries | std::views::transform(QueryToWriteOp) |
               std::views::filter([](auto &&op) { return op.has_value(); }) |

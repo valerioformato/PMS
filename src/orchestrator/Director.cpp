@@ -262,49 +262,46 @@ Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
   return result;
 }
 
-Director::OperationResult Director::UpdateHeartBeat(std::string_view pilotUuid) {
+ErrorOr<void> Director::UpdateHeartBeat(std::string_view pilotUuid) {
   m_heartbeatUpdates.emplace(std::string{pilotUuid}, std::chrono::system_clock::now());
-  return Director::OperationResult::Success;
+  return outcome::success();
 }
 
 void Director::WriteHeartBeatUpdates() {
   static constexpr auto coolDown = std::chrono::minutes(1);
 
   do {
-    auto handle = m_frontPoolHandle->DBHandle();
     std::unordered_map<std::string, time_point> unique_hbs;
     auto hbs = m_heartbeatUpdates.consume_all();
     // NOTE: de-duplicate heartbeats. If all is correct, requests are ordered in time, so only most recent one survives
     std::for_each(begin(hbs), end(hbs), [&unique_hbs](const PilotHeartBeat &hb) { unique_hbs[hb.uuid] = hb.time; });
 
-    std::vector<mongocxx::model::write> requests;
+    std::vector<DB::Queries::Query> requests;
     for (const auto &[uuid, time] : unique_hbs) {
       // NOTE: if this pilot is not in the active cache *and* not in the front DB collection then it's either an unknown
       // pilot or it sent an update before dying and being removed from both cache and DB
       if (auto maybe_pilotInfo = GetPilotInfo(uuid); !maybe_pilotInfo)
         continue;
 
-      json updateFilter;
-      updateFilter["uuid"] = uuid;
+      auto millis_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch());
 
-      // this is why we prefer using nlohmann json wherever possible...
-      // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
-      // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
-      // no possible issues or strange mis-conversions when this data is handled by the DB.
-      bsoncxx::view_or_value<bsoncxx::document::view, bsoncxx::document::value> updateAction =
-          bsoncxx::builder::basic::make_document(
-              bsoncxx::builder::basic::kvp("$set", [tp = time](bsoncxx::builder::basic::sub_document sub_doc) {
-                sub_doc.append(bsoncxx::builder::basic::kvp("lastHeartBeat", bsoncxx::types::b_date(tp)));
-              }));
+      DB::Queries::Matches matches{{"uuid", uuid}};
+      DB::Queries::Updates update_action = {{"lastHeartBeat", millis_since_epoch.count()}};
 
-      requests.push_back(mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), updateAction}.upsert(true));
+      requests.push_back(DB::Queries::Update{
+          .collection = "pilots",
+          .options = {.limit = 1},
+          .match = matches,
+          .update = update_action,
+      });
     }
 
     if (!requests.empty()) {
       m_logger->debug("Updating {} heartbeats", requests.size());
-      mongocxx::options::bulk_write write_options;
-      write_options.ordered(false);
-      RetryIfFailsWith<mongocxx::exception>([&]() { handle["pilots"].bulk_write(requests, write_options); });
+      auto write_result = m_frontDB->BulkWrite("pilots", requests);
+      if (!write_result) {
+        m_logger->error("Failed to write heartbeat updates: {}", write_result.assume_error().Message());
+      }
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
@@ -459,11 +456,8 @@ void Director::JobInsert() {
 void Director::JobTransfer() {
   static constexpr auto coolDown = std::chrono::seconds(10);
 
-  auto bHandle = m_backPoolHandle->DBHandle();
-  auto fHandle = m_frontPoolHandle->DBHandle();
-
   std::vector<json> toBeInserted;
-  std::vector<mongocxx::model::write> writeOps;
+  std::vector<DB::Queries::Query> writeOps;
 
   do {
     // collect jobs from each active task
@@ -506,17 +500,14 @@ void Director::JobTransfer() {
         continue;
       }
 
-      std::transform(begin(toBeInserted), end(toBeInserted), std::back_inserter(writeOps), [](const auto &job) {
-        json updateFilter;
-        updateFilter["hash"] = job["hash"];
-
-        json updateAction;
-        updateAction["$set"]["inFrontDB"] = true;
-
-        return mongocxx::model::update_one{JsonUtils::json2bson(updateFilter), JsonUtils::json2bson(updateAction)};
+      std::ranges::transform(toBeInserted, std::back_inserter(writeOps), [](const auto &job) {
+        return DB::Queries::Update{
+            .collection = "jobs",
+            .options = {.limit = 1},
+            .match = {{"hash", job["hash"]}},
+            .update = {{"inFrontDB", true}},
+        };
       });
-
-      RetryIfFailsWith<mongocxx::exception>([&]() { bHandle["jobs"].bulk_write(writeOps); });
 
       toBeInserted.clear();
       writeOps.clear();
@@ -627,8 +618,6 @@ void Director::UpdateTasks() {
 }
 
 ErrorOr<void> Director::UpdateTaskCounts(Task &task) { // update job counters in task
-  auto backHandle = m_backPoolHandle->DBHandle();
-
   DB::Queries::Matches matches{{"task", task.name}};
   auto query_result = TRY(m_backDB->RunQuery(DB::Queries::Count{
       .collection = "jobs",
@@ -653,56 +642,73 @@ void Director::UpdateDeadPilots() {
 
   static constexpr std::chrono::system_clock::duration gracePeriod = std::chrono::hours{1};
 
-  auto handle = m_frontPoolHandle->DBHandle();
-
   do {
-    // this is why we prefer using nlohmann json wherever possible...
-    // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
-    // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
-    // no possible issues or strange mis-conversions when this data is handled by the DB.
-    bsoncxx::document::value getPilotsQuery = bsoncxx::builder::basic::make_document(
-        bsoncxx::builder::basic::kvp("lastHeartBeat", [](bsoncxx::builder::basic::sub_document sub_doc) {
-          sub_doc.append(bsoncxx::builder::basic::kvp(
-              "$lt", bsoncxx::types::b_date(std::chrono::system_clock::now() - gracePeriod)));
-        }));
+    auto last_valid_hearbeat_in_millis_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(
+        (std::chrono::system_clock::now() - gracePeriod).time_since_epoch());
+    DB::Queries::Matches matches{
+        {"lastHeartBeat", last_valid_hearbeat_in_millis_since_epoch.count(), DB::Queries::ComparisonOp::LT},
+    };
 
-    auto queryResult =
-        RetryIfFailsWith<mongocxx::exception>([&]() { return handle["pilots"].find(getPilotsQuery.view()); });
-    std::vector<mongocxx::model::write> requests;
-    for (const auto &_pilot : queryResult) {
-      json pilot = JsonUtils::bson2json(_pilot);
+    auto pilot_query_result = m_frontDB->RunQuery(DB::Queries::Find{
+        .collection = "pilots",
+        .match = matches,
+    });
+
+    if (!pilot_query_result) {
+      m_logger->error("Failed to query frontend DB for dead pilots");
+      continue;
+    }
+
+    auto queryResult = pilot_query_result.assume_value();
+
+    std::vector<DB::Queries::Query> requests;
+
+    for (const auto &pilot : queryResult) {
       m_logger->debug("Removing dead pilot {}", to_string_view(pilot["uuid"]));
 
       json deleteQuery;
       deleteQuery["uuid"] = pilot["uuid"];
 
-      json jobQuery;
-      jobQuery["pilotUuid"] = pilot["uuid"];
-      jobQuery["status"]["$in"] = std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Running),
-                                                                magic_enum::enum_name(JobStatus::InboundTransfer),
-                                                                magic_enum::enum_name(JobStatus::OutboundTransfer)};
+      DB::Queries::Matches delete_query_match{{"pilotUuid", pilot["uuid"]}};
+
+      DB::Queries::Matches job_query_match{
+          {"pilotUuid", pilot["uuid"]},
+          {"status",
+           std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Running),
+                                         magic_enum::enum_name(JobStatus::InboundTransfer),
+                                         magic_enum::enum_name(JobStatus::OutboundTransfer)},
+           DB::Queries::ComparisonOp::IN},
+      };
 
       json projectionOpt = R"({"_id":1, "hash":1, "task":1})"_json;
-      mongocxx::options::find query_options;
-      query_options.projection(JsonUtils::json2bson(projectionOpt));
 
-      auto queryJResult = RetryIfFailsWith<mongocxx::exception>(
-          [&]() { return handle["jobs"].find_one(JsonUtils::json2bson(jobQuery), query_options); });
-      if (queryJResult) {
-        json job = JsonUtils::bson2json(queryJResult.value());
-        m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_string_view(pilot["uuid"]),
-                        to_string_view(job["hash"]));
-        auto update_result = UpdateJobStatus(to_string_view(pilot["uuid"]), to_string_view(job["hash"]),
-                                             to_string_view(job["task"]), JobStatus::Error);
-        if (!update_result) {
-          m_logger->error("Failed to update job status for job {}", to_string_view(job["hash"]));
-          continue;
-        }
+      auto job_query_result = m_frontDB->RunQuery(DB::Queries::Find{
+          .collection = "jobs",
+          .options = {.limit = 1},
+          .match = job_query_match,
+          .filter = projectionOpt,
+      });
+
+      if (!job_query_result) {
+        m_logger->error("Failed to query frontend DB for running jobs of dead pilot {}", to_string_view(pilot["uuid"]));
+        continue;
       }
 
-      requests.push_back(mongocxx::model::delete_one(JsonUtils::json2bson(deleteQuery)));
-      // RetryIfFailsWith<mongocxx::exception>([&]() { handle["pilots"].delete_one(JsonUtils::json2bson(deleteQuery));
-      // });
+      json job = std::move(job_query_result.value());
+      m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_string_view(pilot["uuid"]),
+                      to_string_view(job["hash"]));
+
+      auto update_result = UpdateJobStatus(to_string_view(pilot["uuid"]), to_string_view(job["hash"]),
+                                           to_string_view(job["task"]), JobStatus::Error);
+      if (!update_result) {
+        m_logger->error("Failed to update job status for job {}", to_string_view(job["hash"]));
+        continue;
+      }
+
+      requests.push_back(DB::Queries::Delete{
+          .collection = "pilots",
+          .match = delete_query_match,
+      });
 
       if (auto pilotIt = m_activePilots.find(to_string(pilot["uuid"])); pilotIt != end(m_activePilots))
         m_activePilots.erase(pilotIt);
@@ -710,9 +716,11 @@ void Director::UpdateDeadPilots() {
 
     if (!requests.empty()) {
       m_logger->debug("Deleting {} pilots from front DB", requests.size());
-      RetryIfFailsWith<mongocxx::exception>([&]() { handle["pilots"].bulk_write(requests); });
+      auto delete_query_result = m_frontDB->BulkWrite("pilots", requests);
+      if (!delete_query_result) {
+        m_logger->error("Failed to delete dead pilots from the front DB");
+      }
     }
-
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
@@ -721,49 +729,58 @@ void Director::DBSync() {
 
   static time_point lastCheck = std::chrono::system_clock::now();
 
-  auto bHandle = m_backPoolHandle->DBHandle();
-  auto fHandle = m_frontPoolHandle->DBHandle();
-
   do {
-    // this is why we prefer using nlohmann json wherever possible...
-    // the bson API for constructing JSON documents is terrible. Unfortunately, to be safe, we prefer to
-    // use the bson internal type for handling datetime objects in JSON, so that we are sure there are
-    // no possible issues or strange mis-conversions when this data is handled by the DB.
-    bsoncxx::document::value getJobsQuery = bsoncxx::builder::basic::make_document(
-        bsoncxx::builder::basic::kvp("lastUpdate", [](bsoncxx::builder::basic::sub_document sub_doc) {
-          sub_doc.append(bsoncxx::builder::basic::kvp("$gt", bsoncxx::types::b_date(lastCheck)));
-        }));
+    auto last_check_in_millis_since_epoch =
+        std::chrono::duration_cast<std::chrono::milliseconds>(lastCheck.time_since_epoch());
+    DB::Queries::Matches matches{
+        {"lastUpdate", last_check_in_millis_since_epoch.count(), DB::Queries::ComparisonOp::GT},
+    };
 
     m_logger->debug("Syncing DBs...");
-    auto queryResult =
-        RetryIfFailsWith<mongocxx::exception>([&]() { return fHandle["jobs"].find(getJobsQuery.view()); });
+
+    auto query_result = m_frontDB->RunQuery(DB::Queries::Find{
+        .collection = "jobs",
+        .match = matches,
+    });
+
+    if (!query_result) {
+      m_logger->error("Failed to query frontend DB for updated jobs");
+      continue;
+    }
+
     lastCheck = std::chrono::system_clock::now();
     m_logger->debug("...query done.");
 
-    std::vector<mongocxx::model::write> writeOps;
-    std::transform(queryResult.begin(), queryResult.end(), std::back_inserter(writeOps), [](const auto &_job) {
-      json job = JsonUtils::bson2json(_job);
+    std::vector<DB::Queries::Query> writeOps;
+    std::ranges::transform(query_result.assume_value(), std::back_inserter(writeOps), [](const auto &job) {
+      DB::Queries::Matches job_query_match{{"hash", job["hash"]}};
 
-      json jobQuery;
-      jobQuery["hash"] = job["hash"];
+      DB::Queries::Updates job_update_action = {{"status", job["status"]}};
 
-      json jobUpdateAction;
-      jobUpdateAction["$set"]["status"] = job["status"];
-
-      if (auto status = magic_enum::enum_cast<JobStatus>(job["status"].get<std::string_view>()); status.has_value()) {
+      if (auto status = magic_enum::enum_cast<JobStatus>(to_string_view(job["status"])); status.has_value()) {
         if (status.value() == JobStatus::Running) {
-          jobUpdateAction["$set"]["startTime"] = job["startTime"];
-          jobUpdateAction["$set"]["pilotUuid"] = job["pilotUuid"];
+          job_update_action.emplace_back("startTime", job["startTime"]);
+          job_update_action.emplace_back("pilotUuid", job["pilotUuid"]);
         }
         if (status.value() == JobStatus::Done || status.value() == JobStatus::Error) {
-          jobUpdateAction["$set"]["endTime"] = job["endTime"];
+          job_update_action.emplace_back("endTime", job["endTime"]);
         }
       }
 
-      return mongocxx::model::update_one{JsonUtils::json2bson(jobQuery), JsonUtils::json2bson(jobUpdateAction)};
+      return DB::Queries::Update{
+          .collection = "jobs",
+          .options = {.limit = 1},
+          .match = job_query_match,
+          .update = job_update_action,
+      };
     });
-    if (!writeOps.empty())
-      RetryIfFailsWith<mongocxx::exception>([&]() { bHandle["jobs"].bulk_write(writeOps); });
+
+    if (!writeOps.empty()) {
+      auto write_result = m_backDB->BulkWrite("jobs", writeOps);
+      if (!write_result) {
+        m_logger->error("Failed to write job updates to backend DB");
+      }
+    }
 
     m_logger->debug("DBs synced: {} jobs updated in backend DB", writeOps.size());
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
@@ -781,7 +798,6 @@ ErrorOr<Director::PilotInfo> Director::GetPilotInfo(std::string_view uuid) {
   if (auto uuidString = std::string{uuid}; m_activePilots.find(uuidString) != end(m_activePilots)) {
     return m_activePilots[uuidString];
   } else {
-    auto handle = m_frontPoolHandle->DBHandle();
     PilotInfo result;
 
     auto pilot_info_from_db = TRY(m_frontDB->RunQuery(DB::Queries::Find{
@@ -799,26 +815,20 @@ ErrorOr<Director::PilotInfo> Director::GetPilotInfo(std::string_view uuid) {
   }
 }
 
-std::string Director::Summary(const std::string &user) const {
-  auto handle = m_frontPoolHandle->DBHandle();
+ErrorOr<std::string> Director::Summary(const std::string &user) const {
+  // auto handle = m_frontPoolHandle->DBHandle();
 
   json summary = json::array({});
 
-  mongocxx::pipeline aggregationPipeline;
+  DB::Queries::Matches matches{{"user", user}};
+  auto tasksQueryResult = TRY(m_frontDB->RunQuery(DB::Queries::Distinct{
+      .collection = "jobs",
+      .field = "task",
+      .match = matches,
+  }));
 
-  json matchingArgs;
-  matchingArgs["user"] = user;
-  aggregationPipeline.match(JsonUtils::json2bson(matchingArgs));
-
-  json groupingArgs;
-  groupingArgs["_id"] = "$task";
-  aggregationPipeline.group(JsonUtils::json2bson(groupingArgs));
-
-  auto tasksQueryResult =
-      RetryIfFailsWith<mongocxx::exception>([&]() { return handle["jobs"].aggregate(aggregationPipeline); });
   for (auto item : tasksQueryResult) {
-    json result = JsonUtils::bson2json(item);
-    auto taskName = to_string(result["_id"]);
+    auto taskName = to_string(item);
 
     if (m_tasks.find(taskName) == end(m_tasks)) {
       continue;
@@ -839,9 +849,6 @@ std::string Director::Summary(const std::string &user) const {
 }
 
 ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json &match, const json &option) const {
-  auto backHandle = m_backPoolHandle->DBHandle();
-  auto frontHandle = m_frontPoolHandle->DBHandle();
-
   m_logger->debug("QueryBackDB: {} {} {}", magic_enum::enum_name(operation), match.dump(), option.dump());
 
   switch (operation) {
