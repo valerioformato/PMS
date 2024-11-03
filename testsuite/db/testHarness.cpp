@@ -14,6 +14,7 @@ public:
   IMPLEMENT_MOCK0(SetupIfNeeded);
 
   IMPLEMENT_MOCK1(RunQuery);
+  IMPLEMENT_MOCK2(BulkWrite);
 };
 
 SCENARIO("Harness Test", "[Harness]") {
@@ -51,6 +52,23 @@ SCENARIO("Harness Test", "[Harness]") {
       auto query_result = harness.RunQuery(query);
 
       THEN("The query should fail") { REQUIRE(query_result.has_error()); }
+    }
+
+    WHEN("BulkWrite is called") {
+      std::vector<PMS::DB::Queries::Query> queries;
+      REQUIRE_CALL(*mockBackendPtr, BulkWrite("collection", queries)).RETURN(json{});
+      auto bulk_write_result = harness.BulkWrite("collection", queries);
+
+      THEN("The bulk write should be successful") { REQUIRE(bulk_write_result.has_value()); }
+    }
+
+    WHEN("The backend fails to bulk write") {
+      std::vector<PMS::DB::Queries::Query> queries;
+      REQUIRE_CALL(*mockBackendPtr, BulkWrite("collection", queries))
+          .RETURN(Error(std::errc::operation_canceled, "Operation canceled"));
+      auto bulk_write_result = harness.BulkWrite("collection", queries);
+
+      THEN("The bulk write should fail") { REQUIRE(bulk_write_result.has_error()); }
     }
 
     WHEN("SetupIfNeeded is called") {

@@ -6,6 +6,7 @@
 #include <mongocxx/client.hpp>
 #include <mongocxx/exception/exception.hpp>
 
+#include "MongoDBBackend.h"
 #include "db/backends/MongoDB/MongoDBBackend.h"
 
 namespace PMS::DB {
@@ -137,6 +138,44 @@ json MongoDBBackend::UpdatesToJson(const Queries::Updates &updates) {
   }
 
   return result;
+}
+
+ErrorOr<mongocxx::model::write> MongoDBBackend::QueryToWriteOp(const Queries::Query &query) {
+  return std::visit(PMS::Utils::overloaded{
+                        [&](const Queries::Insert &query) -> ErrorOr<mongocxx::model::write> {
+                          if (query.documents.size() > 1) {
+                            return Error{std::errc::not_supported, "Insert many not supported by mongocxx driver"};
+                          }
+
+                          return mongocxx::model::insert_one{JsonUtils::json2bson(query.documents[0])};
+                        },
+                        [&](const Queries::Update &query) -> ErrorOr<mongocxx::model::write> {
+                          switch (query.options.limit) {
+                          case 1:
+                            return mongocxx::model::update_one{JsonUtils::json2bson(MatchesToJson(query.match)),
+                                                               JsonUtils::json2bson(UpdatesToJson(query.update))};
+                          default:
+                            return mongocxx::model::update_many{JsonUtils::json2bson(MatchesToJson(query.match)),
+                                                                JsonUtils::json2bson(UpdatesToJson(query.update))};
+                          }
+                        },
+                        [&](const Queries::Delete &query) -> ErrorOr<mongocxx::model::write> {
+                          switch (query.options.limit) {
+                          case 1:
+                            return mongocxx::model::delete_one{JsonUtils::json2bson(MatchesToJson(query.match))};
+                            break;
+
+                          default:
+                            return mongocxx::model::delete_many{JsonUtils::json2bson(MatchesToJson(query.match))};
+                            break;
+                          }
+                        },
+                        [](auto &&query) -> ErrorOr<mongocxx::model::write> {
+                          return Error{std::errc::not_supported,
+                                       fmt::format("Query type {} not supported in bulk writes", query.name)};
+                        },
+                    },
+                    query);
 }
 
 ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
@@ -297,5 +336,35 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
           },
       },
       query);
+}
+
+ErrorOr<QueryResult> MongoDBBackend::BulkWrite(std::string_view collection, std::vector<Queries::Query> queries) {
+  std::vector<mongocxx::model::write> write_ops;
+
+  auto wops = queries | std::ranges::views::transform(QueryToWriteOp) |
+              std::ranges::views::filter([](auto &&op) { return op.has_value(); }) |
+              std::ranges::views::transform([](auto &&op) { return std::move(op.value()); });
+
+  std::ranges::copy(wops, std::back_inserter(write_ops));
+
+  auto poolEntry = m_pool->acquire();
+  auto db = (*poolEntry)[m_dbname];
+
+  try {
+    auto query_result = db[collection].bulk_write(write_ops);
+    if (!query_result) {
+      return Error{std::errc::operation_canceled, "BulkWrite not acknowledged"};
+    }
+
+    QueryResult result;
+    result["inserted_count"] = query_result.value().inserted_count();
+    result["matched_count"] = query_result.value().matched_count();
+    result["modified_count"] = query_result.value().modified_count();
+    result["deleted_count"] = query_result.value().deleted_count();
+
+    return result;
+  } catch (const mongocxx::exception &e) {
+    return Error{e.code(), e.what()};
+  }
 }
 } // namespace PMS::DB

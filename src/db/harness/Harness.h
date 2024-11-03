@@ -22,6 +22,11 @@ public:
     return m_backend->RunQuery(query);
   };
 
+  ErrorOr<QueryResult> BulkWrite(std::string_view table_or_collection, std::vector<Queries::Query> queries) {
+    m_logger->trace("Running bulk write on collection {}", table_or_collection);
+    return m_backend->BulkWrite(table_or_collection, queries);
+  }
+
   static std::shared_ptr<spdlog::logger> m_logger;
 
 private:

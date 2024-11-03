@@ -3,6 +3,7 @@
 #include <string_view>
 
 #include <mongocxx/instance.hpp>
+#include <mongocxx/model/write.hpp>
 #include <mongocxx/pool.hpp>
 
 #include "db/backends/Backend.h"
@@ -14,15 +15,19 @@ public:
 
   virtual ~MongoDBBackend() = default;
 
-  virtual ErrorOr<void> Connect() override;
-  virtual ErrorOr<void> Connect(std::string_view user, std::string_view password) override;
+  [[nodiscard]] virtual ErrorOr<void> Connect() override;
+  [[nodiscard]] virtual ErrorOr<void> Connect(std::string_view user, std::string_view password) override;
 
-  ErrorOr<void> SetupIfNeeded() override;
+  [[nodiscard]] ErrorOr<void> SetupIfNeeded() override;
 
-  ErrorOr<QueryResult> RunQuery(Queries::Query query) override;
+  [[nodiscard]] ErrorOr<QueryResult> RunQuery(Queries::Query query) override;
+  [[nodiscard]] ErrorOr<QueryResult> BulkWrite(std::string_view collection,
+                                               std::vector<Queries::Query> queries) override;
 
-  static json MatchesToJson(const Queries::Matches &matches);
-  static json UpdatesToJson(const Queries::Updates &updates);
+  [[nodiscard]] static json MatchesToJson(const Queries::Matches &matches);
+  [[nodiscard]] static json UpdatesToJson(const Queries::Updates &updates);
+
+  [[nodiscard]] static ErrorOr<mongocxx::model::write> QueryToWriteOp(const Queries::Query &query);
 
 private:
   std::string m_dbhost;

@@ -15,5 +15,6 @@ public:
   virtual ErrorOr<void> SetupIfNeeded() = 0;
 
   virtual ErrorOr<QueryResult> RunQuery(Queries::Query query) = 0;
+  virtual ErrorOr<QueryResult> BulkWrite(std::string_view table_or_collection, std::vector<Queries::Query> queries) = 0;
 };
 } // namespace PMS::DB

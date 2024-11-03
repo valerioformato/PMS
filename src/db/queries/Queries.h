@@ -13,6 +13,7 @@ using OverriddenComparisons = std::unordered_map<std::string_view, ComparisonOp>
 
 #define GENERATE_QUERY_MEMBERS(NAME)                                                                                   \
   bool operator==(const NAME &other) const = default;                                                                  \
+  static constexpr std::string_view name{#NAME};                                                                       \
   std::string collection{};                                                                                            \
   OverriddenComparisons comparisons{};                                                                                 \
   Options options{};
