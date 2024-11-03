@@ -154,6 +154,22 @@ SCENARIO("MongoDBBackend::UpdatesToJson", "[MongoDBBackend]") {
     }
   }
 
+  GIVEN("Multiple updates with the same operations on different fields") {
+    Queries::Updates updates = {
+        {"field1", "value1", Queries::UpdateOp::SET},
+        {"field2", 42, Queries::UpdateOp::SET},
+    };
+
+    WHEN("UpdatesToJson is called") {
+      auto result = ::MongoDBBackend::UpdatesToJson(updates);
+
+      THEN("The result should contain all the update operations") {
+        json expected = {{"$set", {{"field1", "value1"}, {"field2", 42}}}};
+        REQUIRE(result == expected);
+      }
+    }
+  }
+
   GIVEN("An update with a nested field") {
     Queries::Updates updates = {{"nested.field", "value", Queries::UpdateOp::SET}};
 
@@ -193,7 +209,7 @@ SCENARIO("MongoDBBackend::UpdatesToJson", "[MongoDBBackend]") {
       }
     }
   }
-}
+} // namespace PMS::Tests::MongoDBBackend
 
 SCENARIO("MongoDBBackend::QueryToWriteOp", "[MongoDBBackend]") {
   GIVEN("A valid Insert query") {

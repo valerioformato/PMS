@@ -59,8 +59,8 @@ public:
   OperationResult AddNewJob(json &&job);
 
   ErrorOr<json> ClaimJob(std::string_view pilotUuid);
-  OperationResult UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
-                                  JobStatus status);
+  ErrorOr<void> UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
+                                JobStatus status);
 
   struct NewPilotResult {
     OperationResult result;
@@ -126,7 +126,7 @@ private:
   ts_queue<PilotHeartBeat> m_heartbeatUpdates;
 
   std::mutex m_jobUpdateRequests_mx;
-  std::vector<mongocxx::model::write> m_jobUpdateRequests;
+  std::vector<DB::Queries::Query> m_jobUpdateRequests;
 
   std::unordered_map<std::string, Task> m_tasks;
 

@@ -133,8 +133,14 @@ json MongoDBBackend::UpdatesToJson(const Queries::Updates &updates) {
   for (const auto &[field, value, op] : updates) {
     std::string op_name{magic_enum::enum_name(op)};
     std::ranges::transform(op_name, op_name.begin(), ::tolower);
+
+    // special case for $currentDate
+    if (op == Queries::UpdateOp::CURRENT_DATE) {
+      op_name = "currentDate";
+    }
+
     op_name.insert(0, "$");
-    result[op_name] = json{{field, value}};
+    result[op_name][field] = value;
   }
 
   return result;
@@ -163,11 +169,8 @@ ErrorOr<mongocxx::model::write> MongoDBBackend::QueryToWriteOp(const Queries::Qu
                           switch (query.options.limit) {
                           case 1:
                             return mongocxx::model::delete_one{JsonUtils::json2bson(MatchesToJson(query.match))};
-                            break;
-
                           default:
                             return mongocxx::model::delete_many{JsonUtils::json2bson(MatchesToJson(query.match))};
-                            break;
                           }
                         },
                         [](auto &&query) -> ErrorOr<mongocxx::model::write> {
@@ -211,8 +214,6 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
 
             QueryResult result;
             try {
-              spdlog::trace("match: {}", MatchesToJson(query.match).dump());
-              spdlog::trace("update: {}", UpdatesToJson(query.update).dump());
               auto query_result =
                   db[query.collection].find_one_and_update(JsonUtils::json2bson(MatchesToJson(query.match)),
                                                            JsonUtils::json2bson(UpdatesToJson(query.update)), options);
@@ -341,9 +342,11 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
 ErrorOr<QueryResult> MongoDBBackend::BulkWrite(std::string_view collection, std::vector<Queries::Query> queries) {
   std::vector<mongocxx::model::write> write_ops;
 
-  auto wops = queries | std::ranges::views::transform(QueryToWriteOp) |
-              std::ranges::views::filter([](auto &&op) { return op.has_value(); }) |
-              std::ranges::views::transform([](auto &&op) { return std::move(op.value()); });
+  spdlog::trace("[MongoDBBackend] Bulk writing {} queries to collection {}", queries.size(), collection);
+
+  auto wops = queries | std::views::transform(QueryToWriteOp) |
+              std::views::filter([](auto &&op) { return op.has_value(); }) |
+              std::views::transform([](auto &&op) { return std::move(op.value()); });
 
   std::ranges::copy(wops, std::back_inserter(write_ops));
 

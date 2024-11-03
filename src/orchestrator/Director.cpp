@@ -134,61 +134,75 @@ ErrorOr<json> Director::ClaimJob(std::string_view pilotUuid) {
   }
 }
 
-Director::OperationResult Director::UpdateJobStatus(std::string_view pilotUuid, std::string_view hash,
-                                                    std::string_view task, JobStatus status) {
+ErrorOr<void> Director::UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
+                                        JobStatus status) {
   auto maybe_pilotInfo = GetPilotInfo(pilotUuid);
   if (!maybe_pilotInfo.has_value()) {
-    return OperationResult::DatabaseError;
+    return Error{std::errc::invalid_argument, fmt::format("Unknown pilot {}", pilotUuid)};
   }
 
   const auto &pilotInfo = maybe_pilotInfo.value();
 
   auto pilotTasks = pilotInfo.tasks;
-  if (std::find(begin(pilotTasks), end(pilotTasks), task) == end(pilotTasks))
-    return OperationResult::DatabaseError;
+  if (std::find(begin(pilotTasks), end(pilotTasks), task) == end(pilotTasks)) {
+    return Error{std::errc::invalid_argument,
+                 fmt::format("Pilot {} is not allowed to work on task {}", pilotUuid, task)};
+  }
 
-  json jobFilter;
-  jobFilter["task"] = task;
-  jobFilter["hash"] = hash;
+  DB::Queries::Matches matches{
+      {"task", task},
+      {"hash", hash},
+  };
 
-  json jobUpdateAction;
-  jobUpdateAction["$set"]["status"] = magic_enum::enum_name(status);
-  jobUpdateAction["$currentDate"]["lastUpdate"] = true;
+  DB::Queries::Updates update_action{
+      {"status", magic_enum::enum_name(status)},
+      {"lastUpdate", true, DB::Queries::UpdateOp::CURRENT_DATE},
+  };
 
   switch (status) {
   case JobStatus::Running:
-    jobUpdateAction["$currentDate"]["startTime"] = true;
+    update_action.emplace_back("startTime", true, DB::Queries::UpdateOp::CURRENT_DATE);
     break;
   case JobStatus::Error:
   case JobStatus::Done:
-    jobUpdateAction["$currentDate"]["endTime"] = true;
+    update_action.emplace_back("endTime", true, DB::Queries::UpdateOp::CURRENT_DATE);
     break;
   default:
     break;
   }
 
-  {
-    [[maybe_unused]] std::lock_guard lock{m_jobUpdateRequests_mx};
-    m_jobUpdateRequests.push_back(
-        mongocxx::model::update_one{JsonUtils::json2bson(jobFilter), JsonUtils::json2bson(jobUpdateAction)});
-  }
+  [[maybe_unused]] std::lock_guard lock{m_jobUpdateRequests_mx};
+  m_jobUpdateRequests.push_back(DB::Queries::Update{
+      .collection = "jobs",
+      .options = {.limit = 1},
+      .match = matches,
+      .update = update_action,
+  });
 
-  return OperationResult::Success;
+  return outcome::success();
 }
 
 void Director::WriteJobUpdates() {
   static constexpr auto coolDown = std::chrono::seconds(1);
 
-  auto handle = m_frontPoolHandle->DBHandle();
   do {
     if (!m_jobUpdateRequests.empty()) {
-      std::vector<mongocxx::model::write> job_update_requests{};
+      std::vector<DB::Queries::Query> job_update_requests{};
 
       {
         std::lock_guard lock{m_jobUpdateRequests_mx};
         std::swap(m_jobUpdateRequests, job_update_requests);
       }
-      RetryIfFailsWith<mongocxx::exception>([&]() { handle["jobs"].bulk_write(job_update_requests); });
+      auto write_result = m_frontDB->BulkWrite("jobs", job_update_requests);
+      if (!write_result) {
+        m_logger->error("Failed to write job updates: {}", write_result.assume_error().Message());
+        m_logger->error("Will retry...");
+
+        std::lock_guard lock{m_jobUpdateRequests_mx};
+        m_jobUpdateRequests.reserve(m_jobUpdateRequests.size() + job_update_requests.size());
+        m_jobUpdateRequests.insert(end(m_jobUpdateRequests), begin(job_update_requests), end(job_update_requests));
+        continue;
+      }
 
       DB::Queries::Matches matches{
           {"status",
@@ -678,8 +692,12 @@ void Director::UpdateDeadPilots() {
         json job = JsonUtils::bson2json(queryJResult.value());
         m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_string_view(pilot["uuid"]),
                         to_string_view(job["hash"]));
-        UpdateJobStatus(to_string_view(pilot["uuid"]), to_string_view(job["hash"]), to_string_view(job["task"]),
-                        JobStatus::Error);
+        auto update_result = UpdateJobStatus(to_string_view(pilot["uuid"]), to_string_view(job["hash"]),
+                                             to_string_view(job["task"]), JobStatus::Error);
+        if (!update_result) {
+          m_logger->error("Failed to update job status for job {}", to_string_view(job["hash"]));
+          continue;
+        }
       }
 
       requests.push_back(mongocxx::model::delete_one(JsonUtils::json2bson(deleteQuery)));

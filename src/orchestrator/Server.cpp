@@ -181,59 +181,59 @@ std::string Server::HandleCommand(UserCommand &&command) {
 }
 
 std::string Server::HandleCommand(PilotCommand &&command) {
-  return std::visit(
-      PMS::Utils::overloaded{
-          // request a new job
-          [this](const OrchCommand<ClaimJob> &pcmd) {
-            auto result = m_director->ClaimJob(pcmd.cmd.uuid);
-            if (result.has_error()) {
-              m_logger->error("{}", result.error().Message());
-            }
-            return result ? result.value().dump() : std::string{result.error().Message()};
-          },
-          // update job status
-          [this](const OrchCommand<UpdateJobStatus> &pcmd) {
-            auto result = m_director->UpdateJobStatus(pcmd.cmd.uuid, pcmd.cmd.hash, pcmd.cmd.task, pcmd.cmd.status);
-            return (result == Director::OperationResult::Success) ? fmt::format("Ok")
-                                                                  : fmt::format("Failed to change job status");
-          },
-          // register a new pilot
-          [this](const OrchCommand<RegisterNewPilot> &pcmd) {
-            m_logger->trace("Registering new pilot: {}", pcmd.cmd.uuid);
-            const auto result = m_director->RegisterNewPilot(pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks,
-                                                             pcmd.cmd.tags, pcmd.cmd.host_info);
+  return std::visit(PMS::Utils::overloaded{
+                        // request a new job
+                        [this](const OrchCommand<ClaimJob> &pcmd) {
+                          auto result = m_director->ClaimJob(pcmd.cmd.uuid);
+                          if (result.has_error()) {
+                            m_logger->error("{}", result.error().Message());
+                          }
+                          return result ? result.value().dump() : std::string{result.assume_error().Message()};
+                        },
+                        // update job status
+                        [this](const OrchCommand<UpdateJobStatus> &pcmd) {
+                          auto result =
+                              m_director->UpdateJobStatus(pcmd.cmd.uuid, pcmd.cmd.hash, pcmd.cmd.task, pcmd.cmd.status);
+                          return result ? fmt::format("Ok") : std::string{result.assume_error().Message()};
+                        },
+                        // register a new pilot
+                        [this](const OrchCommand<RegisterNewPilot> &pcmd) {
+                          m_logger->trace("Registering new pilot: {}", pcmd.cmd.uuid);
+                          const auto result = m_director->RegisterNewPilot(pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks,
+                                                                           pcmd.cmd.tags, pcmd.cmd.host_info);
 
-            if (!result)
-              return fmt::format("Could not register pilot {}", pcmd.cmd.uuid);
+                          if (!result)
+                            return fmt::format("Could not register pilot {}", pcmd.cmd.uuid);
 
-            json replyDoc;
-            replyDoc["validTasks"] = json::array({});
-            for (const auto &task : result.value().validTasks) {
-              replyDoc["validTasks"].push_back(task);
-            }
+                          json replyDoc;
+                          replyDoc["validTasks"] = json::array({});
+                          for (const auto &task : result.value().validTasks) {
+                            replyDoc["validTasks"].push_back(task);
+                          }
 
-            return replyDoc.dump();
-          },
-          // update pilot heartbeat
-          [this](const OrchCommand<UpdateHeartBeat> &pcmd) {
-            auto result = m_director->UpdateHeartBeat(pcmd.cmd.uuid);
+                          return replyDoc.dump();
+                        },
+                        // update pilot heartbeat
+                        [this](const OrchCommand<UpdateHeartBeat> &pcmd) {
+                          auto result = m_director->UpdateHeartBeat(pcmd.cmd.uuid);
 
-            return (result == Director::OperationResult::Success) ? fmt::format("Ok")
-                                                                  : fmt::format("Failed to update heartbeat");
-          },
-          // delete pilot
-          [this](const OrchCommand<DeleteHeartBeat> &pcmd) {
-            auto result = m_director->DeleteHeartBeat(pcmd.cmd.uuid);
+                          return (result == Director::OperationResult::Success)
+                                     ? fmt::format("Ok")
+                                     : fmt::format("Failed to update heartbeat");
+                        },
+                        // delete pilot
+                        [this](const OrchCommand<DeleteHeartBeat> &pcmd) {
+                          auto result = m_director->DeleteHeartBeat(pcmd.cmd.uuid);
 
-            return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
-          },
-          // Handle errors
-          [this](const OrchCommand<InvalidCommand> &pcmd) {
-            m_logger->debug("Replying to invalid pilot command with {}", pcmd.cmd.errorMessage);
-            return pcmd.cmd.errorMessage;
-          },
-      },
-      command);
+                          return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
+                        },
+                        // Handle errors
+                        [this](const OrchCommand<InvalidCommand> &pcmd) {
+                          m_logger->debug("Replying to invalid pilot command with {}", pcmd.cmd.errorMessage);
+                          return pcmd.cmd.errorMessage;
+                        },
+                    },
+                    command);
 }
 
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
