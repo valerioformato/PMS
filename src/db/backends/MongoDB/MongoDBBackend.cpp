@@ -134,11 +134,6 @@ json MongoDBBackend::UpdatesToJson(const Queries::Updates &updates) {
     std::string op_name{magic_enum::enum_name(op)};
     std::ranges::transform(op_name, op_name.begin(), ::tolower);
 
-    // special case for $currentDate
-    if (op == Queries::UpdateOp::CURRENT_DATE) {
-      op_name = "currentDate";
-    }
-
     op_name.insert(0, "$");
     result[op_name][field] = value;
   }
@@ -217,7 +212,8 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
               auto query_result =
                   db[query.collection].find_one_and_update(JsonUtils::json2bson(MatchesToJson(query.match)),
                                                            JsonUtils::json2bson(UpdatesToJson(query.update)), options);
-              result = JsonUtils::bson2json(query_result.value());
+              if (query_result)
+                result = JsonUtils::bson2json(query_result.value());
             } catch (const mongocxx::exception &e) {
               return Error{e.code(), e.what()};
             }

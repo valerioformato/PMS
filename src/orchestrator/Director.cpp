@@ -22,25 +22,6 @@ using namespace PMS::JsonUtils;
 
 namespace PMS::Orchestrator {
 
-template <class ErrorType, unsigned int max_retries = 10, typename Callable>
-decltype(auto) RetryIfFailsWith(Callable callable) {
-  unsigned int retries = 0;
-  std::exception_ptr last_exception;
-
-  while (retries < max_retries) {
-    try {
-      return callable();
-    } catch (const ErrorType &e) {
-      spdlog::trace("DB query failed, retrying... {}/{}", retries, max_retries);
-      ++retries;
-      last_exception = std::current_exception();
-    }
-  }
-
-  // if we got here it's because we failed too many times. Propagate last error up the stack frame.
-  std::rethrow_exception(last_exception);
-}
-
 void Director::Start() {
   auto &&tmpresult = m_backDB->Connect();
   tmpresult = m_frontDB->Connect();
@@ -154,18 +135,19 @@ ErrorOr<void> Director::UpdateJobStatus(std::string_view pilotUuid, std::string_
       {"hash", hash},
   };
 
+  auto update_time = Utils::CurrentTimeToMillisSinceEpoch();
+
   DB::Queries::Updates update_action{
       {"status", magic_enum::enum_name(status)},
-      {"lastUpdate", true, DB::Queries::UpdateOp::CURRENT_DATE},
   };
 
   switch (status) {
   case JobStatus::Running:
-    update_action.emplace_back("startTime", true, DB::Queries::UpdateOp::CURRENT_DATE);
+    update_action.emplace_back("startTime", update_time);
     break;
   case JobStatus::Error:
   case JobStatus::Done:
-    update_action.emplace_back("endTime", true, DB::Queries::UpdateOp::CURRENT_DATE);
+    update_action.emplace_back("endTime", update_time);
     break;
   default:
     break;
@@ -193,6 +175,11 @@ void Director::WriteJobUpdates() {
         std::lock_guard lock{m_jobUpdateRequests_mx};
         std::swap(m_jobUpdateRequests, job_update_requests);
       }
+
+      std::ranges::for_each(job_update_requests, [this](DB::Queries::Query &query) {
+        std::get<DB::Queries::Update>(query).update.emplace_back("lastUpdate", Utils::CurrentTimeToMillisSinceEpoch());
+      });
+
       auto write_result = m_frontDB->BulkWrite("jobs", job_update_requests);
       if (!write_result) {
         m_logger->error("Failed to write job updates: {}", write_result.assume_error().Message());
@@ -430,7 +417,7 @@ void Director::JobInsert() {
         continue;
       }
 
-      if (query_result && query_result.value())
+      if (query_result && !query_result.value().empty())
         continue;
 
       m_logger->trace("Queueing up job {} for insertion", to_string_view(job["hash"]));
@@ -477,15 +464,14 @@ void Director::JobTransfer() {
       });
 
       if (!maybe_query_result) {
-        m_logger->error("Failed to query backend DB for jobs");
+        m_logger->error("Failed to query backend DB for jobs: {}", maybe_query_result.error().Message());
         continue;
       }
 
-      for (auto &job : maybe_query_result.value()) {
-        // filtering out the _id field
+      std::ranges::transform(maybe_query_result.value(), std::back_inserter(toBeInserted), [](auto &job) {
         job.erase("_id");
-        toBeInserted.push_back(job);
-      }
+        return job;
+      });
     }
 
     if (!toBeInserted.empty()) {
@@ -496,7 +482,7 @@ void Director::JobTransfer() {
       });
 
       if (!insert_result) {
-        m_logger->error("Failed to insert jobs into frontend DB");
+        m_logger->error("Failed to insert jobs into frontend DB: {}", insert_result.error().Message());
         continue;
       }
 
@@ -508,6 +494,11 @@ void Director::JobTransfer() {
             .update = {{"inFrontDB", true}},
         };
       });
+
+      auto write_result = m_backDB->BulkWrite("jobs", writeOps);
+      if (!write_result) {
+        m_logger->error("Failed to update jobs in backend DB: {}", write_result.error().Message());
+      }
 
       toBeInserted.clear();
       writeOps.clear();
@@ -563,7 +554,7 @@ void Director::UpdateTasks() {
 
         DB::Queries::Updates updateQuery{
             {"status", magic_enum::enum_name(JobStatus::Failed)},
-            {"lastUpdate", true, DB::Queries::UpdateOp::CURRENT_DATE},
+            {"lastUpdate", Utils::CurrentTimeToMillisSinceEpoch()},
         };
 
         TRY(m_frontDB->RunQuery(DB::Queries::Update{
@@ -694,6 +685,9 @@ void Director::UpdateDeadPilots() {
         continue;
       }
 
+      if (job_query_result.assume_value().empty())
+        continue;
+
       json job = std::move(job_query_result.value());
       m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_string_view(pilot["uuid"]),
                       to_string_view(job["hash"]));
@@ -733,7 +727,7 @@ void Director::DBSync() {
     auto last_check_in_millis_since_epoch =
         std::chrono::duration_cast<std::chrono::milliseconds>(lastCheck.time_since_epoch());
     DB::Queries::Matches matches{
-        {"lastUpdate", last_check_in_millis_since_epoch.count(), DB::Queries::ComparisonOp::GT},
+        {"lastUpdate", last_check_in_millis_since_epoch.count() - 1, DB::Queries::ComparisonOp::GT},
     };
 
     m_logger->debug("Syncing DBs...");
@@ -744,12 +738,16 @@ void Director::DBSync() {
     });
 
     if (!query_result) {
-      m_logger->error("Failed to query frontend DB for updated jobs");
+      m_logger->error("Failed to query frontend DB for updated jobs: {}", query_result.error().Message());
       continue;
     }
 
     lastCheck = std::chrono::system_clock::now();
     m_logger->debug("...query done.");
+
+    for (const auto &job : query_result.assume_value()) {
+      m_logger->trace("Job: {} - {}", to_string_view(job["hash"]), to_string_view(job["status"]));
+    }
 
     std::vector<DB::Queries::Query> writeOps;
     std::ranges::transform(query_result.assume_value(), std::back_inserter(writeOps), [](const auto &job) {
@@ -855,7 +853,7 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
   case QueryOperation::UpdateOne: {
     auto matches = TRY(PMS::DB::Queries::ToMatches(match));
     auto update_action = TRY(PMS::DB::Queries::ToUpdates(option));
-    update_action.emplace_back("lastUpdate", true, DB::Queries::UpdateOp::CURRENT_DATE);
+    update_action.emplace_back("lastUpdate", Utils::CurrentTimeToMillisSinceEpoch());
 
     auto result = TRY(m_frontDB->RunQuery(DB::Queries::Update{
         .collection = "jobs",
@@ -869,7 +867,7 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
   case QueryOperation::UpdateMany: {
     auto matches = TRY(PMS::DB::Queries::ToMatches(match));
     auto update_action = TRY(PMS::DB::Queries::ToUpdates(option));
-    update_action.emplace_back("lastUpdate", true, DB::Queries::UpdateOp::CURRENT_DATE);
+    update_action.emplace_back("lastUpdate", Utils::CurrentTimeToMillisSinceEpoch());
 
     auto result = TRY(m_frontDB->RunQuery(DB::Queries::Update{
         .collection = "jobs",

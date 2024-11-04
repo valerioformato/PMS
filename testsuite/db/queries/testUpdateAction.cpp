@@ -18,8 +18,7 @@ SCENARIO("ToUpdates function converts JSON to Updates correctly", "[ToUpdates]")
       "$inc" : {"field2": 10},
       "$mul" : {"field3": 2},
       "$min" : {"field4": 5},
-      "$max" : {"field5": 100},
-      "$current_date" : {"field6": true}
+      "$max" : {"field5": 100}
     })"_json;
 
     WHEN("ToUpdates is called") {
@@ -36,7 +35,6 @@ SCENARIO("ToUpdates function converts JSON to Updates correctly", "[ToUpdates]")
         REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field3", 2, UpdateOp::MUL}));
         REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field4", 5, UpdateOp::MIN}));
         REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field5", 100, UpdateOp::MAX}));
-        REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field6", true, UpdateOp::CURRENT_DATE}));
       }
     }
   }

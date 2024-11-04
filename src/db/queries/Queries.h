@@ -113,7 +113,10 @@ inline constexpr std::string to_string(const Query &query) {
             return fmt::format("FindOneAndUpdate: {}, {}", DumpMatches(q.match), DumpUpdates(q.update),
                                q.filter.dump());
           },
-          [](const Insert &q) { return fmt::format("Insert: {}", json(q.documents).dump()); },
+          [](const Insert &q) {
+            return q.documents.size() < 5 ? fmt::format("Insert: {}", json(q.documents).dump())
+                                          : fmt::format("Insert: {} documents", q.documents.size());
+          },
           [](const Update &q) { return fmt::format("Update: {}, {}", DumpMatches(q.match), DumpUpdates(q.update)); },
           [](const Delete &q) { return fmt::format("Delete: {}", DumpMatches(q.match)); },
           [](const Count &q) { return fmt::format("Count: {}", DumpMatches(q.match)); },

@@ -68,6 +68,11 @@ namespace PMS::Utils {
 template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
+inline uint64_t CurrentTimeToMillisSinceEpoch() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+      .count();
+}
+
 inline std::vector<std::string_view> TokenizeString(const std::string_view str, const char delimiter) {
   std::vector<std::string_view> tokens;
   size_t start = 0;

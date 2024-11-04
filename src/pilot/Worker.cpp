@@ -163,9 +163,11 @@ void Worker::MainLoop() {
     }
 
     if (job.contains("finished")) {
+      spdlog::info("Worker: no jobs available. Exiting...");
       m_workerState = State::EXIT;
     } else if (job.contains("sleep")) {
       sleepTime = std::chrono::minutes(1);
+      spdlog::info("Worker: sleeping for {} seconds", sleepTime);
       m_workerState = State::SLEEP;
     }
 
