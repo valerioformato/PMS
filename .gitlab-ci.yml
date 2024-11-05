@@ -60,7 +60,7 @@ test-ubuntu24.04:
   image: docker:19.03.12
   services:
     - docker:19.03.12-dind
-  needs: ["build-ubuntu24.04"]
+  needs: ["test-ubuntu24.04"]
   tags:
     - docker
   variables:
