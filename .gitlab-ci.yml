@@ -54,7 +54,8 @@ test-ubuntu24.04:
   image: vformato/pms-ci:ubuntu24.04
   needs: ["build-ubuntu24.04"]
 
-dockerize-ubuntu24.04:
+
+.dockerize-default : &dockerize-default
   stage: dockerize
   image: docker:19.03.12
   services:
@@ -62,15 +63,27 @@ dockerize-ubuntu24.04:
   needs: ["build-ubuntu24.04"]
   tags:
     - docker
-  only:
-    - master
   variables:
-    # DOCKER_HOST: localhost:2375
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: ""
     
   script:
     - cp docker/Dockerfile .
     - docker login --username vformato --password $dockerhubtoken
-    - docker build -t vformato/pms:latest .
-    - docker push vformato/pms:latest
+    - docker build -t vformato/pms:$dockertag .
+    - docker push vformato/pms:$dockertag
+
+dockerize-ubuntu24.04-latest:
+  <<: *dockerize-default
+  variables:
+    dockertag: latest
+  only:
+    - master
+
+dockerize-ubuntu24.04-tagged-version:
+  <<: *dockerize-default
+  variables:
+    dockertag: $CI_COMMIT_REF_NAME
+  only:
+    - /^v[0-9]*\.[0-9]*(\.[0-9]*)$/  # ex: v0.1.0
+    - /^v[0-9]*\.[0-9]*(_RC[0-9]*)$/ # ex: v1.0_RC1
