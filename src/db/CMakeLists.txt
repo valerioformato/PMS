@@ -1,22 +1,18 @@
-set(MongoDBUtils_src 
-    backends/MongoDB/DBHandle.cpp
-    backends/MongoDB/PoolHandle.cpp
-  )
-
-add_library(MongoDBUtils SHARED ${MongoDBUtils_src})
-target_include_directories(MongoDBUtils PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(MongoDBUtils PUBLIC Boost::boost Boost::system magic_enum::magic_enum spdlog::spdlog mongocxx_shared bsoncxx_shared nlohmann_json::nlohmann_json)
-install(TARGETS MongoDBUtils DESTINATION lib)
+set(MongoDBBackend_src
+backends/MongoDB/PoolHandle.cpp
+backends/MongoDB/DBHandle.cpp
+backends/MongoDB/MongoDBBackend.cpp    
+)
 
 set(DBUtils_src
     harness/Harness.cpp
     queries/Match.cpp
     queries/Update.cpp
-    backends/MongoDB/MongoDBBackend.cpp
+    ${MongoDBBackend_src}
     )
 add_library(DBUtils SHARED ${DBUtils_src})
 target_include_directories(DBUtils PUBLIC ${CMAKE_SOURCE_DIR}/src)
-# TODO: remove this dependency on MongoDBUtils (due to json conversion functions that should be used only in the MongoDB backend)
-target_link_libraries(DBUtils PUBLIC MongoDBUtils)
+target_link_libraries(DBUtils PUBLIC spdlog::spdlog magic_enum::magic_enum mongocxx_shared bsoncxx_shared nlohmann_json::nlohmann_json)
 install(TARGETS DBUtils DESTINATION lib)
     
+# target_link_libraries(MongoDBUtils PUBLIC Boost::boost Boost::system magic_enum::magic_enum spdlog::spdlog mongocxx_shared bsoncxx_shared nlohmann_json::nlohmann_json)

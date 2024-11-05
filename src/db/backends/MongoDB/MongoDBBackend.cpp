@@ -3,11 +3,22 @@
 #include <magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
+#include <bsoncxx/builder/basic/document.hpp>
+#include <bsoncxx/builder/basic/kvp.hpp>
+#include <bsoncxx/document/value.hpp>
+#include <bsoncxx/json.hpp>
+#include <bsoncxx/types.hpp>
+#include <bsoncxx/types/bson_value/value.hpp>
 #include <mongocxx/client.hpp>
 #include <mongocxx/exception/exception.hpp>
 
 #include "MongoDBBackend.h"
 #include "db/backends/MongoDB/MongoDBBackend.h"
+
+namespace PMS::JsonUtils {
+static json bson2json(bsoncxx::document::view bsonDoc) { return json::parse(bsoncxx::to_json(bsonDoc)); }
+static bsoncxx::document::value json2bson(const json &jsonDoc) { return bsoncxx::from_json(jsonDoc.dump()); }
+} // namespace PMS::JsonUtils
 
 namespace PMS::DB {
 mongocxx::instance m_mongo_instance{};
