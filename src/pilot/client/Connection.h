@@ -9,6 +9,8 @@
 #include <websocketpp/config/asio_no_tls_client.hpp>
 #include <websocketpp/connection.hpp>
 
+#include "common/Utils.h"
+
 namespace PMS::Pilot {
 
 using WSclient = websocketpp::client<websocketpp::config::asio_client>;
@@ -33,7 +35,7 @@ public:
   using State = websocketpp::session::state::value;
   [[nodiscard]] State get_status() const { return m_connection->get_state(); }
 
-  std::string Send(const std::string &message);
+  ErrorOr<std::string> Send(const std::string &message);
 
   class FailedConnectionException : public websocketpp::exception {
   public:

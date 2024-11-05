@@ -17,7 +17,7 @@
 namespace PMS::Pilot {
 class HeartBeat {
 public:
-  HeartBeat(boost::uuids::uuid uuid, std::shared_ptr<Connection> wsConnection)
+  HeartBeat(boost::uuids::uuid uuid, std::unique_ptr<Connection> wsConnection)
       : m_uuid{uuid}, m_wsConnection{std::move(wsConnection)}, m_exitSignal{}, m_thread{&HeartBeat::updateHB, this,
                                                                                         m_exitSignal.get_future()} {}
   ~HeartBeat();
@@ -26,7 +26,7 @@ public:
 
 private:
   boost::uuids::uuid m_uuid;
-  std::shared_ptr<Connection> m_wsConnection;
+  std::unique_ptr<Connection> m_wsConnection;
   std::promise<void> m_exitSignal;
   std::thread m_thread;
   bool m_alive = false;

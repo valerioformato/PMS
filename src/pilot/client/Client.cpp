@@ -22,8 +22,10 @@ Client::~Client() {
   m_thread.join();
 }
 
-std::string Client::Send(const json &msg) { return Send(msg, m_serverUri); }
-std::string Client::Send(const json &msg, std::string_view uri) {
+// NOTE: This function is not used in the current implementation
+//       It was meant to be used as a one-shot way to send a message
+[[maybe_unused]] ErrorOr<std::string> Client::Send(const json &msg) { return TRY(Send(msg, m_serverUri)); }
+[[maybe_unused]] ErrorOr<std::string> Client::Send(const json &msg, std::string_view uri) {
   Connection connection{m_endpoint, uri};
 
   unsigned int nTries = 0;
@@ -39,7 +41,7 @@ std::string Client::Send(const json &msg, std::string_view uri) {
     spdlog::error("Could not establish a connection after {} tries. Aborting...", nMaxTries);
   }
 
-  return connection.Send(msg.dump());
+  return TRY(connection.Send(msg.dump()));
 }
 
 std::unique_ptr<Connection> Client::PersistentConnection() { return PersistentConnection(m_serverUri); }

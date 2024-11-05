@@ -745,10 +745,6 @@ void Director::DBSync() {
     lastCheck = std::chrono::system_clock::now();
     m_logger->debug("...query done.");
 
-    for (const auto &job : query_result.assume_value()) {
-      m_logger->trace("Job: {} - {}", to_string_view(job["hash"]), to_string_view(job["status"]));
-    }
-
     std::vector<DB::Queries::Query> writeOps;
     std::ranges::transform(query_result.assume_value(), std::back_inserter(writeOps), [](const auto &job) {
       DB::Queries::Matches job_query_match{{"hash", job["hash"]}};

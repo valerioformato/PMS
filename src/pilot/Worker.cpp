@@ -29,7 +29,7 @@ using namespace PMS::JsonUtils;
 
 namespace PMS::Pilot {
 
-bool Worker::Register(const Info &info) {
+ErrorOr<void> Worker::Register(const Info &info) {
   json req;
 
   m_uuid = info.uuid;
@@ -50,15 +50,18 @@ bool Worker::Register(const Info &info) {
   if (!m_config.tags.empty())
     req["tags"] = m_config.tags;
 
+  std::string response = TRY(m_wsConnection->Send(req.dump()));
+
   json reply;
   try {
-    reply = json::parse(m_wsConnection->Send(req.dump()));
-  } catch (const Connection::FailedConnectionException &e) {
-    spdlog::error("Failed connection to server...");
-    return false;
+    reply = json::parse(response);
+  } catch (const std::exception &e) {
+    return Error{std::make_error_code(std::errc::io_error), e.what()};
   }
 
-  return reply["validTasks"].size() > 0;
+  return reply["validTasks"].size() > 0 ? ErrorOr<void>{outcome::success()}
+                                        : ErrorOr<void>{Error{std::make_error_code(std::errc::permission_denied),
+                                                              "No valid tasks for this pilot"}};
 }
 
 void Worker::Start() { m_workerThread = std::thread{&Worker::MainLoop, this}; }
@@ -71,7 +74,7 @@ void Worker::Kill() {
   m_jobProcess.terminate();
 }
 
-bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
+ErrorOr<void> Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
   json request;
   request["command"] = "p_updateJobStatus";
   request["pilotUuid"] = boost::uuids::to_string(m_uuid);
@@ -79,12 +82,9 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   request["task"] = task;
   request["status"] = magic_enum::enum_name(status);
 
-  try {
-    auto reply = m_wsConnection->Send(request.dump());
-    return reply == "Ok"sv;
-  } catch (const Connection::FailedConnectionException &e) {
-    return false;
-  }
+  auto reply = TRY(m_wsConnection->Send(request.dump()));
+  return reply == "Ok"sv ? ErrorOr<void>{outcome::success()}
+                         : ErrorOr<void>{Error{std::make_error_code(std::errc::io_error), reply}};
 }
 
 void Worker::MainLoop() {
@@ -95,7 +95,7 @@ void Worker::MainLoop() {
   constexpr auto maxWaitTime = std::chrono::minutes(10);
   auto sleepTime = std::chrono::seconds(1);
 
-  HeartBeat hb{m_uuid, m_wsConnection};
+  HeartBeat hb{m_uuid, m_wsClient->PersistentConnection()};
   unsigned long int doneJobs = 0;
 
   auto startTime = std::chrono::system_clock::now();
@@ -131,11 +131,9 @@ void Worker::MainLoop() {
     request["pilotUuid"] = boost::uuids::to_string(m_uuid);
     spdlog::trace("{}", request.dump(2));
 
-    json job;
-    try {
-      job = json::parse(m_wsConnection->Send(request.dump()));
-      m_workerState = State::JOB_ACQUIRED;
-    } catch (const Connection::FailedConnectionException &e) {
+    auto response = m_wsConnection->Send(request.dump());
+    if (!response) {
+      spdlog::error("{}", response.assume_error().Message());
       if (!hb.IsAlive()) {
         spdlog::warn("No connection to server and heartbeat is not alive. Exiting...");
         m_workerState = State::EXIT;
@@ -144,6 +142,15 @@ void Worker::MainLoop() {
         m_workerState = State::WAIT;
         std::this_thread::sleep_for(std::chrono::seconds(10));
       }
+      continue;
+    }
+
+    json job;
+    try {
+      job = json::parse(response.assume_value());
+      m_workerState = State::JOB_ACQUIRED;
+    } catch (const std::exception &e) {
+      spdlog::error("{}", e.what());
       continue;
     }
 

@@ -29,10 +29,11 @@ struct Info;
 
 class Worker {
 public:
-  explicit Worker(Config config, std::shared_ptr<Client> wsClient)
-      : m_config{std::move(config)}, m_wsConnection{wsClient->PersistentConnection()} {}
+  explicit Worker(Config config, std::unique_ptr<Client> &&wsClient)
+      : m_config{std::move(config)}, m_wsClient{std::move(wsClient)}, m_wsConnection{
+                                                                          m_wsClient->PersistentConnection()} {}
 
-  bool Register(const Info &);
+  ErrorOr<void> Register(const Info &);
 
   void Start();
   void Stop();
@@ -47,10 +48,13 @@ public:
 private:
   enum class State { JOB_ACQUIRED, RUN, SLEEP, WAIT, EXIT };
 
+  Config m_config;
+  std::unique_ptr<Client> m_wsClient;
+  std::unique_ptr<Connection> m_wsConnection;
+
   State m_workerState = State::WAIT;
   std::thread m_workerThread;
-  Config m_config;
-  std::shared_ptr<Connection> m_wsConnection;
+
   unsigned long int m_maxJobs = std::numeric_limits<unsigned long int>::max();
   std::chrono::seconds m_maxTime = std::chrono::seconds::max();
 
@@ -67,7 +71,7 @@ private:
                                                             {EnvInfoType::List, "list"sv}};
   EnvInfoType GetEnvType(const std::string &envName);
 
-  bool UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status);
+  ErrorOr<void> UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status);
 
   std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, json, std::string_view);
 
