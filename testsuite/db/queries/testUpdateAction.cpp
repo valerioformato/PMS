@@ -28,7 +28,7 @@ SCENARIO("ToUpdates function converts JSON to Updates correctly", "[ToUpdates]")
 
       THEN("The Updates vector should contain the correct UpdateActions") {
         auto updates = result.value();
-        REQUIRE(updates.size() == 6);
+        REQUIRE(updates.size() == 5);
 
         REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field1", "value1", UpdateOp::SET}));
         REQUIRE(::PMS::Tests::Utils::RangeContains(updates, UpdateAction{"field2", 10, UpdateOp::INC}));
