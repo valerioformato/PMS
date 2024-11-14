@@ -96,6 +96,7 @@ GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
 FetchContent_GetProperties(mongo-cxx)
 if(NOT mongo-cxx_POPULATED)
   FetchContent_MakeAvailable(mongo-cxx)
+  install(TARGETS bson_shared bsoncxx_shared mongoc_shared mongocxx_shared DESTINATION lib)
 endif()
 
 # === XRootD ===
