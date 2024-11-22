@@ -252,9 +252,9 @@ void Worker::MainLoop() {
 
         handleJobStatusChange(job, JobStatus::InboundTransfer);
 
-        bool success = ftQueue.Process();
-        if (!success) {
-          spdlog::error("File transfer process failed");
+        auto result = ftQueue.Process();
+        if (!result) {
+          spdlog::error("File transfer process failed: {}", result.assume_error().Message());
           handleJobStatusChange(job, JobStatus::InboundTransferError);
           m_workerState = State::WAIT;
 
@@ -328,11 +328,11 @@ void Worker::MainLoop() {
         unsigned int file_transfer_tries{0};
         while (true) {
           // Call the Process method and check the return value
-          bool success = ftQueue.Process();
-          if (!success) {
+          auto result = ftQueue.Process();
+          if (!result) {
             ++file_transfer_tries;
 
-            spdlog::error("File transfer process failed");
+            spdlog::error("File transfer process failed: {}", result.assume_error().Message());
             if (file_transfer_tries == max_transfer_tries) {
               nextJobStatus = JobStatus::OutboundTransferError;
               break;

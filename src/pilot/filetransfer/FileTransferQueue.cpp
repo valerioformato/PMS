@@ -8,13 +8,14 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "common/Utils.h"
 #include "pilot/filetransfer/FileTransferQueue.h"
 
 namespace fs = std::filesystem;
 namespace bp = boost::process;
 
 namespace PMS::Pilot {
-bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
+ErrorOr<void> FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
   fs::path from, to;
 
   switch (ftInfo.type) {
@@ -34,16 +35,20 @@ bool FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
 
   spdlog::debug("Attempting to copy {} to {}", from.string(), to.string());
 
-  fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+  try {
+    fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+  } catch (const std::exception &e) {
+    return Error{std::make_error_code(std::errc::io_error), e.what()};
+  }
 
-  return true;
+  return outcome::success();
 }
 
 // TODO: gfal transfers are temporarily implemented by spawning a process call to the actual gfal client.
 //       With enough time we should use the actual library and embed the file transfer similarly to what we do with
 //       xrootd.
 
-bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
+ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
   std::string from, to;
 
   switch (ftInfo.type) {
@@ -79,41 +84,39 @@ bool FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
     spdlog::error("stderr: {}", err);
 
   if (proc_ec || transfer_process.exit_code()) {
-    throw(std::runtime_error("Error in GFAL copy"));
+    return Error{std::make_error_code(std::errc::io_error), "gfal-copy failed"};
   }
 
-  return true;
+  return outcome::success();
 }
 
-bool FileTransferQueue::Process() {
-  bool result;
-
+ErrorOr<void> FileTransferQueue::Process() {
   // run the local file transfers
-  std::for_each(begin(m_queue), end(m_queue), [&result](const auto &ft) {
+  for (const auto &ft : m_queue) {
     switch (ft.protocol) {
     case FileTransferProtocol::local:
-      result = LocalFileTransfer(ft);
+      TRY(LocalFileTransfer(ft));
       break;
     case FileTransferProtocol::gfal:
-      result = GfalFileTransfer(ft);
+      TRY(GfalFileTransfer(ft));
       break;
     case FileTransferProtocol::xrootd:
       // handled later
       break;
     }
-  });
+  };
 
 #ifdef ENABLE_XROOTD
   // run XRootD file transfers
-  std::for_each(begin(m_queue), end(m_queue), [this](const auto &ft) {
+  for (const auto &ft : m_queue) {
     if (ft.protocol == FileTransferProtocol::xrootd)
-      AddXRootDFileTransfer(ft);
-  });
+      TRY(AddXRootDFileTransfer(ft));
+  };
 
-  result = RunXRootDFileTransfer();
+  TRY(RunXRootDFileTransfer());
 #endif
 
-  return result;
+  return outcome::success();
 }
 
 void FileTransferQueue::ProcessWildcards(std::string &fileName) {

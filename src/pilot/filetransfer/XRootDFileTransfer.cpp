@@ -90,7 +90,7 @@ static XrdCl::PropertyList getDefaultProperties(std::string_view sfile, std::str
   return properties;
 }
 
-bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
+ErrorOr<void> FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
   std::string sourceFile, destFile;
   switch (ftInfo.type) {
   case FileTransferType::Inbound:
@@ -127,8 +127,7 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
       std::error_code ec;
       dest += fs::current_path(ec).string() + '/';
       if (ec) {
-        spdlog::error("{}", ec.message());
-        return false;
+        return Error{ec, ec.message()};
       }
     }
   }
@@ -167,8 +166,7 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
         std::string url = source.GetURL();
         sourceFiles = IndexRemote(fs.get(), url);
         if (sourceFiles.empty()) {
-          spdlog::error("Error indexing remote directory.");
-          return false;
+          return Error{std::make_error_code(std::errc::io_error), "Error indexing remote directory."};
         }
       } else {
         sourceFiles.push_back(std::string{sourceFile});
@@ -191,8 +189,7 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
         std::error_code ec;
         sfile = "file://" + fs::current_path(ec).string() + '/' + sfile;
         if (ec) {
-          spdlog::error("{}", ec.message());
-          return false;
+          return Error{ec, ec.message()};
         }
       }
     }
@@ -235,10 +232,10 @@ bool FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &ftInfo) {
     m_results.push_back(results);
   }
 
-  return true;
+  return outcome::success();
 }
 
-bool FileTransferQueue::RunXRootDFileTransfer() {
+ErrorOr<void> FileTransferQueue::RunXRootDFileTransfer() {
   // Configure the copy process
   XrdCl::PropertyList processConfig;
   processConfig.Set("jobType", "configuration");
@@ -252,8 +249,7 @@ bool FileTransferQueue::RunXRootDFileTransfer() {
   XrdCl::XRootDStatus st = m_xrdProcess.Prepare();
   if (!st.IsOK()) {
     CleanUpResults(m_results);
-    spdlog::error("Prepare: {}", st.ToStr());
-    return false;
+    return Error{std::make_error_code(std::errc::io_error), st.ToStr()};
   }
 
   st = m_xrdProcess.Run(nullptr);
@@ -278,11 +274,11 @@ bool FileTransferQueue::RunXRootDFileTransfer() {
       spdlog::error("Jobs total: {}, run: {}, errors: {}", m_results.size(), jobsRun, errors);
     }
     CleanUpResults(m_results);
-    return false;
+    return Error{std::make_error_code(std::errc::io_error), st.ToStr()};
   }
 
   CleanUpResults(m_results);
-  return true;
+  return outcome::success();
 }
 
 std::vector<std::string> FileTransferQueue::IndexXRootDRemote(std::string_view dir) {
