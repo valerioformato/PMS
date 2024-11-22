@@ -89,6 +89,7 @@ target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost:
 set(ENABLE_TESTS
     OFF
     CACHE INTERNAL "") # Forces the value
+set(BSONCXX_LINK_WITH_STATIC_MONGOC ON CACHE INTERNAL "")
 FetchContent_Declare(mongo-cxx
 GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
   GIT_TAG r3.9.0
@@ -96,7 +97,7 @@ GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
 FetchContent_GetProperties(mongo-cxx)
 if(NOT mongo-cxx_POPULATED)
   FetchContent_MakeAvailable(mongo-cxx)
-  install(TARGETS bson_shared bsoncxx_shared mongoc_shared mongocxx_shared DESTINATION lib)
+  install(TARGETS bsoncxx_shared mongocxx_shared DESTINATION lib)
 endif()
 
 # === XRootD ===
