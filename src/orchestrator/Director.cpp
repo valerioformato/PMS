@@ -688,7 +688,7 @@ void Director::UpdateDeadPilots() {
       if (job_query_result.assume_value().empty())
         continue;
 
-      json job = std::move(job_query_result.value());
+      json job = std::move(job_query_result.assume_value().front());
       m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_string_view(pilot["uuid"]),
                       to_string_view(job["hash"]));
 
