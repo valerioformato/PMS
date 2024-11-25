@@ -89,7 +89,7 @@ target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost:
 set(ENABLE_TESTS
     OFF
     CACHE INTERNAL "") # Forces the value
-set(BSONCXX_LINK_WITH_STATIC_MONGOC ON CACHE INTERNAL "")
+set(BUILD_SHARED_LIBS_WITH_STATIC_MONGOC ON CACHE INTERNAL "")
 FetchContent_Declare(mongo-cxx
 GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
   GIT_TAG r3.9.0
