@@ -68,7 +68,7 @@ test-ubuntu24.04:
     DOCKER_TLS_CERTDIR: ""
 
   script:
-    - cp ${DOCKERFILE} Dockerfile
+    - cp docker/${DOCKERFILE} Dockerfile
     - docker login --username vformato --password $dockerhubtoken
     - docker build -t vformato/pms:$dockertag .
     - docker push vformato/pms:$dockertag
