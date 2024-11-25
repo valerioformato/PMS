@@ -17,4 +17,4 @@ RUN apt install -y gdb
 
 COPY --from=builder /PMS/software/install/ /PMS/software/install/
 
-ENTRYPOINT ["gdb", "--ex", "run", "--args", /PMS/software/install/PMS/bin/PMSOrchestrator"]
+ENTRYPOINT ["gdb", "--ex", "run", "--args", "/PMS/software/install/PMS/bin/PMSOrchestrator"]
