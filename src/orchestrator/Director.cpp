@@ -660,7 +660,7 @@ void Director::UpdateDeadPilots() {
       json deleteQuery;
       deleteQuery["uuid"] = pilot["uuid"];
 
-      DB::Queries::Matches delete_query_match{{"pilotUuid", pilot["uuid"]}};
+      DB::Queries::Matches delete_query_match{{"uuid", pilot["uuid"]}};
 
       DB::Queries::Matches job_query_match{
           {"pilotUuid", pilot["uuid"]},
