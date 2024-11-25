@@ -66,9 +66,9 @@ test-ubuntu24.04:
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: ""
-    
+
   script:
-    - cp docker/Dockerfile .
+    - cp ${DOCKERFILE} Dockerfile
     - docker login --username vformato --password $dockerhubtoken
     - docker build -t vformato/pms:$dockertag .
     - docker push vformato/pms:$dockertag
@@ -77,6 +77,7 @@ dockerize-ubuntu24.04-latest:
   <<: *dockerize-default
   variables:
     dockertag: latest
+    DOCKERFILE: Dockerfile
   only:
     - master
 
@@ -84,6 +85,24 @@ dockerize-ubuntu24.04-tagged-version:
   <<: *dockerize-default
   variables:
     dockertag: $CI_COMMIT_REF_NAME
+    DOCKERFILE: Dockerfile
+  only:
+    - /^v[0-9]*\.[0-9]*(\.[0-9]*)$/  # ex: v0.1.0
+    - /^v[0-9]*\.[0-9]*(_RC[0-9]*)$/ # ex: v1.0_RC1
+
+dockerize-ubuntu24.04-latest-deb:
+  <<: *dockerize-default
+  variables:
+    dockertag: latest-debug
+    DOCKERFILE: Dockerfile_debug
+  only:
+    - master
+
+dockerize-ubuntu24.04-tagged-version-deb:
+  <<: *dockerize-default
+  variables:
+    dockertag: ${CI_COMMIT_REF_NAME}-debug
+    DOCKERFILE: Dockerfile_debug
   only:
     - /^v[0-9]*\.[0-9]*(\.[0-9]*)$/  # ex: v0.1.0
     - /^v[0-9]*\.[0-9]*(_RC[0-9]*)$/ # ex: v1.0_RC1
