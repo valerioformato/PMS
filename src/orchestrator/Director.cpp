@@ -685,18 +685,17 @@ void Director::UpdateDeadPilots() {
         continue;
       }
 
-      if (job_query_result.assume_value().empty())
-        continue;
+      if (!job_query_result.assume_value().empty()) {
+        json job = std::move(job_query_result.assume_value().front());
+        m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_string_view(pilot["uuid"]),
+                        to_string_view(job["hash"]));
 
-      json job = std::move(job_query_result.assume_value().front());
-      m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_string_view(pilot["uuid"]),
-                      to_string_view(job["hash"]));
-
-      auto update_result = UpdateJobStatus(to_string_view(pilot["uuid"]), to_string_view(job["hash"]),
-                                           to_string_view(job["task"]), JobStatus::Error);
-      if (!update_result) {
-        m_logger->error("Failed to update job status for job {}", to_string_view(job["hash"]));
-        continue;
+        auto update_result = UpdateJobStatus(to_string_view(pilot["uuid"]), to_string_view(job["hash"]),
+                                             to_string_view(job["task"]), JobStatus::Error);
+        if (!update_result) {
+          m_logger->error("Failed to update job status for job {}", to_string_view(job["hash"]));
+          continue;
+        }
       }
 
       requests.push_back(DB::Queries::Delete{
