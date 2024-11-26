@@ -105,4 +105,4 @@ dockerize-ubuntu24.04-tagged-version-deb:
     DOCKERFILE: Dockerfile_debug
   only:
     - /^v[0-9]*\.[0-9]*(\.[0-9]*)$/  # ex: v0.1.0
-    - /^v[0-9]*\.[0-9]*(_RC[0-9]*)$/ # ex: v1.0_RC1
+    - /^v[0-9]*\.[0-9]*(_RC[0-9]+.*)$/ # ex: v1.0_RC1, v1.0_RC1b
