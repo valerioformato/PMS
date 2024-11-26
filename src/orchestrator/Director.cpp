@@ -824,6 +824,7 @@ ErrorOr<std::string> Director::Summary(const std::string &user) const {
     auto taskName = to_string(item);
 
     if (m_tasks.find(taskName) == end(m_tasks)) {
+      m_logger->error("Task {} not found in internal task list", taskName);
       continue;
     }
 

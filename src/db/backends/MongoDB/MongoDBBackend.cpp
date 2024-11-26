@@ -348,6 +348,8 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                              [](const auto &doc) { return JsonUtils::bson2json(doc); });
             } catch (const mongocxx::exception &e) {
               return Error{e.code(), e.what()};
+            } catch (const std::exception &e) {
+              return Error{std::errc::invalid_argument, e.what()};
             }
 
             return result;
