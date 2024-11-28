@@ -312,8 +312,6 @@ void Worker::MainLoop() {
         nextJobStatus = JobStatus::Done;
       }
 
-      constexpr unsigned int max_transfer_tries{3};
-
       // check for outbound file transfers
       if (job.contains("output")) {
         FileTransferQueue ftQueue;
@@ -322,27 +320,15 @@ void Worker::MainLoop() {
           ftQueue.Add(ftJob);
         }
 
-        // UpdateJobStatus(job["hash"], job["task"], JobStatus::OutboundTransfer);
         handleJobStatusChange(job, JobStatus::OutboundTransfer);
 
-        unsigned int file_transfer_tries{0};
-        while (true) {
-          // Call the Process method and check the return value
-          auto result = ftQueue.Process();
-          if (!result) {
-            ++file_transfer_tries;
-
-            spdlog::error("File transfer process failed: {}", result.assume_error().Message());
-            if (file_transfer_tries == max_transfer_tries) {
-              nextJobStatus = JobStatus::OutboundTransferError;
-              break;
-            }
-
-            // wait 3 seconds before retrying
-            std::this_thread::sleep_for(std::chrono::seconds(3));
-          } else {
-            break;
-          }
+        // Call the Process method and check the return value
+        auto result = ftQueue.Process();
+        if (!result) {
+          spdlog::error("File transfer process failed: {}", result.assume_error().Message());
+          nextJobStatus = JobStatus::OutboundTransferError;
+        } else {
+          spdlog::trace("Outbound transfers completed");
         }
       }
 

@@ -39,6 +39,8 @@ public:
 private:
   std::vector<FileTransferInfo> m_queue;
 
+  static constexpr unsigned int m_max_tries = 3;
+
   static std::vector<std::string> GlobFS(std::string_view dir, const std::regex &matcher);
   static std::vector<std::string> GlobXRootD(std::string_view dir, const std::regex &matcher);
 
