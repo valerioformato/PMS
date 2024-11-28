@@ -1,5 +1,6 @@
 // c++ headers
 #include <filesystem>
+#include <fstream>
 #include <ranges>
 #include <thread>
 
@@ -300,9 +301,21 @@ void Worker::MainLoop() {
 
       spdlog::debug("Process exited with code {}", m_jobProcess.exit_code());
 
+      auto dump_file = [](const std::string_view filePath) {
+        std::ifstream file(filePath.data());
+        if (file.is_open()) {
+          std::string line;
+          while (std::getline(file, line)) {
+            std::cout << line << std::endl;
+          }
+          file.close();
+        }
+      };
+
       JobStatus nextJobStatus;
       if (procError || m_jobProcess.exit_code()) {
-        spdlog::error("Worker: Job exited with an error: {}", procError.message());
+        spdlog::error("Worker: Job exited with an error. Dumping stderr:");
+        dump_file(jobIO.stderr);
         nextJobStatus = JobStatus::Error;
       } else if (m_workerState == State::EXIT) {
         spdlog::warn("Worker: Requested termination. Marking job as failed...");
