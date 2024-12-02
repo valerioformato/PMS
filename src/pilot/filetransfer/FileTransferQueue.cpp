@@ -3,7 +3,6 @@
 #include <filesystem>
 
 // external dependencies
-#include <boost/process.hpp>
 #include <regex>
 #include <spdlog/spdlog.h>
 
@@ -12,7 +11,6 @@
 #include "pilot/filetransfer/FileTransferQueue.h"
 
 namespace fs = std::filesystem;
-namespace bp = boost::process;
 
 namespace PMS::Pilot {
 ErrorOr<void> FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInfo) {
@@ -39,65 +37,6 @@ ErrorOr<void> FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInf
     fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
   } catch (const std::exception &e) {
     return Error{std::make_error_code(std::errc::io_error), e.what()};
-  }
-
-  return outcome::success();
-}
-
-// TODO: gfal transfers are temporarily implemented by spawning a process call to the actual gfal client.
-//       With enough time we should use the actual library and embed the file transfer similarly to what we do with
-//       xrootd.
-
-ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
-  std::string from, to;
-
-  switch (ftInfo.type) {
-  case FileTransferType::Inbound:
-    from = fmt::format("{}/{}", ftInfo.remotePath, ftInfo.fileName);
-    to = ftInfo.currentPath;
-    break;
-  case FileTransferType::Outbound:
-    from = fmt::format("{}/{}", ftInfo.currentPath, ftInfo.fileName);
-    to = ftInfo.remotePath;
-    break;
-  }
-
-  spdlog::debug("Attempting to copy {} to {} via gfal", from, to);
-
-  unsigned int tries = 0;
-
-  std::error_code proc_ec;
-  int proc_exit_code = 0;
-  while (tries < m_max_tries) {
-    bp::ipstream out_stream, err_stream;
-    bp::child transfer_process{bp::search_path("gfal-copy"),
-                               std::string{"-p"},
-                               std::string{"-f"},
-                               from,
-                               to,
-                               bp::std_out > out_stream,
-                               bp::std_err > err_stream,
-                               proc_ec};
-    transfer_process.wait();
-
-    proc_exit_code = transfer_process.exit_code();
-
-    std::string out, err;
-    while (std::getline(out_stream, out))
-      spdlog::trace("stdout: {}", out);
-
-    while (std::getline(err_stream, err))
-      spdlog::error("stderr: {}", err);
-
-    if (!proc_ec && !proc_exit_code) {
-      break;
-    }
-
-    ++tries;
-  }
-
-  if (proc_ec || proc_exit_code) {
-    return Error{std::make_error_code(std::errc::io_error), "gfal-copy failed"};
   }
 
   return outcome::success();

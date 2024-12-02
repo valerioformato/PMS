@@ -6,6 +6,7 @@ set(PMSPilot_src
     client/Client.cpp
     client/Connection.cpp
     filetransfer/FileTransferQueue.cpp
+    filetransfer/GfalFileTransfer.cpp
     )
 
 if(XROOTD_FOUND)
@@ -26,7 +27,13 @@ endif()
 
 
 if(XROOTD_FOUND)
+  message("Linking pilot with XRootD")
   target_link_libraries(PMSPilot PRIVATE PMSXrootd)
+endif()
+
+if(GFAL2_FOUND)
+  message("Linking pilot with gfal2")
+  target_link_libraries(PMSPilot PRIVATE PMSgfal2)
 endif()
 
 install(TARGETS PMSPilot DESTINATION bin)
