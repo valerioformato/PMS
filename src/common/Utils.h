@@ -27,11 +27,16 @@ namespace outcome = boost::outcome_v2;
     _temporary_result.value();                                                                                         \
   })
 
-#define TRY_WRAPPED(expression)                                                                                        \
+#define TRY_REPEATED(expression, max_tries)                                                                            \
   ({                                                                                                                   \
+    std::remove_cvref_t<decltype(max_tries)> tries{0};                                                                 \
     auto &&_temporary_result = (expression);                                                                           \
     static_assert(!std::is_lvalue_reference_v<std::remove_cvref_t<decltype(_temporary_result)>::value_type>,           \
                   "Do not return a reference from a fallible expression");                                             \
+    while (_temporary_result.has_error() && tries < max_tries) {                                                       \
+      _temporary_result = (expression);                                                                                \
+      ++tries;                                                                                                         \
+    }                                                                                                                  \
     if (_temporary_result.has_error()) [[unlikely]]                                                                    \
       return _temporary_result;                                                                                        \
     _temporary_result.value();                                                                                         \

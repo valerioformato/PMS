@@ -199,4 +199,86 @@ SCENARIO("Parsing time strings with ParseTimeString", "[ParseTimeString]") {
     }
   }
 }
+
+SCENARIO("Testing the TRY macros", "[Utils][TRY]") {
+  GIVEN("A successful operation") {
+    auto success = []() -> ErrorOr<int> { return 42; };
+    WHEN("TRY is called") {
+      THEN("It should return the value") {
+        auto test_func = [&]() -> ErrorOr<void> {
+          auto result = TRY(success());
+          REQUIRE(result == 42);
+
+          return outcome::success();
+        };
+
+        REQUIRE(test_func());
+      }
+    }
+  }
+
+  GIVEN("A failing operation") {
+    auto failure = []() -> ErrorOr<int> { return Error{std::errc::invalid_argument, "Test error"}; };
+    WHEN("TRY is called") {
+      THEN("It should return the error") {
+        auto test_func = [&]() -> ErrorOr<void> {
+          [[maybe_unused]] auto result = TRY(failure());
+
+          return outcome::success();
+        };
+
+        auto result = test_func();
+
+        REQUIRE(result.has_error());
+        REQUIRE(result.error().Code() == std::errc::invalid_argument);
+        REQUIRE(result.error().Message() == "Test error");
+      }
+    }
+  }
+
+  GIVEN("A repeatedly failing operation") {
+    auto failure = []() -> ErrorOr<void> { return Error{std::errc::invalid_argument, "Test error"}; };
+    WHEN("TRY is called") {
+      THEN("It should return the error") {
+        auto test_func = [&]() -> ErrorOr<void> {
+          TRY_REPEATED(failure(), 3);
+
+          return outcome::success();
+        };
+
+        auto result = test_func();
+
+        REQUIRE(result.has_error());
+        REQUIRE(result.error().Code() == std::errc::invalid_argument);
+        REQUIRE(result.error().Message() == "Test error");
+      }
+    }
+  }
+
+  GIVEN("A initially failing operation") {
+    unsigned int n{0};
+    auto failure = [&n]() -> ErrorOr<void> {
+      if (n < 2) {
+        ++n;
+        return Error{std::errc::invalid_argument, "Test error"};
+      }
+
+      return outcome::success();
+    };
+
+    WHEN("TRY is called") {
+      THEN("It should succeed after the third try") {
+        auto test_func = [&]() -> ErrorOr<void> {
+          TRY_REPEATED(failure(), 3);
+
+          return outcome::success();
+        };
+
+        auto result = test_func();
+
+        REQUIRE(result);
+      }
+    }
+  }
+}
 } // namespace PMS::Tests::Utils

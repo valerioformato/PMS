@@ -123,7 +123,6 @@ if(GFAL2_FOUND)
   message(STATUS "Enabling support for gfal file transfer")
   target_compile_definitions(PMSgfal2 INTERFACE ENABLE_GFAL2)
   target_include_directories(PMSgfal2 INTERFACE ${GFAL2_INCLUDE_DIR})
-  target_link_directories(PMSgfal2 INTERFACE ${GFAL2_LIB_DIR})
   if(NOT APPLE)
     # we force the use of RPATH instead of RUNPATH so that all gfal2 libraries will be found automatically
     target_link_options(PMSgfal2 INTERFACE -Wl,--disable-new-dtags)
@@ -132,7 +131,7 @@ if(GFAL2_FOUND)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(gfal2_deps REQUIRED IMPORTED_TARGET glib-2.0)
 
-  target_link_libraries(PMSgfal2 INTERFACE PkgConfig::gfal2_deps gfal2 gfal2_transfer)
+  target_link_libraries(PMSgfal2 INTERFACE PkgConfig::gfal2_deps ${GFAL2_LIBRARIES})
 endif()
 
 
