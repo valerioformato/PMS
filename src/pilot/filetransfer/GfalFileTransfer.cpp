@@ -11,6 +11,7 @@ namespace bp = boost::process;
 
 namespace PMS::Pilot {
 
+#ifdef ENABLE_GFAL2
 // Helper functions and types
 ErrorOr<gfal2_context_t> CreateGfal2Context() {
   GError *error = nullptr;
@@ -66,6 +67,7 @@ ErrorOr<void> Gfal2CopyFile(const std::string &from, const std::string &to, Tran
 
   return outcome::success();
 }
+#endif
 
 ErrorOr<void> Gfal2CopyFileExternal(const std::string &from, const std::string &to) {
   std::error_code proc_ec;
