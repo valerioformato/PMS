@@ -174,10 +174,10 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
   switch (ftInfo.type) {
   case FileTransferType::Inbound:
     from = fmt::format("{}/{}", ftInfo.remotePath, ftInfo.fileName);
-    to = fmt::format("file://{}/{}", ftInfo.currentPath, ftInfo.fileName);
+    to = fmt::format("file:///{}/{}", ftInfo.currentPath, ftInfo.fileName);
     break;
   case FileTransferType::Outbound:
-    from = fmt::format("file://{}/{}", ftInfo.currentPath, ftInfo.fileName);
+    from = fmt::format("file:///{}/{}", ftInfo.currentPath, ftInfo.fileName);
     to = ftInfo.remotePath;
     break;
   }

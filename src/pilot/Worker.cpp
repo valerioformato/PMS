@@ -184,7 +184,7 @@ void Worker::MainLoop() {
       spdlog::trace("Job: {}", job.dump(2));
 
       // prepare a sandbox directory for the job
-      fs::path wdPath{fmt::format("job_{}", std::string(job["hash"]))};
+      fs::path wdPath = fs::absolute(fs::path{fmt::format("job_{}", std::string(job["hash"]))});
       fs::create_directory(wdPath);
 
       // make the shell script executable
