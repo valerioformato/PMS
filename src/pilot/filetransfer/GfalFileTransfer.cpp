@@ -4,6 +4,7 @@
 #include <gfal_api.h>
 #endif
 #include <fmt/chrono.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
 #include "pilot/filetransfer/FileTransferQueue.h"
@@ -74,7 +75,7 @@ static void EventCallback(const gfalt_event_t e, [[maybe_unused]] gpointer user_
 
 static void MonitorCallback(gfalt_transfer_status_t h, [[maybe_unused]] const char *src,
                             [[maybe_unused]] const char *dst, [[maybe_unused]] gpointer user_data) {
-  static auto logger = spdlog::get("gfal2-event-callback");
+  static auto logger = spdlog::stdout_color_st("gfal2-event-callback");
 
   if (!h) {
     return;
@@ -103,7 +104,7 @@ static void MonitorCallback(gfalt_transfer_status_t h, [[maybe_unused]] const ch
 
 ErrorOr<void> Gfal2CopyFile(const std::string &from, const std::string &to,
                             const TransferParameters &transfer_parameters, gfal2_context_t context) {
-  static auto logger = spdlog::get("gfal2-copy-file");
+  static auto logger = spdlog::stdout_color_st("gfal2-copy-file");
 
   auto gt_params = TRY(transfer_parameters.get_native_parameters());
 
