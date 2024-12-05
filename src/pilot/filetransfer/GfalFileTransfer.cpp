@@ -97,7 +97,7 @@ static void MonitorCallback(gfalt_transfer_status_t h, [[maybe_unused]] const ch
   size_t trans = gfalt_copy_get_bytes_transferred(h, nullptr);
   auto elapsed = std::chrono::seconds{gfalt_copy_get_elapsed_time(h, nullptr)};
 
-  logger->trace("{} /second average ({} instant). Transferred {}, elapsed {} seconds", format_converted_bytes(avg),
+  logger->debug("{} /second average ({} instant). Transferred {}, elapsed {} seconds", format_converted_bytes(avg),
                 format_converted_bytes(inst), format_converted_bytes(trans), elapsed);
 }
 
