@@ -53,7 +53,7 @@ struct TransferParameters {
 };
 
 static void EventCallback(const gfalt_event_t e, [[maybe_unused]] gpointer user_data) {
-  static auto logger = spdlog::get("gfal2-event-callback");
+  static auto logger = spdlog::stdout_color_st("gfal2-event-callback");
 
   std::string side_str;
   switch (e->side) {

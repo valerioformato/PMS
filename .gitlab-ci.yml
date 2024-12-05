@@ -29,10 +29,6 @@ build-ubuntu24.04:
   <<: *build-docker
   image: vformato/pms-ci:ubuntu24.04
 
-build-ubuntu22.04:
-  <<: *build-docker
-  image: vformato/pms-ci:ubuntu22.04
-
 .test: &test
   stage: test
   script:
@@ -43,11 +39,6 @@ test-alma9:
   <<: *test
   image: vformato/pms-ci:alma9
   needs: ["build-alma9"]
-
-test-ubuntu22.04:
-  <<: *test
-  image: vformato/pms-ci:ubuntu22.04
-  needs: ["build-ubuntu22.04"]
 
 test-ubuntu24.04:
   <<: *test
