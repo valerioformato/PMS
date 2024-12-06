@@ -27,7 +27,7 @@ ErrorOr<gfal2_context_t> CreateGfal2Context() {
 }
 
 struct TransferParameters {
-  // default values from gfal2 transfer exmaple
+  // default values from gfal2 transfer example
   guint64 timeout{120};
   std::string dst_spacetoken{"TOKEN"};
   bool replace_existing_file{false};
@@ -75,7 +75,7 @@ static void EventCallback(const gfalt_event_t e, [[maybe_unused]] gpointer user_
 
 static void MonitorCallback(gfalt_transfer_status_t h, [[maybe_unused]] const char *src,
                             [[maybe_unused]] const char *dst, [[maybe_unused]] gpointer user_data) {
-  static auto logger = spdlog::stdout_color_st("gfal2-event-callback");
+  static auto logger = spdlog::stdout_color_st("gfal2-monitor-callback");
 
   if (!h) {
     return;
