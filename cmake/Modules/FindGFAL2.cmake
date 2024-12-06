@@ -55,6 +55,12 @@ endif (GFAL2_LIBRARIES)
 if (GFAL2_INCLUDE_DIR)
     message (STATUS "GFAL2 include dir: ${GFAL2_INCLUDE_DIR}")
 endif (GFAL2_INCLUDE_DIR)
+if (GFAL2_DEFINITIONS)
+    message (STATUS "GFAL2 definitions: ${GFAL2_DEFINITIONS}")
+endif (GFAL2_DEFINITIONS)
+if (GFAL2_LIBRARY_DIRS)
+    message (STATUS "GFAL2 library dirs: ${GFAL2_LIBRARY_DIRS}")
+endif (GFAL2_LIBRARY_DIRS)
 
 # -----------------------------------------------------
 # handle the QUIETLY and REQUIRED arguments and set GFAL2_FOUND to TRUE if
