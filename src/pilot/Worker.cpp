@@ -1,5 +1,7 @@
 // c++ headers
 #include <filesystem>
+#include <fstream>
+#include <ranges>
 #include <thread>
 
 // external headers
@@ -15,6 +17,7 @@
 // our headers
 #include "PMSVersion.h"
 #include "common/Job.h"
+#include "common/JsonUtils.h"
 #include "pilot/HeartBeat.h"
 #include "pilot/PilotInfo.h"
 #include "pilot/Worker.h"
@@ -23,9 +26,11 @@ using json = nlohmann::json;
 namespace bp = boost::process;
 namespace fs = std::filesystem;
 
+using namespace PMS::JsonUtils;
+
 namespace PMS::Pilot {
 
-bool Worker::Register(const Info &info) {
+ErrorOr<void> Worker::Register(const Info &info) {
   json req;
 
   m_uuid = info.uuid;
@@ -46,15 +51,18 @@ bool Worker::Register(const Info &info) {
   if (!m_config.tags.empty())
     req["tags"] = m_config.tags;
 
+  std::string response = TRY(m_wsConnection->Send(req.dump()));
+
   json reply;
   try {
-    reply = json::parse(m_wsConnection->Send(req.dump()));
-  } catch (const Connection::FailedConnectionException &e) {
-    spdlog::error("Failed connection to server...");
-    return false;
+    reply = json::parse(response);
+  } catch (const std::exception &e) {
+    return Error{std::make_error_code(std::errc::io_error), e.what()};
   }
 
-  return reply["validTasks"].size() > 0;
+  return reply["validTasks"].size() > 0 ? ErrorOr<void>{outcome::success()}
+                                        : ErrorOr<void>{Error{std::make_error_code(std::errc::permission_denied),
+                                                              "No valid tasks for this pilot"}};
 }
 
 void Worker::Start() { m_workerThread = std::thread{&Worker::MainLoop, this}; }
@@ -67,7 +75,7 @@ void Worker::Kill() {
   m_jobProcess.terminate();
 }
 
-bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
+ErrorOr<void> Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
   json request;
   request["command"] = "p_updateJobStatus";
   request["pilotUuid"] = boost::uuids::to_string(m_uuid);
@@ -75,12 +83,9 @@ bool Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   request["task"] = task;
   request["status"] = magic_enum::enum_name(status);
 
-  try {
-    auto reply = m_wsConnection->Send(request.dump());
-    return reply == "Ok"sv;
-  } catch (const Connection::FailedConnectionException &e) {
-    return false;
-  }
+  auto reply = TRY(m_wsConnection->Send(request.dump()));
+  return reply == "Ok"sv ? ErrorOr<void>{outcome::success()}
+                         : ErrorOr<void>{Error{std::make_error_code(std::errc::io_error), reply}};
 }
 
 void Worker::MainLoop() {
@@ -91,7 +96,7 @@ void Worker::MainLoop() {
   constexpr auto maxWaitTime = std::chrono::minutes(10);
   auto sleepTime = std::chrono::seconds(1);
 
-  HeartBeat hb{m_uuid, m_wsConnection};
+  HeartBeat hb{m_uuid, m_wsClient->PersistentConnection()};
   unsigned long int doneJobs = 0;
 
   auto startTime = std::chrono::system_clock::now();
@@ -101,7 +106,7 @@ void Worker::MainLoop() {
   std::deque<json> queued_job_updates;
 
   auto handleJobStatusChange = [&queued_job_updates, this](const json &job, JobStatus status) {
-    if (!UpdateJobStatus(job["hash"], job["task"], status)) {
+    if (!UpdateJobStatus(to_string(job["hash"]), to_string(job["task"]), status)) {
       spdlog::error("Can't reach server while trying to set job status as {}. Queueing up job status update for later.",
                     magic_enum::enum_name(status));
 
@@ -127,11 +132,9 @@ void Worker::MainLoop() {
     request["pilotUuid"] = boost::uuids::to_string(m_uuid);
     spdlog::trace("{}", request.dump(2));
 
-    json job;
-    try {
-      job = json::parse(m_wsConnection->Send(request.dump()));
-      m_workerState = State::JOB_ACQUIRED;
-    } catch (const Connection::FailedConnectionException &e) {
+    auto response = m_wsConnection->Send(request.dump());
+    if (!response) {
+      spdlog::error("{}", response.assume_error().Message());
       if (!hb.IsAlive()) {
         spdlog::warn("No connection to server and heartbeat is not alive. Exiting...");
         m_workerState = State::EXIT;
@@ -143,14 +146,24 @@ void Worker::MainLoop() {
       continue;
     }
 
+    json job;
+    try {
+      job = json::parse(response.assume_value());
+      m_workerState = State::JOB_ACQUIRED;
+    } catch (const std::exception &e) {
+      spdlog::error("{}", e.what());
+      continue;
+    }
+
     // Here we check if we had abandoned jobs that have not been updated on the server and we process them
     // NOTE: at this point, we should have a connection to the server
     if (!queued_job_updates.empty()) {
       while (!queued_job_updates.empty()) {
         auto &job = queued_job_updates.front();
 
-        JobStatus status = magic_enum::enum_cast<JobStatus>(job["status"].get<std::string_view>()).value();
-        spdlog::debug("Sending queued job status update {} to {}", job["hash"], job["status"]);
+        JobStatus status = magic_enum::enum_cast<JobStatus>(to_string_view(job["status"])).value();
+        spdlog::debug("Sending queued job status update {} to {}", to_string_view(job["hash"]),
+                      to_string_view(job["status"]));
         handleJobStatusChange(job, status);
 
         queued_job_updates.pop_front();
@@ -158,9 +171,11 @@ void Worker::MainLoop() {
     }
 
     if (job.contains("finished")) {
+      spdlog::info("Worker: no jobs available. Exiting...");
       m_workerState = State::EXIT;
     } else if (job.contains("sleep")) {
       sleepTime = std::chrono::minutes(1);
+      spdlog::info("Worker: sleeping for {} seconds", sleepTime);
       m_workerState = State::SLEEP;
     }
 
@@ -169,7 +184,7 @@ void Worker::MainLoop() {
       spdlog::trace("Job: {}", job.dump(2));
 
       // prepare a sandbox directory for the job
-      fs::path wdPath{fmt::format("job_{}", std::string(job["hash"]))};
+      fs::path wdPath = fs::absolute(fs::path{fmt::format("job_{}", std::string(job["hash"]))});
       fs::create_directory(wdPath);
 
       // make the shell script executable
@@ -184,7 +199,8 @@ void Worker::MainLoop() {
       try {
         executable = job["executable"].get<std::string>();
         auto exeArgs = job["exe_args"];
-        std::copy(exeArgs.begin(), exeArgs.end(), std::back_inserter(arguments));
+
+        std::ranges::transform(exeArgs, std::back_inserter(arguments), [](const auto &arg) { return to_string(arg); });
       } catch (...) {
         spdlog::error("Worker: Error fetching the executable and its arguments");
         break;
@@ -192,26 +208,27 @@ void Worker::MainLoop() {
 
       jobSTDIO jobIO;
       if (job.contains("stdout") && job["stdout"] != "")
-        jobIO.stdout = fmt::format("{}/{}", wdPath.string(), job["stdout"]);
+        jobIO.stdout = fmt::format("{}/{}", wdPath.string(), to_string_view(job["stdout"]));
       if (job.contains("stderr") && job["stderr"] != "")
-        jobIO.stderr = fmt::format("{}/{}", wdPath.string(), job["stderr"]);
+        jobIO.stderr = fmt::format("{}/{}", wdPath.string(), to_string_view(job["stderr"]));
       if (job.contains("stdin") && job["stdin"] != "")
-        jobIO.stdin = fmt::format("{}/{}", wdPath.string(), job["stdin"]);
+        jobIO.stdin = fmt::format("{}/{}", wdPath.string(), to_string_view(job["stdin"]));
 
       // TODO: factorize env preparation in helper function
       if (!job["env"].empty()) {
-        EnvInfoType envType = GetEnvType(job["env"]["type"]);
+        EnvInfoType envType = GetEnvType(to_string(job["env"]["type"]));
         switch (envType) {
         case EnvInfoType::Script:
           try {
             if (!job["env"].contains("args")) {
-              shellScript.print(". {}\n", fs::canonical(job["env"]["file"]).string());
+              shellScript.print(". {}\n", fs::canonical(to_string(job["env"]["file"])).string());
             } else {
               std::vector<std::string> dummy;
               auto scriptArgs = job["env"]["args"];
-              std::copy(scriptArgs.begin(), scriptArgs.end(), std::back_inserter(dummy));
+              std::ranges::transform(scriptArgs, std::back_inserter(dummy),
+                                     [](const auto &arg) { return to_string(arg); });
               std::string scriptWithArgs =
-                  fmt::format("{} {}\n", fs::canonical(job["env"]["file"]).string(), fmt::join(dummy, " "));
+                  fmt::format("{} {}\n", fs::canonical(to_string(job["env"]["file"])).string(), fmt::join(dummy, " "));
               shellScript.print(". {}", scriptWithArgs);
             }
           } catch (const fs::filesystem_error &e) {
@@ -220,7 +237,7 @@ void Worker::MainLoop() {
           }
           break;
         case EnvInfoType::NONE:
-          spdlog::error("Invalid env type {} is not supported", job["env"]["type"]);
+          spdlog::error("Invalid env type {} is not supported", to_string_view(job["env"]["type"]));
         default:
           break;
         }
@@ -236,9 +253,9 @@ void Worker::MainLoop() {
 
         handleJobStatusChange(job, JobStatus::InboundTransfer);
 
-        bool success = ftQueue.Process();
-        if (!success) {
-          spdlog::error("File transfer process failed");
+        auto result = ftQueue.Process();
+        if (!result) {
+          spdlog::error("File transfer process failed: {}", result.assume_error().Message());
           handleJobStatusChange(job, JobStatus::InboundTransferError);
           m_workerState = State::WAIT;
 
@@ -284,9 +301,21 @@ void Worker::MainLoop() {
 
       spdlog::debug("Process exited with code {}", m_jobProcess.exit_code());
 
+      auto dump_file = [](const std::string_view filePath) {
+        std::ifstream file(filePath.data());
+        if (file.is_open()) {
+          std::string line;
+          while (std::getline(file, line)) {
+            std::cout << line << std::endl;
+          }
+          file.close();
+        }
+      };
+
       JobStatus nextJobStatus;
       if (procError || m_jobProcess.exit_code()) {
-        spdlog::error("Worker: Job exited with an error: {}", procError.message());
+        spdlog::error("Worker: Job exited with an error. Dumping stderr:");
+        dump_file(jobIO.stderr);
         nextJobStatus = JobStatus::Error;
       } else if (m_workerState == State::EXIT) {
         spdlog::warn("Worker: Requested termination. Marking job as failed...");
@@ -296,8 +325,6 @@ void Worker::MainLoop() {
         nextJobStatus = JobStatus::Done;
       }
 
-      constexpr unsigned int max_transfer_tries{3};
-
       // check for outbound file transfers
       if (job.contains("output")) {
         FileTransferQueue ftQueue;
@@ -306,27 +333,15 @@ void Worker::MainLoop() {
           ftQueue.Add(ftJob);
         }
 
-        // UpdateJobStatus(job["hash"], job["task"], JobStatus::OutboundTransfer);
         handleJobStatusChange(job, JobStatus::OutboundTransfer);
 
-        unsigned int file_transfer_tries{0};
-        while (true) {
-          // Call the Process method and check the return value
-          bool success = ftQueue.Process();
-          if (!success) {
-            ++file_transfer_tries;
-
-            spdlog::error("File transfer process failed");
-            if (file_transfer_tries == max_transfer_tries) {
-              nextJobStatus = JobStatus::OutboundTransferError;
-              break;
-            }
-
-            // wait 3 seconds before retrying
-            std::this_thread::sleep_for(std::chrono::seconds(3));
-          } else {
-            break;
-          }
+        // Call the Process method and check the return value
+        auto result = ftQueue.Process();
+        if (!result) {
+          spdlog::error("File transfer process failed: {}", result.assume_error().Message());
+          nextJobStatus = JobStatus::OutboundTransferError;
+        } else {
+          spdlog::trace("Outbound transfers completed");
         }
       }
 
@@ -379,7 +394,7 @@ std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType 
     // We have an array: this means output depends on the pilot tag
     auto tmpIt = std::find_if(request.begin(), request.end(), [this](const json &element) {
       return std::any_of(begin(m_config.tags), end(m_config.tags),
-                         [&element](const auto &tag) { return tag == element["tag"]; });
+                         [&element](const auto &tag) { return tag == element["tag"].get<std::string>(); });
     });
 
     // if there is a tag matching this pilot we parse the associated request
@@ -420,17 +435,18 @@ std::vector<FileTransferInfo> Worker::ParseFileTransferRequest(FileTransferType 
       }
     }
 
-    std::string fileName = doc["file"];
+    std::string fileName = to_string(doc["file"]);
     bool hasWildcard = fileName.find("*") != std::string::npos;
     if (hasWildcard)
       FileTransferQueue::ProcessWildcards(fileName);
 
     auto protocol = magic_enum::enum_cast<FileTransferProtocol>(doc["protocol"].get<std::string_view>());
     if (!protocol.has_value()) {
-      spdlog::error("Invalid file transfer protocol: {}", doc["protocol"]);
+      spdlog::error("Invalid file transfer protocol: {}", to_string_view(doc["protocol"]));
     }
 
-    std::string remotePath = type == FileTransferType::Inbound ? doc["source"] : doc["destination"];
+    std::string remotePath =
+        type == FileTransferType::Inbound ? to_string(doc["source"]) : to_string(doc["destination"]);
 
     FileTransferInfo ftInfo{type, protocol.value(), fileName, remotePath, std::string{currentPath}};
     if (hasWildcard) {

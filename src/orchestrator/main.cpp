@@ -10,7 +10,7 @@
 // our headers
 #include "PMSVersion.h"
 #include "db/CredType.h"
-#include "db/PoolHandle.h"
+#include "db/backends/MongoDB/PoolHandle.h"
 #include "orchestrator/Director.h"
 #include "orchestrator/OrchestratorConfig.h"
 #include "orchestrator/Server.h"
@@ -74,15 +74,9 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Orchestrator::Config config{configFileName};
 
-  spdlog::info("Connecting to frontend DB: {}/{}", config.front_dbhost, config.front_dbname);
-  std::shared_ptr<PMS::DB::PoolHandle> frontPoolHandle =
-      std::make_shared<PMS::DB::PoolHandle>(config.front_dbhost, config.front_dbname);
-
-  spdlog::info("Connecting to backend DB: {}/{}", config.back_dbhost, config.back_dbname);
-  std::shared_ptr<PMS::DB::PoolHandle> backPoolHandle =
-      std::make_shared<PMS::DB::PoolHandle>(config.back_dbhost, config.back_dbname);
-
-  auto director = std::make_shared<Orchestrator::Director>(frontPoolHandle, backPoolHandle);
+  auto director = std::make_shared<Orchestrator::Director>();
+  director->SetFrontDB(config.front_dbhost, config.front_dbname);
+  director->SetBackDB(config.back_dbhost, config.back_dbname);
 
   Orchestrator::Server server{config.listeningPort, director};
 

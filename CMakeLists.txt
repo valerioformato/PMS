@@ -1,9 +1,9 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.14)
 
-cmake_policy(SET CMP0111 OLD)
+# cmake_policy(SET CMP0111 OLD)
 
 # Pilot Management System
-project(PMS VERSION 0.0.2)
+project(PMS VERSION 0.9.9)
 
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 # use, i.e. don't skip the full RPATH for the build tree
@@ -22,8 +22,8 @@ endif ()
 # RPATH
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-# Check for C++ standard and set it to C++17 if not already set
-set(CMAKE_CXX_STANDARD 17)
+# Check for C++ standard and set it to C++20 if not already set
+set(CMAKE_CXX_STANDARD 20)
 
 # -------------------------------------------------------------------
 # -------------------------- Begin project --------------------------
@@ -32,6 +32,7 @@ set(CMAKE_CXX_STANDARD 17)
 option(ASAN "Enable Address sanitizer" OFF)
 option(TSAN "Enable Thread sanitizer" OFF)
 option(DEBUG_WEBSOCKETS "Enable debug output for websocketpp" OFF)
+option(ENABLE_PMS_TESTS "Enable unit test compilation" OFF)
 
 if (ASAN)
     message(STATUS "Enabling Address sanitizer")
@@ -68,4 +69,9 @@ execute_process(
 
 add_subdirectory(src)
 
-# add_subdirectory(doc)
+if(ENABLE_PMS_TESTS)
+include(CTest)
+include(Catch)
+
+add_subdirectory(testsuite)
+endif()

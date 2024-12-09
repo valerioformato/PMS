@@ -52,11 +52,13 @@ void signal_watcher(Pilot::Worker &worker) {
   }
 }
 
-std::string read_file(std::string const &file) {
+ErrorOr<std::string> read_file(const std::filesystem::path &file) {
   std::ifstream is(file);
   if (!is.good()) {
-    throw std::runtime_error("Error: stream has errors.");
+    return PMS::Error{std::make_error_code(std::errc::no_such_file_or_directory),
+                      fmt::format("File {} not found", file.string())};
   }
+
   std::stringstream ss;
   ss << is.rdbuf();
   std::string m;
@@ -77,11 +79,9 @@ Pilot::Info ReadPilotInfo() {
 
   result.hostname = boost::asio::ip::host_name();
   result.ip = get_ip_address();
-  try {
-    result.os_version = read_file("/proc/version");
-  } catch (const std::runtime_error &e) {
-    // nothing :)
-  }
+
+  auto os_version_or_error = read_file("/proc/version");
+  result.os_version = os_version_or_error ? os_version_or_error.value() : "Unknown";
 
   return result;
 }
@@ -127,9 +127,8 @@ int main(int argc, const char **argv) {
 
   std::string serverUri = fmt::format("ws://{}", config.server);
   spdlog::info("Connecting to Server: {}", serverUri);
-  auto wsClient = std::make_shared<PMS::Pilot::Client>(serverUri);
 
-  Pilot::Worker worker{config, wsClient};
+  Pilot::Worker worker{config, std::make_unique<PMS::Pilot::Client>(serverUri)};
   if (!worker.Register(pilotInfo)) {
     spdlog::warn("Served returned no valid tasks. Please check your token(s)");
     return 0;

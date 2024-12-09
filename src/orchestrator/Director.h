@@ -17,7 +17,9 @@
 
 // our headers
 #include "common/queue.h"
-#include "db/PoolHandle.h"
+#include "db/backends/MongoDB/MongoDBBackend.h"
+#include "db/backends/MongoDB/PoolHandle.h"
+#include "db/harness/Harness.h"
 #include "orchestrator/Task.h"
 
 using json = nlohmann::json;
@@ -29,75 +31,75 @@ public:
 
   enum class OperationResult { Success, ProcessError, DatabaseError };
 
-  Director(std::shared_ptr<DB::PoolHandle> frontPoolHandle, std::shared_ptr<DB::PoolHandle> backPoolHandle)
-      : m_logger{spdlog::stdout_color_st("Director")}, m_frontPoolHandle{std::move(frontPoolHandle)},
-        m_backPoolHandle{std::move(backPoolHandle)} {}
+  Director() : m_logger{spdlog::stdout_color_st("Director")} {}
 
   void Start();
   void Stop();
 
+  void SetFrontDB(std::string_view dbhost, std::string_view dbname) {
+    spdlog::info("Using frontend DB: {}/{}", dbhost, dbname);
+    m_frontDB = std::make_unique<DB::Harness>(std::make_unique<DB::MongoDBBackend>(dbhost, dbname));
+  }
+  void SetBackDB(std::string_view dbhost, std::string_view dbname) {
+    spdlog::info("Using backend DB: {}/{}", dbhost, dbname);
+    m_backDB = std::make_unique<DB::Harness>(std::make_unique<DB::MongoDBBackend>(dbhost, dbname));
+  }
+
   OperationResult AddNewJob(const json &job);
   OperationResult AddNewJob(json &&job);
 
-  json ClaimJob(std::string_view pilotUuid);
-  OperationResult UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
-                                  JobStatus status);
+  ErrorOr<json> ClaimJob(std::string_view pilotUuid);
+  ErrorOr<void> UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
+                                JobStatus status);
 
   struct NewPilotResult {
     OperationResult result;
     std::vector<std::string> validTasks;
     std::vector<std::string> invalidTasks;
   };
-  NewPilotResult RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
-                                  const std::vector<std::pair<std::string, std::string>> &tasks,
-                                  const std::vector<std::string> &tags, const json &host_info);
-  OperationResult UpdateHeartBeat(std::string_view pilotUuid);
-  OperationResult DeleteHeartBeat(std::string_view pilotUuid);
+  ErrorOr<NewPilotResult> RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
+                                           const std::vector<std::pair<std::string, std::string>> &tasks,
+                                           const std::vector<std::string> &tags, const json &host_info);
+  ErrorOr<void> UpdateHeartBeat(std::string_view pilotUuid);
+  ErrorOr<void> DeleteHeartBeat(std::string_view pilotUuid);
 
-  OperationResult AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
+  ErrorOr<void> AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
 
-  struct CreateTaskResult {
-    OperationResult result;
-    std::string token;
-  };
-  CreateTaskResult CreateTask(const std::string &task);
-  OperationResult ClearTask(const std::string &task, bool deleteTask = true);
+  ErrorOr<std::string> CreateTask(const std::string &task);
+  ErrorOr<void> ClearTask(const std::string &task, bool deleteTask = true);
 
-  std::string Summary(const std::string &user) const;
+  ErrorOr<std::string> Summary(const std::string &user) const;
 
-  struct QueryResult {
-    OperationResult result;
-    std::string msg;
-  };
   enum class DBCollection { Jobs, Pilots };
   enum class QueryOperation { Find, UpdateOne, UpdateMany, DeleteOne, DeleteMany };
-  QueryResult QueryBackDB(QueryOperation operation, const json &match, const json &option) const;
-  QueryResult QueryFrontDB(DBCollection collection, const json &match, const json &filter) const;
+  ErrorOr<std::string> QueryBackDB(QueryOperation operation, const json &match, const json &option) const;
+  ErrorOr<std::string> QueryFrontDB(DBCollection collection, const json &match, const json &filter) const;
 
   OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const;
-  OperationResult ResetFailedJobs(std::string_view taskname);
+  ErrorOr<void> ResetFailedJobs(std::string_view taskname);
 
 private:
   void JobInsert();
   void JobTransfer();
   void UpdateTasks();
   void UpdateDeadPilots();
-  void UpdateTaskCounts(Task &task);
   void WriteJobUpdates();
   void WriteHeartBeatUpdates();
   void DBSync();
+
+  ErrorOr<void> UpdateTaskCounts(Task &task);
 
   struct PilotInfo {
     std::vector<std::string> tasks;
     std::vector<std::string> tags;
   };
-  std::optional<PilotInfo> GetPilotInfo(std::string_view uuid);
+  ErrorOr<PilotInfo> GetPilotInfo(std::string_view uuid);
   std::unordered_map<std::string, PilotInfo> m_activePilots;
 
   std::shared_ptr<spdlog::logger> m_logger;
 
-  std::shared_ptr<DB::PoolHandle> m_frontPoolHandle;
-  std::shared_ptr<DB::PoolHandle> m_backPoolHandle;
+  std::unique_ptr<DB::Harness> m_frontDB;
+  std::unique_ptr<DB::Harness> m_backDB;
 
   ts_queue<json> m_incomingJobs;
 
@@ -109,7 +111,7 @@ private:
   ts_queue<PilotHeartBeat> m_heartbeatUpdates;
 
   std::mutex m_jobUpdateRequests_mx;
-  std::vector<mongocxx::model::write> m_jobUpdateRequests;
+  std::vector<DB::Queries::Query> m_jobUpdateRequests;
 
   std::unordered_map<std::string, Task> m_tasks;
 

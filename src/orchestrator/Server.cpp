@@ -1,5 +1,6 @@
 // c++ headers
 #include <chrono>
+#include <ranges>
 #include <thread>
 #include <vector>
 
@@ -11,18 +12,18 @@
 #include <spdlog/spdlog.h>
 
 // our headers
+#include "common/JsonUtils.h"
+#include "common/Utils.h"
 #include "orchestrator/Server.h"
 
-// https://github.com/okdshin/PicoSHA2
+// from https://github.com/okdshin/PicoSHA2
 #include "orchestrator/picosha2.h"
 
 using json = nlohmann::json;
 using namespace std::string_view_literals;
+using namespace PMS::JsonUtils;
 
 namespace PMS::Orchestrator {
-template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
-
 Server::~Server() {
   if (m_isRunning) {
     Stop();
@@ -71,13 +72,12 @@ std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, st
 
 std::string Server::HandleCommand(UserCommand &&command) {
   return std::visit(
-      overloaded{
+      PMS::Utils::overloaded{
           // Create a new task
           [this](const OrchCommand<CreateTask> &ucmd) {
-            auto [result, token] = m_director->CreateTask(ucmd.cmd.task);
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Task {} created. Token: {}", ucmd.cmd.task, token)
-                       : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
+            auto result = m_director->CreateTask(ucmd.cmd.task);
+            return result ? fmt::format("Task {} created. Token: {}", ucmd.cmd.task, result.value())
+                          : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
           },
           // Remove an existing task
           [this](const OrchCommand<ClearTask> &ucmd) {
@@ -87,9 +87,8 @@ std::string Server::HandleCommand(UserCommand &&command) {
             }
 
             auto result = m_director->ClearTask(ucmd.cmd.task);
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
-                       : fmt::format("Failed to clear task \"{}\"", ucmd.cmd.task);
+            return result ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
+                          : fmt::format("Failed to clear task \"{}\"", ucmd.cmd.task);
           },
           // Remove jobs from an existing task
           [this](const OrchCommand<CleanTask> &ucmd) {
@@ -99,9 +98,8 @@ std::string Server::HandleCommand(UserCommand &&command) {
             }
 
             auto result = m_director->ClearTask(ucmd.cmd.task, false);
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
-                       : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
+            return result ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
+                          : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
           },
           // Declare a dependency between tasks
           [this](const OrchCommand<DeclareTaskDependency> &ucmd) {
@@ -111,9 +109,8 @@ std::string Server::HandleCommand(UserCommand &&command) {
             }
 
             auto result = m_director->AddTaskDependency(ucmd.cmd.task, ucmd.cmd.dependsOn);
-            return result == Director::OperationResult::Success
-                       ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task, ucmd.cmd.dependsOn)
-                       : fmt::format("Failed to add task dependency");
+            return result ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task, ucmd.cmd.dependsOn)
+                          : fmt::format("Failed to add task dependency");
           },
           // Check if a task/token pair is valid
           [this](const OrchCommand<CheckTaskToken> &ucmd) {
@@ -145,7 +142,7 @@ std::string Server::HandleCommand(UserCommand &&command) {
           // query db for jobs info
           [this](const OrchCommand<FindJobs> &ucmd) {
             auto result = m_director->QueryBackDB(Director::QueryOperation::Find, ucmd.cmd.match, ucmd.cmd.filter);
-            return result.msg;
+            return result ? result.value() : std::string{result.error().Message()};
           },
           // reset jobs to pending status and 0 retries
           [this](const OrchCommand<ResetJobs> &ucmd) {
@@ -153,14 +150,19 @@ std::string Server::HandleCommand(UserCommand &&command) {
             updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Pending);
             updateAction["$set"]["retries"] = 0;
 
-            return m_director->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match, updateAction).msg;
+            auto result = m_director->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match, updateAction);
+            return result ? result.value() : std::string{result.error().Message()};
           },
           // query db for pilot info
           [this](const OrchCommand<FindPilots> &ucmd) {
-            return m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter).msg;
+            auto result = m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter);
+            return result ? result.value() : std::string{result.error().Message()};
           },
           // Get user summary
-          [this](const OrchCommand<Summary> &ucmd) { return m_director->Summary(ucmd.cmd.user); },
+          [this](const OrchCommand<Summary> &ucmd) {
+            auto result = m_director->Summary(ucmd.cmd.user);
+            return result ? result.value() : std::string{result.error().Message()};
+          },
           // Reset jobs in a given task that have status Failed
           [this](const OrchCommand<ResetFailedJobs> &ucmd) {
             auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
@@ -170,8 +172,7 @@ std::string Server::HandleCommand(UserCommand &&command) {
 
             auto result = m_director->ResetFailedJobs(ucmd.cmd.task);
 
-            return result == Director::OperationResult::Success ? fmt::format("Jobs reset")
-                                                                : fmt::format("Jobs reset failed");
+            return result ? fmt::format("Jobs reset") : result.error().Message().data();
           },
           // Handle errors
           [this](const OrchCommand<InvalidCommand> &ucmd) {
@@ -183,56 +184,62 @@ std::string Server::HandleCommand(UserCommand &&command) {
 }
 
 std::string Server::HandleCommand(PilotCommand &&command) {
-  return std::visit(
-      overloaded{
-          // request a new job
-          [this](const OrchCommand<ClaimJob> &pcmd) { return m_director->ClaimJob(pcmd.cmd.uuid).dump(); },
-          // update job status
-          [this](const OrchCommand<UpdateJobStatus> &pcmd) {
-            auto result = m_director->UpdateJobStatus(pcmd.cmd.uuid, pcmd.cmd.hash, pcmd.cmd.task, pcmd.cmd.status);
-            return (result == Director::OperationResult::Success) ? fmt::format("Ok")
-                                                                  : fmt::format("Failed to change job status");
-          },
-          // register a new pilot
-          [this](const OrchCommand<RegisterNewPilot> &pcmd) {
-            const auto &[result, validTasks, invalidTasks] = m_director->RegisterNewPilot(
-                pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks, pcmd.cmd.tags, pcmd.cmd.host_info);
+  return std::visit(PMS::Utils::overloaded{
+                        // request a new job
+                        [this](const OrchCommand<ClaimJob> &pcmd) {
+                          auto result = m_director->ClaimJob(pcmd.cmd.uuid);
+                          if (result.has_error()) {
+                            m_logger->error("{}", result.error().Message());
+                          }
+                          return result ? result.value().dump() : std::string{result.assume_error().Message()};
+                        },
+                        // update job status
+                        [this](const OrchCommand<UpdateJobStatus> &pcmd) {
+                          auto result =
+                              m_director->UpdateJobStatus(pcmd.cmd.uuid, pcmd.cmd.hash, pcmd.cmd.task, pcmd.cmd.status);
+                          return result ? fmt::format("Ok") : std::string{result.assume_error().Message()};
+                        },
+                        // register a new pilot
+                        [this](const OrchCommand<RegisterNewPilot> &pcmd) {
+                          m_logger->trace("Registering new pilot: {}", pcmd.cmd.uuid);
+                          const auto result = m_director->RegisterNewPilot(pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks,
+                                                                           pcmd.cmd.tags, pcmd.cmd.host_info);
 
-            json replyDoc;
-            replyDoc["validTasks"] = json::array({});
-            for (const auto &task : validTasks) {
-              replyDoc["validTasks"].push_back(task);
-            }
+                          if (!result)
+                            return fmt::format("Could not register pilot {}", pcmd.cmd.uuid);
 
-            return (result == Director::OperationResult::Success)
-                       ? replyDoc.dump()
-                       : fmt::format("Could not register pilot {}", pcmd.cmd.uuid);
-          },
-          // update pilot heartbeat
-          [this](const OrchCommand<UpdateHeartBeat> &pcmd) {
-            auto result = m_director->UpdateHeartBeat(pcmd.cmd.uuid);
+                          json replyDoc;
+                          replyDoc["validTasks"] = json::array({});
+                          for (const auto &task : result.value().validTasks) {
+                            replyDoc["validTasks"].push_back(task);
+                          }
 
-            return (result == Director::OperationResult::Success) ? fmt::format("Ok")
-                                                                  : fmt::format("Failed to update heartbeat");
-          },
-          // delete pilot
-          [this](const OrchCommand<DeleteHeartBeat> &pcmd) {
-            auto result = m_director->DeleteHeartBeat(pcmd.cmd.uuid);
+                          return replyDoc.dump();
+                        },
+                        // update pilot heartbeat
+                        [this](const OrchCommand<UpdateHeartBeat> &pcmd) {
+                          auto result = m_director->UpdateHeartBeat(pcmd.cmd.uuid);
 
-            return (result == Director::OperationResult::Success) ? fmt::format("Ok")
-                                                                  : fmt::format("Failed to update heartbeat");
-          },
-          // Handle errors
-          [this](const OrchCommand<InvalidCommand> &pcmd) {
-            m_logger->debug("Replying to invalid pilot command with {}", pcmd.cmd.errorMessage);
-            return pcmd.cmd.errorMessage;
-          },
-      },
-      command);
+                          return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
+                        },
+                        // delete pilot
+                        [this](const OrchCommand<DeleteHeartBeat> &pcmd) {
+                          auto result = m_director->DeleteHeartBeat(pcmd.cmd.uuid);
+
+                          return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
+                        },
+                        // Handle errors
+                        [this](const OrchCommand<InvalidCommand> &pcmd) {
+                          m_logger->debug("Replying to invalid pilot command with {}", pcmd.cmd.errorMessage);
+                          return pcmd.cmd.errorMessage;
+                        },
+                    },
+                    command);
 }
 
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-  m_logger->trace("[{}] Received message {}", std::this_thread::get_id(), msg->get_payload());
+  m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
+                  msg->get_payload());
 
   json parsedMessage;
   try {
@@ -264,7 +271,8 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
 }
 
 void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-  m_logger->trace("[{}] Received pilot message {}", std::this_thread::get_id(), msg->get_payload());
+  m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
+                  msg->get_payload());
 
   json parsedMessage;
   try {
@@ -282,7 +290,8 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
     return;
   }
 
-  std::string reply = HandleCommand(toPilotCommand(parsedMessage));
+  auto &&pcommand = toPilotCommand(parsedMessage);
+  std::string reply = HandleCommand(std::move(pcommand));
 
   m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
@@ -370,28 +379,29 @@ UserCommand Server::toUserCommand(const json &msg) {
   switch (cmdTypeP->second) {
   case UserCommandType::CreateTask:
     if (ValidateJsonCommand<CreateTask>(msg))
-      return OrchCommand<CreateTask>{msg["task"]};
+      return OrchCommand<CreateTask>{to_string(msg["task"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CreateTask::requiredFields);
     break;
   case UserCommandType::ClearTask:
     if (ValidateJsonCommand<ClearTask>(msg))
-      return OrchCommand<ClearTask>{msg["task"], msg["token"]};
+      return OrchCommand<ClearTask>{to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ClearTask::requiredFields);
     break;
   case UserCommandType::CleanTask:
     if (ValidateJsonCommand<CleanTask>(msg))
-      return OrchCommand<CleanTask>{msg["task"], msg["token"]};
+      return OrchCommand<CleanTask>{to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CleanTask::requiredFields);
     break;
   case UserCommandType::DeclareTaskDependency:
     if (ValidateJsonCommand<DeclareTaskDependency>(msg))
-      return OrchCommand<DeclareTaskDependency>{msg["task"], msg["dependsOn"], msg["token"]};
+      return OrchCommand<DeclareTaskDependency>{to_string(msg["task"]), to_string(msg["dependsOn"]),
+                                                to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage =
@@ -399,14 +409,14 @@ UserCommand Server::toUserCommand(const json &msg) {
     break;
   case UserCommandType::CheckTaskToken:
     if (ValidateJsonCommand<CheckTaskToken>(msg))
-      return OrchCommand<CheckTaskToken>{msg["task"], msg["token"]};
+      return OrchCommand<CheckTaskToken>{to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", CheckTaskToken::requiredFields);
     break;
   case UserCommandType::SubmitJob:
     if (ValidateJsonCommand<SubmitJob>(msg))
-      return OrchCommand<SubmitJob>{msg["job"], msg["task"], msg["token"]};
+      return OrchCommand<SubmitJob>{msg["job"], to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
@@ -434,14 +444,14 @@ UserCommand Server::toUserCommand(const json &msg) {
     break;
   case UserCommandType::Summary:
     if (ValidateJsonCommand<Summary>(msg))
-      return OrchCommand<Summary>{msg["user"]};
+      return OrchCommand<Summary>{to_string(msg["user"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", Summary::requiredFields);
     break;
   case UserCommandType::ResetFailedJobs:
     if (ValidateJsonCommand<ResetFailedJobs>(msg))
-      return OrchCommand<ResetFailedJobs>{msg["task"], msg["token"]};
+      return OrchCommand<ResetFailedJobs>{to_string(msg["task"]), to_string(msg["token"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ResetFailedJobs::requiredFields);
@@ -463,17 +473,16 @@ PilotCommand Server::toPilotCommand(const json &msg) {
   switch (cmdTypeP->second) {
   case PilotCommandType::ClaimJob:
     if (ValidateJsonCommand<ClaimJob>(msg))
-      return OrchCommand<ClaimJob>{msg["pilotUuid"]};
+      return OrchCommand<ClaimJob>{to_string(msg["pilotUuid"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", ClaimJob::requiredFields);
     break;
   case PilotCommandType::UpdateJobStatus:
     if (ValidateJsonCommand<UpdateJobStatus>(msg) &&
-        magic_enum::enum_cast<JobStatus>(msg["status"].get<std::string_view>()).has_value())
-      return OrchCommand<UpdateJobStatus>{
-          magic_enum::enum_cast<JobStatus>(msg["status"].get<std::string_view>()).value(), msg["pilotUuid"],
-          msg["hash"], msg["task"]};
+        magic_enum::enum_cast<JobStatus>(to_string_view(msg["status"])).has_value())
+      return OrchCommand<UpdateJobStatus>{magic_enum::enum_cast<JobStatus>(to_string_view(msg["status"])).value(),
+                                          to_string(msg["pilotUuid"]), to_string(msg["hash"]), to_string(msg["task"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", UpdateJobStatus::requiredFields);
@@ -486,24 +495,24 @@ PilotCommand Server::toPilotCommand(const json &msg) {
       }
       std::vector<std::string> tags;
       if (msg.contains("tags")) {
-        std::copy(msg["tags"].begin(), msg["tags"].end(), std::back_inserter(tags));
+        std::ranges::transform(msg["tags"], std::back_inserter(tags), [](const auto &tag) { return to_string(tag); });
       }
-      return OrchCommand<RegisterNewPilot>{msg["pilotUuid"], msg["user"], std::move(tasks), std::move(tags),
-                                           msg["host"]};
+      return OrchCommand<RegisterNewPilot>{to_string(msg["pilotUuid"]), to_string(msg["user"]), std::move(tasks),
+                                           std::move(tags), msg["host"]};
     }
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", RegisterNewPilot::requiredFields);
     break;
   case PilotCommandType::UpdateHeartBeat:
     if (ValidateJsonCommand<UpdateHeartBeat>(msg))
-      return OrchCommand<UpdateHeartBeat>{msg["uuid"]};
+      return OrchCommand<UpdateHeartBeat>{to_string(msg["uuid"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", UpdateHeartBeat::requiredFields);
     break;
   case PilotCommandType::DeleteHeartBeat:
     if (ValidateJsonCommand<DeleteHeartBeat>(msg))
-      return OrchCommand<DeleteHeartBeat>{msg["uuid"]};
+      return OrchCommand<DeleteHeartBeat>{to_string(msg["uuid"])};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", DeleteHeartBeat::requiredFields);

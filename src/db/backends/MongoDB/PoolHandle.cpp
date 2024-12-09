@@ -2,7 +2,7 @@
 #include <fmt/format.h>
 
 // our headers
-#include "db/PoolHandle.h"
+#include "db/backends/MongoDB/PoolHandle.h"
 
 namespace PMS::DB {
 PoolHandle::PoolHandle(std::string_view dbhost, std::string_view dbname)

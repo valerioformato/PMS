@@ -117,12 +117,13 @@ void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr m
   m_in_flight_message.set_value(msg->get_payload());
 }
 
-std::string Connection::Send(const std::string &message) {
+ErrorOr<std::string> Connection::Send(const std::string &message) {
   std::lock_guard<std::mutex> slk(m_sendMutex);
+  spdlog::trace("Send - lock acquired");
+
   std::promise<std::string>{}.swap(m_in_flight_message);
   auto message_future = m_in_flight_message.get_future();
 
-  spdlog::trace("Send - lock acquired");
   if (get_status() == State::closed || get_status() == State::closing) {
     spdlog::warn("Re-connecting to server...");
     Reconnect();
@@ -134,7 +135,15 @@ std::string Connection::Send(const std::string &message) {
 #ifdef DEBUG_WEBSOCKETS
   spdlog::trace("waiting for message...");
 #endif
-  return message_future.get();
+
+  spdlog::trace("Send - releasing lock...");
+  try {
+    return message_future.get();
+  } catch (const FailedConnectionException &e) {
+    return Error{std::make_error_code(std::errc::connection_reset), e.what()};
+  } catch (const std::future_error &e) {
+    return Error{std::make_error_code(std::errc::device_or_resource_busy), e.what()};
+  }
 }
 
 } // namespace PMS::Pilot

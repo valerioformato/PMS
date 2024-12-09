@@ -30,8 +30,8 @@ public:
   std::unique_ptr<Connection> PersistentConnection();
   std::unique_ptr<Connection> PersistentConnection(std::string_view uri);
 
-  std::string Send(const json &msg);
-  std::string Send(const json &msg, std::string_view uri);
+  ErrorOr<std::string> Send(const json &msg);
+  ErrorOr<std::string> Send(const json &msg, std::string_view uri);
 
   // std::string Send(Connection &connection, const json &msg);
 

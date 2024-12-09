@@ -7,7 +7,7 @@
 
 // our headers
 #include "common/JsonUtils.h"
-#include "db/DBHandle.h"
+#include "db/backends/MongoDB/DBHandle.h"
 
 using json = nlohmann::json;
 

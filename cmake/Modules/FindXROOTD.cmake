@@ -93,7 +93,7 @@ if(XROOTD_FOUND)
       find_library(XROOTD_${l}_LIBRARY
          NAMES ${l}
          HINTS ${searchpath}
-         PATH_SUFFIXES lib)
+         PATH_SUFFIXES lib lib64)
       list(APPEND XROOTD_LIBRARIES ${XROOTD_${l}_LIBRARY})
     endforeach()
 
@@ -101,7 +101,7 @@ if(XROOTD_FOUND)
       find_library(XROOTD_XrdNetUtil_LIBRARY
         NAMES XrdNetUtil
         HINTS ${searchpath}
-        PATH_SUFFIXES lib)
+        PATH_SUFFIXES lib lib64)
       list(APPEND XROOTD_LIBRARIES ${XROOTD_XrdNetUtil_LIBRARY})
     endif ()
   else()
@@ -110,7 +110,7 @@ if(XROOTD_FOUND)
     find_library(XROOTD_XrdMain_LIBRARY
        NAMES XrdMain
        HINTS ${searchpath}
-       PATH_SUFFIXES lib)
+       PATH_SUFFIXES lib lib64)
     if (XROOTD_XrdMain_LIBRARY)
        list(APPEND XROOTD_LIBRARIES ${XROOTD_XrdMain_LIBRARY})
     else ()
@@ -121,7 +121,7 @@ if(XROOTD_FOUND)
     find_library(XROOTD_XrdUtils_LIBRARY
        NAMES XrdUtils
        HINTS ${searchpath}
-       PATH_SUFFIXES lib)
+       PATH_SUFFIXES lib lib64)
     if (XROOTD_XrdUtils_LIBRARY)
        list(APPEND XROOTD_LIBRARIES ${XROOTD_XrdUtils_LIBRARY})
     endif ()
@@ -131,7 +131,7 @@ if(XROOTD_FOUND)
     find_library(XROOTD_XrdClient_LIBRARY
        NAMES XrdClient
        HINTS ${searchpath}
-       PATH_SUFFIXES lib)
+       PATH_SUFFIXES lib lib64)
     if (XROOTD_XrdClient_LIBRARY)
        list(APPEND XROOTD_LIBRARIES ${XROOTD_XrdClient_LIBRARY})
     else ()
@@ -145,7 +145,7 @@ if(XROOTD_FOUND)
        find_library(XROOTD_XrdCl_LIBRARY
           NAMES XrdCl
           HINTS ${searchpath}
-          PATH_SUFFIXES lib)
+          PATH_SUFFIXES lib lib64)
        if (XROOTD_XrdCl_LIBRARY)
           list(APPEND XROOTD_LIBRARIES ${XROOTD_XrdCl_LIBRARY})
           get_filename_component(XROOTD_LIB_DIR ${XROOTD_XrdCl_LIBRARY} DIRECTORY)
