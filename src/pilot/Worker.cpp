@@ -65,7 +65,10 @@ ErrorOr<void> Worker::Register(const Info &info) {
                                                               "No valid tasks for this pilot"}};
 }
 
-void Worker::Start() { m_workerThread = std::thread{&Worker::MainLoop, this}; }
+void Worker::Start() {
+  m_workerThread = std::thread{&Worker::MainLoop, this};
+  m_jobUpdateThread = std::thread{&Worker::SendJobUpdates, this};
+}
 
 void Worker::Stop() { m_workerThread.join(); }
 
@@ -75,7 +78,7 @@ void Worker::Kill() {
   m_jobProcess.terminate();
 }
 
-ErrorOr<void> Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
+void Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
   json request;
   request["command"] = "p_updateJobStatus";
   request["pilotUuid"] = boost::uuids::to_string(m_uuid);
@@ -83,9 +86,31 @@ ErrorOr<void> Worker::UpdateJobStatus(const std::string &hash, const std::string
   request["task"] = task;
   request["status"] = magic_enum::enum_name(status);
 
-  auto reply = TRY(m_wsConnection->Send(request.dump()));
-  return reply == "Ok"sv ? ErrorOr<void>{outcome::success()}
-                         : ErrorOr<void>{Error{std::make_error_code(std::errc::io_error), reply}};
+  m_queuedJobUpdates.push(request);
+}
+
+void Worker::SendJobUpdates() {
+  while (true) {
+    if (m_queuedJobUpdates.empty()) {
+      if (m_workerState == State::EXIT) {
+        return;
+      } else {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        continue;
+      }
+    }
+
+    json request = m_queuedJobUpdates.front();
+
+    auto maybe_reply = m_wsConnection->Send(request.dump());
+    if (!maybe_reply) {
+      spdlog::error("{}", maybe_reply.error().Message());
+    } else if (maybe_reply.assume_value() == "Ok"sv) {
+      m_queuedJobUpdates.pop();
+    } else {
+      spdlog::error("Unexpected server reply: {}", maybe_reply.assume_value());
+    }
+  }
 }
 
 void Worker::MainLoop() {
@@ -104,21 +129,6 @@ void Worker::MainLoop() {
 
   // FIXME: This should be a deque probably
   std::deque<json> queued_job_updates;
-
-  auto handleJobStatusChange = [&queued_job_updates, this](const json &job, JobStatus status) {
-    if (!UpdateJobStatus(to_string(job["hash"]), to_string(job["task"]), status)) {
-      spdlog::error("Can't reach server while trying to set job status as {}. Queueing up job status update for later.",
-                    magic_enum::enum_name(status));
-
-      // NOTE(vformato): Here we actually need to handle the failure. We push the job to a queue of "to-be-updated"
-      // jobs, and we'll communicate to the server as soon as the connection becomes available...
-      json &queued_job_update = queued_job_updates.emplace_back(job);
-      queued_job_update["status"] = magic_enum::enum_name(status);
-      return false;
-    }
-
-    return true;
-  };
 
   // main loop
   while (true) {
@@ -153,21 +163,6 @@ void Worker::MainLoop() {
     } catch (const std::exception &e) {
       spdlog::error("{}", e.what());
       continue;
-    }
-
-    // Here we check if we had abandoned jobs that have not been updated on the server and we process them
-    // NOTE: at this point, we should have a connection to the server
-    if (!queued_job_updates.empty()) {
-      while (!queued_job_updates.empty()) {
-        auto &job = queued_job_updates.front();
-
-        JobStatus status = magic_enum::enum_cast<JobStatus>(to_string_view(job["status"])).value();
-        spdlog::debug("Sending queued job status update {} to {}", to_string_view(job["hash"]),
-                      to_string_view(job["status"]));
-        handleJobStatusChange(job, status);
-
-        queued_job_updates.pop_front();
-      }
     }
 
     if (job.contains("finished")) {
@@ -251,12 +246,12 @@ void Worker::MainLoop() {
           ftQueue.Add(ftJob);
         }
 
-        handleJobStatusChange(job, JobStatus::InboundTransfer);
+        UpdateJobStatus(to_string(job["hash"]), to_string(job["task"]), JobStatus::InboundTransfer);
 
         auto result = ftQueue.Process();
         if (!result) {
           spdlog::error("File transfer process failed: {}", result.assume_error().Message());
-          handleJobStatusChange(job, JobStatus::InboundTransferError);
+          UpdateJobStatus(to_string(job["hash"]), to_string(job["task"]), JobStatus::InboundTransferError);
           m_workerState = State::WAIT;
 
           // remove temporary sandbox directory
@@ -295,7 +290,7 @@ void Worker::MainLoop() {
                                bp::shell, procError);
 
       // set status to "Running"
-      handleJobStatusChange(job, JobStatus::Running);
+      UpdateJobStatus(to_string(job["hash"]), to_string(job["task"]), JobStatus::Running);
 
       m_jobProcess.wait();
 
@@ -333,7 +328,7 @@ void Worker::MainLoop() {
           ftQueue.Add(ftJob);
         }
 
-        handleJobStatusChange(job, JobStatus::OutboundTransfer);
+        UpdateJobStatus(to_string(job["hash"]), to_string(job["task"]), JobStatus::OutboundTransfer);
 
         // Call the Process method and check the return value
         auto result = ftQueue.Process();
@@ -345,7 +340,7 @@ void Worker::MainLoop() {
         }
       }
 
-      handleJobStatusChange(job, nextJobStatus);
+      UpdateJobStatus(to_string(job["hash"]), to_string(job["task"]), nextJobStatus);
 
       // remove temporary sandbox directory
       fs::remove_all(wdPath);

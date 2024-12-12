@@ -16,6 +16,7 @@
 
 // our headers
 #include "common/Job.h"
+#include "common/queue.h"
 #include "pilot/PilotConfig.h"
 #include "pilot/client/Client.h"
 #include "pilot/filetransfer/FileTransferQueue.h"
@@ -55,6 +56,10 @@ private:
   State m_workerState = State::WAIT;
   std::thread m_workerThread;
 
+  ts_queue<json> m_queuedJobUpdates;
+  std::thread m_jobUpdateThread;
+  void SendJobUpdates();
+
   unsigned long int m_maxJobs = std::numeric_limits<unsigned long int>::max();
   std::chrono::seconds m_maxTime = std::chrono::seconds::max();
 
@@ -71,7 +76,7 @@ private:
                                                             {EnvInfoType::List, "list"sv}};
   EnvInfoType GetEnvType(const std::string &envName);
 
-  ErrorOr<void> UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status);
+  void UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status);
 
   std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, json, std::string_view);
 
