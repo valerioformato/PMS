@@ -76,6 +76,7 @@ private:
                                                             {EnvInfoType::List, "list"sv}};
   EnvInfoType GetEnvType(const std::string &envName);
 
+  std::map<std::chrono::system_clock::time_point, std::string> m_jobFailures;
   void UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status);
 
   std::vector<FileTransferInfo> ParseFileTransferRequest(FileTransferType, json, std::string_view);

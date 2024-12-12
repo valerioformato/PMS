@@ -80,6 +80,10 @@ void Worker::Kill() {
 }
 
 void Worker::UpdateJobStatus(const std::string &hash, const std::string &task, JobStatus status) {
+  if (status == JobStatus::Error) {
+    m_jobFailures[std::chrono::system_clock::now()] = hash;
+  }
+
   json request;
   request["command"] = "p_updateJobStatus";
   request["pilotUuid"] = boost::uuids::to_string(m_uuid);
@@ -128,8 +132,6 @@ void Worker::MainLoop() {
   auto startTime = std::chrono::system_clock::now();
   auto lastJobFinished = std::chrono::system_clock::now();
 
-  std::map<std::chrono::system_clock::time_point, std::string> jobFailures;
-
   // main loop
   while (true) {
 
@@ -137,10 +139,16 @@ void Worker::MainLoop() {
     auto now = std::chrono::system_clock::now();
     auto thirtySecondsAgo = now - std::chrono::seconds(30);
     auto failuresInLast30Seconds =
-        std::ranges::count_if(jobFailures, [thirtySecondsAgo](const auto &p) { return p.first > thirtySecondsAgo; });
+        std::ranges::count_if(m_jobFailures, [thirtySecondsAgo](const auto &p) { return p.first > thirtySecondsAgo; });
 
     if (failuresInLast30Seconds > 10) {
       spdlog::error("Too many failures in the last 30 seconds. Exiting...");
+
+      // dump all failures in the last 30 seconds
+      for (const auto &[time, hash] : m_jobFailures) {
+        spdlog::error("Job {} failed at {}", hash, time);
+      }
+
       m_workerState = State::EXIT;
     }
 
