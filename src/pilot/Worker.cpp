@@ -1,4 +1,5 @@
 // c++ headers
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <ranges>
@@ -127,11 +128,21 @@ void Worker::MainLoop() {
   auto startTime = std::chrono::system_clock::now();
   auto lastJobFinished = std::chrono::system_clock::now();
 
-  // FIXME: This should be a deque probably
-  std::deque<json> queued_job_updates;
+  std::map<std::chrono::system_clock::time_point, std::string> jobFailures;
 
   // main loop
   while (true) {
+
+    // count how many failures we had in the last 30 seconds
+    auto now = std::chrono::system_clock::now();
+    auto thirtySecondsAgo = now - std::chrono::seconds(30);
+    auto failuresInLast30Seconds =
+        std::ranges::count_if(jobFailures, [thirtySecondsAgo](const auto &p) { return p.first > thirtySecondsAgo; });
+
+    if (failuresInLast30Seconds > 10) {
+      spdlog::error("Too many failures in the last 30 seconds. Exiting...");
+      m_workerState = State::EXIT;
+    }
 
     if (m_workerState == State::EXIT) {
       break;
