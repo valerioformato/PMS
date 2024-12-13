@@ -723,10 +723,12 @@ void Director::DBSync() {
   static time_point lastCheck = std::chrono::system_clock::now();
 
   do {
-    auto last_check_in_millis_since_epoch =
-        std::chrono::duration_cast<std::chrono::milliseconds>(lastCheck.time_since_epoch());
+    // NOTE: as a safety measure, we add a 10 seconds buffer to the last check time. Some jobs might get copied twice
+    // but it's better than missing some
+    auto last_check_in_millis_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(
+        (lastCheck - std::chrono::seconds(10)).time_since_epoch());
     DB::Queries::Matches matches{
-        {"lastUpdate", last_check_in_millis_since_epoch.count() - 1, DB::Queries::ComparisonOp::GT},
+        {"lastUpdate", last_check_in_millis_since_epoch.count(), DB::Queries::ComparisonOp::GT},
     };
 
     m_logger->debug("Syncing DBs...");
