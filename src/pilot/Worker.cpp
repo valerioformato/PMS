@@ -107,6 +107,8 @@ void Worker::SendJobUpdates() {
 
     json request = m_queuedJobUpdates.front();
 
+    spdlog::debug("Sending status update for job {}: {}", to_string(request["hash"]), to_string(request["status"]));
+
     auto maybe_reply = m_wsConnection->Send(request.dump());
     if (!maybe_reply) {
       spdlog::error("{}", maybe_reply.error().Message());
@@ -153,6 +155,11 @@ void Worker::MainLoop() {
     }
 
     if (m_workerState == State::EXIT) {
+      while (!m_queuedJobUpdates.empty()) {
+        spdlog::warn("Waiting for job updates to be sent...");
+        std::this_thread::sleep_for(std::chrono::minutes(1));
+      }
+
       break;
     }
 
