@@ -344,8 +344,28 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
             try {
               auto query_result =
                   db[query.collection].distinct(query.field, JsonUtils::json2bson(MatchesToJson(query.match)));
-              std::transform(query_result.begin(), query_result.end(), std::back_inserter(result),
+
+              std::vector<json> dummy;
+
+              std::transform(query_result.begin(), query_result.end(), std::back_inserter(dummy),
                              [](const auto &doc) { return JsonUtils::bson2json(doc); });
+
+              if (dummy.empty()) {
+                return Error{std::errc::no_such_file_or_directory, "No distinct values found"};
+              }
+
+              if (dummy.size() > 1) {
+                return Error{std::errc::not_supported, "Distinct query returned more than one value. Rporto this to "
+                                                       "the developers which should check if the mongocxx API changed"};
+              }
+
+              if (dummy[0]["ok"] == 0) {
+                return Error{std::errc::no_such_file_or_directory,
+                             fmt::format("Unexpected result to Distinct query: {}", dummy[0].dump())};
+              }
+
+              result = dummy[0]["values"];
+              return result;
             } catch (const mongocxx::exception &e) {
               return Error{e.code(), e.what()};
             } catch (const std::exception &e) {
