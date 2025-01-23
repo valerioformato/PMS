@@ -934,6 +934,7 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
 }
 
 ErrorOr<std::string> Director::QueryFrontDB(DBCollection collection, const json &match, const json &filter) const {
+  m_logger->debug("QueryFrontDB: {} {} {}", magic_enum::enum_name(collection), match.dump(), filter.dump());
 
   std::string_view collection_name;
   switch (collection) {

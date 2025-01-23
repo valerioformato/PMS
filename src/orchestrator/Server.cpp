@@ -437,7 +437,7 @@ UserCommand Server::toUserCommand(const json &msg) {
     break;
   case UserCommandType::FindPilots:
     if (ValidateJsonCommand<FindPilots>(msg))
-      return OrchCommand<FindJobs>{msg["match"], msg.contains("filter") ? msg["filter"] : json{}};
+      return OrchCommand<FindPilots>{msg["match"], msg.contains("filter") ? msg["filter"] : json{}};
 
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", SubmitJob::requiredFields);
