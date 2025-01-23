@@ -143,6 +143,8 @@ ErrorOr<std::string> Connection::Send(const std::string &message) {
     return Error{std::make_error_code(std::errc::connection_reset), e.what()};
   } catch (const std::future_error &e) {
     return Error{std::make_error_code(std::errc::device_or_resource_busy), e.what()};
+  } catch (const std::exception &e) {
+    return Error{std::make_error_code(std::errc::io_error), e.what()};
   }
 }
 
