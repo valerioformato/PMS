@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.14)
 # cmake_policy(SET CMP0111 OLD)
 
 # Pilot Management System
-project(PMS VERSION 0.9.9)
+project(PMS VERSION 1.0.1)
 
 set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
 # use, i.e. don't skip the full RPATH for the build tree
