@@ -48,7 +48,7 @@ public:
   OperationResult AddNewJob(const json &job);
   OperationResult AddNewJob(json &&job);
 
-  ErrorOr<json> ClaimJob(std::string_view pilotUuid);
+  ErrorOr<json> PilotClaimJob(std::string_view pilotUuid);
   ErrorOr<void> UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
                                 JobStatus status);
 
@@ -90,11 +90,21 @@ private:
   ErrorOr<void> UpdateTaskCounts(Task &task);
 
   struct PilotInfo {
+    std::string uuid;
     std::vector<std::string> tasks;
     std::vector<std::string> tags;
   };
   ErrorOr<PilotInfo> GetPilotInfo(std::string_view uuid);
   std::unordered_map<std::string, PilotInfo> m_activePilots;
+
+  void RunClaimQueries();
+  ts_queue<PilotInfo> m_claimRequests;
+  struct ClaimedJob {
+    bool sent = false;
+    bool claimed = false;
+    json job;
+  };
+  std::unordered_map<std::string, ClaimedJob> m_claimedJobs;
 
   std::shared_ptr<spdlog::logger> m_logger;
 

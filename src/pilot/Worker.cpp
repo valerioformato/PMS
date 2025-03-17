@@ -114,6 +114,7 @@ void Worker::SendJobUpdates() {
       spdlog::error("{}", maybe_reply.error().Message());
     } else if (maybe_reply.assume_value() == "Ok"sv) {
       m_queuedJobUpdates.pop();
+      spdlog::trace("Job update received by server");
     } else {
       spdlog::error("Unexpected server reply: {}", maybe_reply.assume_value());
     }
@@ -375,6 +376,7 @@ void Worker::MainLoop() {
       auto delta = lastJobFinished - startTime;
 
       if (++doneJobs == m_maxJobs || std::chrono::duration_cast<decltype(m_maxTime)>(delta) > m_maxTime) {
+        spdlog::info("Worker: done with {} jobs or {} elapsed time. Exiting...", doneJobs, m_maxTime);
         m_workerState = State::EXIT;
       }
 

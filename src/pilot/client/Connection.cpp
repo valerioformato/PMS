@@ -130,6 +130,11 @@ ErrorOr<std::string> Connection::Send(const std::string &message) {
   }
 
   std::error_code ec;
+
+#ifdef DEBUG_WEBSOCKETS
+  spdlog::trace("Sending message: {}", message);
+#endif
+
   m_endpoint->send(get_hdl(), message, websocketpp::frame::opcode::text, ec);
 
 #ifdef DEBUG_WEBSOCKETS

@@ -187,7 +187,7 @@ std::string Server::HandleCommand(PilotCommand &&command) {
   return std::visit(PMS::Utils::overloaded{
                         // request a new job
                         [this](const OrchCommand<ClaimJob> &pcmd) {
-                          auto result = m_director->ClaimJob(pcmd.cmd.uuid);
+                          auto result = m_director->PilotClaimJob(pcmd.cmd.uuid);
                           if (result.has_error()) {
                             m_logger->error("{}", result.error().Message());
                           }
