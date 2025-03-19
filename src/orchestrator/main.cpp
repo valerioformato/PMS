@@ -78,7 +78,7 @@ int main(int argc, const char **argv) {
   director->SetFrontDB(config.front_dbhost, config.front_dbname);
   director->SetBackDB(config.back_dbhost, config.back_dbname);
 
-  Orchestrator::Server server{config.listeningPort, director};
+  Orchestrator::Server server{config.listeningPort, director, config.nConnectionThreads};
 
   // prepare to run everything...
   std::vector<std::thread> threads;

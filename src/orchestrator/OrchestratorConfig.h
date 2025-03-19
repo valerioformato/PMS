@@ -28,6 +28,8 @@ struct Config {
   // std::string front_dbcredentials;
 
   unsigned int listeningPort = 0;
+
+  unsigned int nConnectionThreads = 32;
 };
 } // namespace PMS::Orchestrator
 

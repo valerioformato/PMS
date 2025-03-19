@@ -21,8 +21,9 @@ using WSserver = websocketpp::server<websocketpp::config::asio>;
 namespace PMS::Orchestrator {
 class Server {
 public:
-  Server(unsigned int port, std::shared_ptr<Director> director)
-      : m_logger{spdlog::stdout_color_st("Server")}, m_port{port}, m_director{std::move(director)} {}
+  Server(unsigned int port, std::shared_ptr<Director> director, unsigned int connectionThreads)
+      : m_logger{spdlog::stdout_color_st("Server")}, m_port{port}, m_director{std::move(director)},
+        m_threadPool{connectionThreads} {}
   ~Server();
 
   void Start();
