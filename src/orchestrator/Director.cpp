@@ -605,12 +605,12 @@ void Director::JobTransfer() {
 
   m_logger->info("Job transfer thread started with {} jobs per query", m_maxJobTransferQuerySize);
 
-  std::vector<json> toBeInserted;
-  std::vector<DB::Queries::Query> writeOps;
-
   do {
     // collect jobs from each active task
     for (const auto &[name, task] : m_tasks) {
+      std::vector<json> toBeInserted;
+      std::vector<DB::Queries::Query> writeOps;
+
       if (!task.readyForScheduling || !task.IsActive()) {
         continue;
       }
@@ -635,36 +635,33 @@ void Director::JobTransfer() {
         job.erase("_id");
         return job;
       });
-    }
 
-    if (!toBeInserted.empty()) {
-      m_logger->debug("Inserting {} new jobs into frontend DB", toBeInserted.size());
-      auto insert_result = m_frontDB->RunQuery(DB::Queries::Insert{
-          .collection = "jobs",
-          .documents = toBeInserted,
-      });
-
-      if (!insert_result) {
-        m_logger->error("Failed to insert jobs into frontend DB: {}", insert_result.error().Message());
-        continue;
-      }
-
-      std::ranges::transform(toBeInserted, std::back_inserter(writeOps), [](const auto &job) {
-        return DB::Queries::Update{
+      if (!toBeInserted.empty()) {
+        m_logger->debug("Inserting {} new jobs into frontend DB", toBeInserted.size());
+        auto insert_result = m_frontDB->RunQuery(DB::Queries::Insert{
             .collection = "jobs",
-            .options = {.limit = 1},
-            .match = {{"hash", job["hash"]}},
-            .update = {{"inFrontDB", true}},
-        };
-      });
+            .documents = toBeInserted,
+        });
 
-      auto write_result = m_backDB->BulkWrite("jobs", writeOps);
-      if (!write_result) {
-        m_logger->error("Failed to update jobs in backend DB: {}", write_result.error().Message());
+        if (!insert_result) {
+          m_logger->error("Failed to insert jobs into frontend DB: {}", insert_result.error().Message());
+          continue;
+        }
+
+        std::ranges::transform(toBeInserted, std::back_inserter(writeOps), [](const auto &job) {
+          return DB::Queries::Update{
+              .collection = "jobs",
+              .options = {.limit = 1},
+              .match = {{"hash", job["hash"]}},
+              .update = {{"inFrontDB", true}},
+          };
+        });
+
+        auto write_result = m_backDB->BulkWrite("jobs", writeOps);
+        if (!write_result) {
+          m_logger->error("Failed to update jobs in backend DB: {}", write_result.error().Message());
+        }
       }
-
-      toBeInserted.clear();
-      writeOps.clear();
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
