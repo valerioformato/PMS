@@ -35,5 +35,9 @@ Config::Config(std::string_view fileName) {
   // front_dbcredentials = configJson["front_dbcredentials"];
 
   listeningPort = configJson["listeningPort"].get<unsigned int>();
+
+  if (configJson.contains("nConnectionThreads")) {
+    nConnectionThreads = configJson["nConnectionThreads"].get<unsigned int>();
+  }
 }
 } // namespace PMS::Orchestrator
