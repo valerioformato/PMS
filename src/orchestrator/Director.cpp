@@ -620,6 +620,7 @@ void Director::JobTransfer() {
 
       auto maybe_query_result = m_backDB->RunQuery(DB::Queries::Find{
           .collection = "jobs",
+          .options = {.limit = 100000},
           .match = matches,
       });
 
