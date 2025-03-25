@@ -30,7 +30,6 @@ public:
   void Stop();
 
 private:
-  Thread::Pool m_threadPool{32};
   std::shared_ptr<spdlog::logger> m_logger;
 
   bool m_isRunning = false;
@@ -38,6 +37,8 @@ private:
   WSserver m_endpoint;
   WSserver m_pilot_endpoint;
   std::shared_ptr<Director> m_director;
+
+  Thread::Pool m_threadPool{32};
 
   std::pair<bool, std::string> ValidateTaskToken(std::string_view task, std::string_view token) const;
 

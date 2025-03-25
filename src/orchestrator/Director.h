@@ -27,10 +27,6 @@ using json = nlohmann::json;
 namespace PMS::Orchestrator {
 class Director {
 public:
-  using time_point = std::chrono::system_clock::time_point;
-
-  enum class OperationResult { Success, ProcessError, DatabaseError };
-
   Director() : m_logger{spdlog::stdout_color_st("Director")} {}
 
   void Start();
@@ -44,6 +40,9 @@ public:
     spdlog::info("Using backend DB: {}/{}", dbhost, dbname);
     m_backDB = std::make_unique<DB::Harness>(std::make_unique<DB::MongoDBBackend>(dbhost, dbname));
   }
+  void SetMaxJobTransferQuerySize(unsigned int size) { m_maxJobTransferQuerySize = size; }
+
+  enum class OperationResult { Success, ProcessError, DatabaseError };
 
   OperationResult AddNewJob(const json &job);
   OperationResult AddNewJob(json &&job);
@@ -89,6 +88,8 @@ private:
 
   ErrorOr<void> UpdateTaskCounts(Task &task);
 
+  unsigned int m_maxJobTransferQuerySize = 1000u;
+
   struct PilotInfo {
     std::string uuid;
     std::vector<std::string> tasks;
@@ -113,6 +114,7 @@ private:
 
   ts_queue<json> m_incomingJobs;
 
+  using time_point = std::chrono::system_clock::time_point;
   struct PilotHeartBeat {
     PilotHeartBeat(std::string u, time_point t) : uuid{std::move(u)}, time{t} {};
     std::string uuid;

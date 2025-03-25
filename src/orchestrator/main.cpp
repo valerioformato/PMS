@@ -77,6 +77,7 @@ int main(int argc, const char **argv) {
   auto director = std::make_shared<Orchestrator::Director>();
   director->SetFrontDB(config.front_dbhost, config.front_dbname);
   director->SetBackDB(config.back_dbhost, config.back_dbname);
+  director->SetMaxJobTransferQuerySize(config.maxJobTransferQuerySize);
 
   Orchestrator::Server server{config.listeningPort, director, config.nConnectionThreads};
 

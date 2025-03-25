@@ -23,7 +23,7 @@ using namespace PMS::JsonUtils;
 namespace PMS::Orchestrator {
 
 void Director::Start() {
-  auto &&tmpresult = m_backDB->Connect();
+  auto tmpresult = m_backDB->Connect();
   tmpresult = m_frontDB->Connect();
 
   tmpresult = m_backDB->SetupIfNeeded();
@@ -601,7 +601,9 @@ void Director::JobInsert() {
 }
 
 void Director::JobTransfer() {
-  static constexpr auto coolDown = std::chrono::seconds(10);
+  static constexpr auto coolDown = std::chrono::seconds(1);
+
+  m_logger->info("Job transfer thread started with {} jobs per query", m_maxJobTransferQuerySize);
 
   std::vector<json> toBeInserted;
   std::vector<DB::Queries::Query> writeOps;
@@ -620,7 +622,7 @@ void Director::JobTransfer() {
 
       auto maybe_query_result = m_backDB->RunQuery(DB::Queries::Find{
           .collection = "jobs",
-          .options = {.limit = 100000},
+          .options = {.limit = m_maxJobTransferQuerySize},
           .match = matches,
       });
 

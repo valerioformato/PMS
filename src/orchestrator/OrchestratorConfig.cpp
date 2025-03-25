@@ -25,19 +25,14 @@ Config::Config(std::string_view fileName) {
   front_dbname = to_string(configJson["front_dbname"]);
   // front_dbuser = configJson["front_dbuser"];
 
-  // if (configJson["front_dbcredtype"] == "password") {
-  //   front_dbcredtype = DB::CredType::PWD;
-  // } else if (configJson["front_dbcredtype"] == "X509") {
-  //   front_dbcredtype = DB::CredType::X509;
-  // } else {
-  //   front_dbcredtype = DB::CredType::None;
-  // }
-  // front_dbcredentials = configJson["front_dbcredentials"];
-
   listeningPort = configJson["listeningPort"].get<unsigned int>();
 
   if (configJson.contains("nConnectionThreads")) {
     nConnectionThreads = configJson["nConnectionThreads"].get<unsigned int>();
+  }
+
+  if (configJson.contains("maxJobTransferQuerySize")) {
+    maxJobTransferQuerySize = configJson["maxJobTransferQuerySize"].get<unsigned int>();
   }
 }
 } // namespace PMS::Orchestrator

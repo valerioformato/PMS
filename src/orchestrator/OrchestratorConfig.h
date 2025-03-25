@@ -30,6 +30,8 @@ struct Config {
   unsigned int listeningPort = 0;
 
   unsigned int nConnectionThreads = 32;
+
+  unsigned int maxJobTransferQuerySize = 1000u;
 };
 } // namespace PMS::Orchestrator
 
