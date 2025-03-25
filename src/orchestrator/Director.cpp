@@ -67,11 +67,22 @@ ErrorOr<json> Director::PilotClaimJob(std::string_view pilotUuid) {
 
   bool done = true;
   for (const auto &taskName : pilot_info.tasks) {
+    done &= !(m_tasks[taskName].IsActive());
+  }
+
+  // NOTE(vformato): if all tasks are inactive, we can't assign any job
+  if (done)
+    return R"({"finished": true})"_json;
+
+  done = true;
+  for (const auto &taskName : pilot_info.tasks) {
     done &= (m_tasks[taskName].IsExhausted());
   }
 
+  // NOTE(vformato): if at least one task is exhausted but not finished, we can't assign any job, but jobs are allowed
+  // to go to error and be retried
   if (done)
-    return R"({"finished": true})"_json;
+    return R"({"sleep": true})"_json;
 
   m_claimRequests.push(pilot_info);
 
@@ -233,6 +244,7 @@ void Director::RunClaimQueries() {
               {"status", magic_enum::enum_name(JobStatus::Claimed)},
               {"pilotUuid", pilotUuid},
               {"retries", 1, DB::Queries::UpdateOp::INC},
+              {"lastUpdate", Utils::CurrentTimeToMillisSinceEpoch()},
           };
           return DB::Queries::Update{
               .collection = "jobs",
