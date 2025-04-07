@@ -891,8 +891,9 @@ void Director::DBSync() {
         {"lastUpdate", last_check_in_millis_since_epoch.count(), DB::Queries::ComparisonOp::GT},
     };
 
-    m_logger->debug("Syncing DBs...");
+    m_logger->debug("Syncing DBs... (lastUpdate > {})", last_check_in_millis_since_epoch.count());
 
+    lastCheck = std::chrono::system_clock::now();
     auto query_result = m_frontDB->RunQuery(DB::Queries::Find{
         .collection = "jobs",
         .match = matches,
@@ -903,7 +904,6 @@ void Director::DBSync() {
       continue;
     }
 
-    lastCheck = std::chrono::system_clock::now();
     m_logger->debug("...query done.");
 
     std::vector<DB::Queries::Query> writeOps;
