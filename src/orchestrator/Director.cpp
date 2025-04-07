@@ -917,7 +917,7 @@ void Director::DBSync() {
           job_update_action.emplace_back("startTime", job["startTime"]);
           job_update_action.emplace_back("pilotUuid", job["pilotUuid"]);
         }
-        if (status.value() == JobStatus::Done || status.value() == JobStatus::Error) {
+        if ((status.value() == JobStatus::Done || status.value() == JobStatus::Error) && job.contains("endTime")) {
           job_update_action.emplace_back("endTime", job["endTime"]);
         }
       }
