@@ -115,6 +115,9 @@ void Worker::SendJobUpdates() {
     } else if (maybe_reply.assume_value() == "Ok"sv) {
       m_queuedJobUpdates.pop();
       spdlog::trace("Job update received by server");
+    } else if (auto &reply = maybe_reply.assume_value(); reply.find_first_of("not allowed") != std::string::npos) {
+      spdlog::error("Server replied: {}", reply);
+      m_workerState = State::EXIT;
     } else {
       spdlog::error("Unexpected server reply: {}", maybe_reply.assume_value());
     }

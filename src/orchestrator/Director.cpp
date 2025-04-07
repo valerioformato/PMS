@@ -554,7 +554,7 @@ void Director::JobInsert() {
   std::vector<json> toBeInserted;
   do {
     while (!m_incomingJobs.empty()) {
-      auto job = m_incomingJobs.consume();
+      auto job = m_incomingJobs.pop();
 
       json jobQuery;
       jobQuery["task"] = job["task"];
