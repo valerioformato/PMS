@@ -91,6 +91,8 @@ void Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   request["task"] = task;
   request["status"] = magic_enum::enum_name(status);
 
+  spdlog::trace("UpdateJobStatus: {}", request.dump(2));
+
   m_queuedJobUpdates.push(request);
 }
 
@@ -105,7 +107,9 @@ void Worker::SendJobUpdates() {
       }
     }
 
-    json request = m_queuedJobUpdates.front();
+    json request = m_queuedJobUpdates.pop();
+
+    spdlog::trace("SendJobUpdates: {}", request.dump(2));
 
     spdlog::debug("Sending status update for job {}: {}", to_string(request["hash"]), to_string(request["status"]));
 
@@ -113,7 +117,7 @@ void Worker::SendJobUpdates() {
     if (!maybe_reply) {
       spdlog::error("{}", maybe_reply.error().Message());
     } else if (maybe_reply.assume_value() == "Ok"sv) {
-      m_queuedJobUpdates.pop();
+      // m_queuedJobUpdates.pop();
       spdlog::trace("Job update received by server");
     } else if (auto &reply = maybe_reply.assume_value(); reply.find_first_of("not allowed") != std::string::npos) {
       spdlog::error("Server replied: {}", reply);

@@ -56,8 +56,19 @@ public:
   }
 
   constexpr T &front() noexcept {
-    const auto head{m_head.load(std::memory_order::acquire)};
-    return m_container[head % m_capacity].as_ref();
+    const auto tail{m_tail.load(std::memory_order::acquire) + 1};
+    const auto head{(tail / m_capacity) * 2 + 1};
+    auto *container{&m_container[tail % m_capacity]};
+
+    while (true) {
+      const auto now{container->m_idx_.load(std::memory_order::acquire)};
+      if (now == head) {
+        break;
+      }
+      container->m_idx_.wait(now, std::memory_order::relaxed);
+    }
+
+    return container->as_ref();
   }
 
   bool empty() const noexcept {
