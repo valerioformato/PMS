@@ -56,5 +56,7 @@ struct DeleteHeartBeat {
 
   constexpr static std::array requiredFields{"uuid"sv};
 };
+
+struct Test {};
 } // namespace PMS::Orchestrator
 #endif // PMS_PILOTCOMMANDS_H

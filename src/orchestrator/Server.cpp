@@ -52,6 +52,7 @@ std::unordered_map<std::string_view, Server::PilotCommandType> Server::m_pilot_c
     {"p_registerNewPilot"sv, PilotCommandType::RegisterNewPilot},
     {"p_updateHeartBeat"sv, PilotCommandType::UpdateHeartBeat},
     {"p_deleteHeartBeat"sv, PilotCommandType::DeleteHeartBeat},
+    {"p_test"sv, PilotCommandType::Test},
 };
 
 std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, std::string_view token) const {
@@ -70,7 +71,7 @@ std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, st
   return {false, {}};
 }
 
-std::string Server::HandleCommand(UserCommand &&command) {
+std::string Server::HandleCommand(UserCommand &&command) const {
   return std::visit(
       PMS::Utils::overloaded{
           // Create a new task
@@ -183,7 +184,7 @@ std::string Server::HandleCommand(UserCommand &&command) {
       command);
 }
 
-std::string Server::HandleCommand(PilotCommand &&command) {
+std::string Server::HandleCommand(PilotCommand &&command) const {
   return std::visit(PMS::Utils::overloaded{
                         // request a new job
                         [this](const OrchCommand<ClaimJob> &pcmd) {
@@ -233,7 +234,8 @@ std::string Server::HandleCommand(PilotCommand &&command) {
                           m_logger->debug("Replying to invalid pilot command with {}", pcmd.cmd.errorMessage);
                           return pcmd.cmd.errorMessage;
                         },
-                    },
+                        // Stress tests
+                        [this]([[maybe_unused]] const OrchCommand<Test> &pcmd) { return std::string{"ok"}; }},
                     command);
 }
 
@@ -517,6 +519,8 @@ PilotCommand Server::toPilotCommand(const json &msg) {
     // handle invalid fields:
     errorMessage = fmt::format("Invalid command arguments. Required fields are: {}", DeleteHeartBeat::requiredFields);
     break;
+  case PilotCommandType::Test:
+    return OrchCommand<Test>{};
   }
 
   return OrchCommand<InvalidCommand>{errorMessage};

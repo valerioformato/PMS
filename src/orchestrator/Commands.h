@@ -24,9 +24,9 @@ using UserCommand = std::variant<OrchCommand<InvalidCommand>, OrchCommand<Submit
                                  OrchCommand<ClearTask>, OrchCommand<CleanTask>, OrchCommand<DeclareTaskDependency>,
                                  OrchCommand<CheckTaskToken>, OrchCommand<Summary>, OrchCommand<ResetFailedJobs>>;
 
-using PilotCommand =
-    std::variant<OrchCommand<InvalidCommand>, OrchCommand<ClaimJob>, OrchCommand<UpdateJobStatus>,
-                 OrchCommand<RegisterNewPilot>, OrchCommand<UpdateHeartBeat>, OrchCommand<DeleteHeartBeat>>;
+using PilotCommand = std::variant<OrchCommand<InvalidCommand>, OrchCommand<ClaimJob>, OrchCommand<UpdateJobStatus>,
+                                  OrchCommand<RegisterNewPilot>, OrchCommand<UpdateHeartBeat>,
+                                  OrchCommand<DeleteHeartBeat>, OrchCommand<Test>>;
 
 template <typename Command> static inline bool ValidateJsonCommand(const json &msg) {
   return std::accumulate(begin(Command::requiredFields), end(Command::requiredFields), true,
