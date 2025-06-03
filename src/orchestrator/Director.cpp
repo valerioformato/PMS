@@ -906,6 +906,7 @@ void Director::DBSync() {
 
     m_logger->debug("...query done.");
 
+    // auto chunks = query_result | std::views::chunk(m_maxJobTransferQuerySize);
     std::vector<DB::Queries::Query> writeOps;
     std::ranges::transform(query_result.assume_value(), std::back_inserter(writeOps), [](const auto &job) {
       DB::Queries::Matches job_query_match{{"hash", job["hash"]}};
@@ -1034,8 +1035,8 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
         .update = update_action,
     }));
 
-    return fmt::format("Matched {} jobs. Updated {} jobs", to_string(result["matched_count"]),
-                       to_string(result["modified_count"]));
+    return fmt::format("Matched {} jobs. Updated {} jobs", result["matched_count"].get<size_t>(),
+                       result["modified_count"].get<size_t>());
   }
   case QueryOperation::DeleteOne: {
     auto matches = TRY(PMS::DB::Queries::ToMatches(match));
@@ -1067,7 +1068,7 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
         .match = matches,
     }));
 
-    return fmt::format("Deleted {} jobs", to_string_view(result["deleted_count"]));
+    return fmt::format("Deleted {} jobs", result["deleted_count"].get<size_t>());
   }
   case QueryOperation::Find: {
     json projectionOpt;
