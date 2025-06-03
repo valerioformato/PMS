@@ -48,10 +48,10 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
       switch (update_result.error().Code().value()) {
       case std::to_underlying(std::errc::connection_reset):
         spdlog::warn("Connection reset while sending heartbeat: {}", update_result.error().Message());
-        failedToConnect = true;
         if (!failedToConnect) {
           firstFailedConnection = std::chrono::system_clock::now();
         }
+        failedToConnect = true;
 
         // if we have been failing to connect for more than gracePeriod, we should exit
         if (std::chrono::system_clock::now() - firstFailedConnection > gracePeriod) {
