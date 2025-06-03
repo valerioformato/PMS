@@ -770,20 +770,16 @@ void Director::UpdateTasks() {
 
 ErrorOr<void> Director::UpdateTaskCounts(Task &task) { // update job counters in task
   DB::Queries::Matches matches{{"task", task.name}};
-  auto query_result = TRY(m_backDB->RunQuery(DB::Queries::Count{
-      .collection = "jobs",
-      .match = matches,
-  }));
-  task.totJobs = query_result["count"].get<unsigned int>();
-
   for (auto status : magic_enum::enum_values<JobStatus>()) {
     matches = {{"task", task.name}, {"status", magic_enum::enum_name(status)}};
-    query_result = TRY(m_backDB->RunQuery(DB::Queries::Count{
+    auto query_result = TRY(m_backDB->RunQuery(DB::Queries::Count{
         .collection = "jobs",
         .match = matches,
     }));
     task.jobs[status] = query_result["count"].get<unsigned int>();
   }
+
+  task.totJobs = std::accumulate(task.jobs.begin(), task.jobs.end(), 0u);
 
   return outcome::success();
 }

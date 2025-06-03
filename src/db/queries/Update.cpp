@@ -12,8 +12,9 @@ auto ToUpdates(const json &match_json) -> ErrorOr<DB::Queries::Updates> {
       return Error(std::errc::invalid_argument, fmt::format("Invalid comparison operator: {}", full_op));
     }
 
-    const auto &[key, value] = field_update.items().begin();
-    updates.emplace_back(UpdateAction{.key = key, .value = value, .op = op.value()});
+    for (const auto &[key, value] : field_update.items()) {
+      updates.emplace_back(UpdateAction{.key = key, .value = value, .op = op.value()});
+    }
   }
 
   return updates;
