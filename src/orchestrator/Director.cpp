@@ -144,6 +144,15 @@ void Director::RunClaimQueries() {
       std::copy_if(begin(pilot_info.tasks), end(pilot_info.tasks), std::back_inserter(activeTasks),
                    [this](const auto &taskName) { return m_tasks[taskName].IsActive(); });
 
+      // if there are no active tasks, send this pilot back to sleep
+      if (activeTasks.empty()) {
+        m_claimedJobs[pilot_info.uuid] = ClaimedJob{
+            .claimed = true,
+            .job = R"({"sleep": true})"_json,
+        };
+        continue;
+      }
+
       // NOTE(vformato): check if we already have jobs queried for these tasks
       if (auto maybe_active_task = get_active_task(activeTasks); maybe_active_task) {
         const auto &selected_task = maybe_active_task.value();
