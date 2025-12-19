@@ -71,7 +71,10 @@ void Worker::Start() {
   m_jobUpdateThread = std::thread{&Worker::SendJobUpdates, this};
 }
 
-void Worker::Stop() { m_workerThread.join(); }
+void Worker::Stop() {
+  m_jobUpdateThread.join();
+  m_workerThread.join();
+}
 
 void Worker::Kill() {
   m_workerState = State::EXIT;
