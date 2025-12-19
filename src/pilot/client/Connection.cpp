@@ -119,8 +119,10 @@ void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr m
 
 ErrorOr<std::string> Connection::Send(const std::string &message) {
   std::lock_guard<std::mutex> slk(m_sendMutex);
+#ifdef DEBUG_WEBSOCKETS
   spdlog::trace("Send - lock acquired");
-
+#endif
+  
   std::promise<std::string>{}.swap(m_in_flight_message);
   auto message_future = m_in_flight_message.get_future();
 
@@ -139,9 +141,10 @@ ErrorOr<std::string> Connection::Send(const std::string &message) {
 
 #ifdef DEBUG_WEBSOCKETS
   spdlog::trace("waiting for message...");
-#endif
 
   spdlog::trace("Send - releasing lock...");
+#endif
+
   try {
     return message_future.get();
   } catch (const FailedConnectionException &e) {

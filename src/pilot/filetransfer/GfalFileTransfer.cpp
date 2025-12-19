@@ -1,4 +1,6 @@
 // external dependencies
+#include "pilot/filetransfer/FileTransferQueue.h"
+
 #include <boost/process.hpp>
 #ifdef ENABLE_GFAL2
 #include <gfal_api.h>
@@ -7,12 +9,17 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-#include "pilot/filetransfer/FileTransferQueue.h"
+#include <filesystem>
+#include <ranges>
 
 namespace bp = boost::process;
 
 namespace PMS::Pilot {
 
+ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote);
+std::vector<std::string> FlattenDirectory(const std::filesystem::path &path);
+  std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_path, std::optional<gfal2_context_t> o_context = std::nullopt);
+  
 #ifdef ENABLE_GFAL2
 // Helper functions and types
 ErrorOr<gfal2_context_t> CreateGfal2Context() {
@@ -193,20 +200,181 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
   // First, we need to create a gfal2 context
   gfal2_context_t context = TRY(CreateGfal2Context());
 
-  TransferParameters params{
+  if ( ftInfo.type == FileTransferType::Outbound && IsDirectory(from, false).value() ){
+    spdlog::warn("Directory transfer requested, this is still experimental");
+
+    auto base_path = from;
+    auto ft_info_list = std::views::all(FlattenDirectory(from)) | std::views::transform([&](const std::string &file) {
+      return FileTransferInfo{
+	.type = FileTransferType::Outbound,
+	.protocol = ftInfo.protocol,
+	.fileName = file,
+	.remotePath = fmt::format("{}/{}", to, file),
+	.currentPath = base_path,
+      };
+    });
+    
+    for (const auto &ft_info : ft_info_list) {
+      TRY(GfalFileTransfer(ft_info));
+    }
+  } else {
+
+    TransferParameters params{
       .replace_existing_file = true,
       .checksum_mode = GFALT_CHECKSUM_TARGET,
       .create_parent_directory = true,
-  };
-
-  // Now, we can start the transfer
-  TRY_REPEATED(Gfal2CopyFile(from, to, params, context), m_max_tries);
-
+    };
+    
+    // Now, we can start the transfer
+    TRY_REPEATED(Gfal2CopyFile(from, to, params, context), m_max_tries);    
+  }
+  
   // Lastly, we free the context
   gfal2_context_free(context);
-
 #endif
 
   return outcome::success();
 }
+
+
+std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
+  std::vector<std::string> files;
+
+  try {
+    if (!std::filesystem::exists(path) || !std::filesystem::is_directory(path)) {
+      spdlog::error("Path {} does not exist or is not a directory", path.string());
+      return {};
+    }
+
+    // Get the canonical path to ensure consistent path comparisons
+    const auto canonical_path = std::filesystem::canonical(path);
+
+    // Recursively iterate through the directory
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(
+             canonical_path, std::filesystem::directory_options::follow_directory_symlink)) {
+
+      // Only include regular files, not directories
+      if (std::filesystem::is_regular_file(entry)) {
+        // Calculate the relative path from the base directory
+        std::filesystem::path relative_path = std::filesystem::relative(entry, canonical_path);
+        spdlog::debug("Adding {} to the filelist", relative_path.string());
+        files.push_back(relative_path.string());
+      }
+    }
+
+    spdlog::debug("Found {} files in directory {}", files.size(), path.string());
+  } catch (const std::filesystem::filesystem_error &e) {
+    spdlog::error("Filesystem error while flattening directory {}: {}", path.string(), e.what());
+  } catch (const std::exception &e) {
+    spdlog::error("Error while flattening directory {}: {}", path.string(), e.what());
+  }
+
+  return files;
+}
+
+std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_path, std::optional<gfal2_context_t> o_context) {
+  std::vector<std::string> files;
+
+  static gfal2_context_t context;
+  
+  // First, we need to create a gfal2 context
+  if (!o_context) {
+    auto maybe_context = CreateGfal2Context();
+    if (maybe_context.has_error()) {
+      spdlog::error("Failed to create gfal2 context: {}", maybe_context.error().Message());
+      return {};
+    }
+    context = maybe_context.value();
+  } else {
+    context = o_context.value();
+  }
+
+  static bool timeout_setup{false};
+  if (!timeout_setup) {
+    gfal2_set_opt_integer(context, "CORE", "NAMESPACE_TIMEOUT", 1000000, nullptr);
+    int timeout = gfal2_get_opt_integer(context, "CORE", "NAMESPACE_TIMEOUT", nullptr);
+    if (timeout != 1000000) {
+      spdlog::error("Timeout not set. Got value of {}", timeout);
+      return {};
+    } else {
+      timeout_setup = true;
+    }
+  }
+
+  if (auto check_result = IsDirectory(remote_path, true); check_result.has_value() && check_result.value()) {
+    spdlog::trace("Recursing into {}", remote_path);
+
+    // If the path is a directory, we can list its contents
+    GError *error = nullptr;
+    DIR *dir = gfal2_opendir(context, remote_path.data(), &error);
+    dirent *dir_entry = gfal2_readdir(context, dir, &error);
+    while (dir_entry || !error) {
+      if (error) {
+        spdlog::error("Failed to read directory {}: {}", remote_path, error->message);
+        spdlog::error("dir_entry was: {} {}", fmt::ptr(dir_entry), remote_path);
+        g_error_free(error);
+        return files;
+      }
+
+      std::string_view entry_name(dir_entry->d_name);
+      if (IsDirectory(fmt::format("{}/{}", remote_path, entry_name), true)) {
+        auto sub_files = FlattenRemoteDirectory(fmt::format("{}/{}", remote_path, entry_name));
+
+        files.reserve(files.size() + sub_files.size() + 1);
+        // Reserve space for the sub-files and the current directory entry
+        std::ranges::copy(sub_files, std::back_inserter(files));
+      }
+
+      dir_entry = gfal2_readdir(context, dir, &error);
+      spdlog::trace("Current: {} - Next dir_entry: {} {} ({} {})", entry_name, fmt::ptr(dir_entry),
+                    dir_entry ? dir_entry->d_name : "", fmt::ptr(error), error ? error->message : "");
+    }
+
+    if (error) {
+      g_error_free(error);
+    }
+
+    gfal2_closedir(context, dir, &error);
+
+    spdlog::trace("FlattenDirectory on {} returned {} files", remote_path, files.size());
+  } else {
+    // spdlog::trace("Adding {}", remote_path);
+    files.emplace_back(remote_path);
+  }
+
+  return files;
+}
+
+ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
+  // Helper function to check if a path is a directory
+  if (!is_remote) {
+    try {
+      // spdlog::trace("{} is {} a directory", path, std::filesystem::is_directory(path) ? "" : "not");
+      return std::filesystem::is_directory(path);
+    } catch (const std::filesystem::filesystem_error &e) {
+      spdlog::error("Error checking if path is a directory: {}", e.what());
+      return Error(std::make_error_code(std::errc::io_error), e.what());
+    }
+  } else {
+    // For remote paths, we need to use gfal2_stat
+    static auto context = TRY(CreateGfal2Context());
+
+    GError *error = nullptr;
+
+    struct stat statbuf;
+    int ret = gfal2_stat(context, path.data(), &statbuf, &error);
+    // spdlog::trace("{} is {} a directory", path, S_ISDIR(statbuf.st_mode) ? "" : "not");
+
+    if (ret == -1) {
+      spdlog::error("Failed to stat remote path {}: {}", path, error->message);
+      return Error(std::make_error_code(std::errc::io_error), error->message);
+    }
+
+    if (error) {
+      g_error_free(error);
+    }
+
+    return S_ISDIR(statbuf.st_mode);
+  }
+}  
 } // namespace PMS::Pilot
