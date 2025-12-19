@@ -15,15 +15,7 @@
 namespace bp = boost::process;
 
 namespace PMS::Pilot {
-ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote);
-
-std::vector<std::string> FlattenDirectory(const std::filesystem::path &path);
-
-std::vector<std::string> FlattenRemoteDirectory(std::string_view remote_path,
-                                                std::optional<gfal2_context_t> o_context = std::nullopt);
-
 #ifdef ENABLE_GFAL2
-
 struct GfalContextHandle {
   gfal2_context_t context;
 
@@ -35,6 +27,12 @@ struct GfalContextHandle {
 
   gfal2_context_t operator*() const { return context; }
 };
+
+ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote);
+
+std::vector<std::string> FlattenDirectory(const std::filesystem::path &path);
+
+std::vector<std::string> FlattenRemoteDirectory(std::string_view remote_path, GfalContextHandle &o_context);
 
 // Helper functions and types
 ErrorOr<GfalContextHandle> CreateGfal2Context() {
@@ -215,7 +213,7 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
 
 #else
   // First, we need to create a gfal2 context
-  static GfalContextHandle context = TRY(CreateGfal2Context());
+  GfalContextHandle context = TRY(CreateGfal2Context());
 
   auto local_path = fmt::format("{}/{}", ftInfo.currentPath, ftInfo.fileName);
   if (ftInfo.type == FileTransferType::Outbound && IsDirectory(local_path, false).value()) {
@@ -290,23 +288,10 @@ std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
   return files;
 }
 
-std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_path,
-                                                std::optional<GfalContextHandle> o_context) {
+std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_path, GfalContextHandle &context) {
   std::vector<std::string> files;
 
-  static GfalContextHandle context;
-
   // First, we need to create a gfal2 context
-  if (!o_context) {
-    auto maybe_context = CreateGfal2Context();
-    if (maybe_context.has_error()) {
-      spdlog::error("Failed to create gfal2 context: {}", maybe_context.error().Message());
-      return {};
-    }
-    context = maybe_context.value();
-  } else {
-    context = o_context.value();
-  }
 
   static bool timeout_setup{false};
   if (!timeout_setup) {
