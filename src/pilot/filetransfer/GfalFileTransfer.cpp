@@ -178,6 +178,8 @@ ErrorOr<void> Gfal2CopyFileExternal(const std::string &from, const std::string &
 }
 
 ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
+  static auto logger = spdlog::stdout_color_mt("GfalFileTransfer");
+
   std::string from, to;
 
   switch (ftInfo.type) {
@@ -191,7 +193,7 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
     break;
   }
 
-  spdlog::debug("Attempting to copy {} to {} via gfal", from, to);
+  logger->debug("Attempting to copy {} to {} via gfal", from, to);
 
 #ifndef ENABLE_GFAL2
   // NOTE: in case we cannot find the client library, gfal transfers are implemented by spawning a process
@@ -204,7 +206,7 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
 
   auto local_path = fmt::format("{}/{}", ftInfo.currentPath, ftInfo.fileName);
   if (ftInfo.type == FileTransferType::Outbound && IsDirectory(local_path, false).value()) {
-    spdlog::warn("Directory transfer requested, this is still experimental");
+    logger->warn("Directory transfer requested, this is still experimental");
 
     auto base_path = from;
     auto ft_info_list = std::views::all(FlattenDirectory(from)) | std::views::transform([&](const std::string &file) {
@@ -239,11 +241,13 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
 }
 
 std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
+  static auto logger = spdlog::stdout_color_mt("FlattenDirectory");
+
   std::vector<std::string> files;
 
   try {
     if (!std::filesystem::exists(path) || !std::filesystem::is_directory(path)) {
-      spdlog::error("Path {} does not exist or is not a directory", path.string());
+      logger->error("Path {} does not exist or is not a directory", path.string());
       return {};
     }
 
@@ -257,16 +261,16 @@ std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
       if (std::filesystem::is_regular_file(entry)) {
         // Calculate the relative path from the base directory
         std::filesystem::path relative_path = std::filesystem::relative(entry, canonical_path);
-        spdlog::debug("Adding {} to the filelist", relative_path.string());
+        logger->debug("Adding {} to the filelist", relative_path.string());
         files.push_back(relative_path.string());
       }
     }
 
-    spdlog::debug("Found {} files in directory {}", files.size(), path.string());
+    logger->debug("Found {} files in directory {}", files.size(), path.string());
   } catch (const std::filesystem::filesystem_error &e) {
-    spdlog::error("Filesystem error while flattening directory {}: {}", path.string(), e.what());
+    logger->error("Filesystem error while flattening directory {}: {}", path.string(), e.what());
   } catch (const std::exception &e) {
-    spdlog::error("Error while flattening directory {}: {}", path.string(), e.what());
+    logger->error("Error while flattening directory {}: {}", path.string(), e.what());
   }
 
   return files;
@@ -347,13 +351,15 @@ std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_pa
 }
 
 ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
+  auto logger = spdlog::stdout_color_st("IsDirectory");
+
   // Helper function to check if a path is a directory
   if (!is_remote) {
     try {
-      // spdlog::trace("{} is {} a directory", path, std::filesystem::is_directory(path) ? "" : "not");
+      logger->trace("{} is {} a directory", path, std::filesystem::is_directory(path) ? "" : "not");
       return std::filesystem::is_directory(path);
     } catch (const std::filesystem::filesystem_error &e) {
-      spdlog::error("Error checking if path is a directory: {}", e.what());
+      logger->error("Error checking if path is a directory: {}", e.what());
       return Error(std::make_error_code(std::errc::io_error), e.what());
     }
   } else {
@@ -364,10 +370,10 @@ ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
 
     struct stat statbuf;
     int ret = gfal2_stat(context, path.data(), &statbuf, &error);
-    // spdlog::trace("{} is {} a directory", path, S_ISDIR(statbuf.st_mode) ? "" : "not");
+    logger->trace("{} is {} a directory", path, S_ISDIR(statbuf.st_mode) ? "" : "not");
 
     if (ret == -1) {
-      spdlog::error("Failed to stat remote path {}: {}", path, error->message);
+      logger->error("Failed to stat remote path {}: {}", path, error->message);
       return Error(std::make_error_code(std::errc::io_error), error->message);
     }
 
