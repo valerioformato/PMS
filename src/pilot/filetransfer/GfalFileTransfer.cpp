@@ -210,12 +210,15 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
 
     auto ft_info_list =
         std::views::all(FlattenDirectory(local_path)) | std::views::transform([&](const std::string &file) {
+          logger->trace("fileName = {}", file);
+          logger->trace("remotePath = {}", fmt::format("{}/{}", to, file));
+          logger->trace("currentPath = {}", local_path);
           return FileTransferInfo{
               .type = FileTransferType::Outbound,
               .protocol = ftInfo.protocol,
               .fileName = file,
               .remotePath = fmt::format("{}/{}", to, file),
-              .currentPath = from,
+              .currentPath = local_path,
           };
         });
 
