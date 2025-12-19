@@ -19,6 +19,25 @@ namespace PMS::Pilot {
 struct GfalContextHandle {
   gfal2_context_t context;
 
+  // Constructor
+  explicit GfalContextHandle(gfal2_context_t ctx) : context(ctx) {}
+
+  // Deleted copy constructor and copy assignment operator
+  GfalContextHandle(const GfalContextHandle &) = delete;
+  GfalContextHandle &operator=(const GfalContextHandle &) = delete;
+
+  // Move constructor
+  GfalContextHandle(GfalContextHandle &&other) noexcept : context(other.context) { other.context = nullptr; }
+
+  // Move assignment operator
+  GfalContextHandle &operator=(GfalContextHandle &&other) noexcept {
+    if (this != &other) {
+      context = other.context;
+      other.context = nullptr;
+    }
+    return *this;
+  }
+
   ~GfalContextHandle() {
     if (context) {
       gfal2_context_free(context);
@@ -213,7 +232,12 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
 
 #else
   // First, we need to create a gfal2 context
-  GfalContextHandle context = TRY(CreateGfal2Context());
+  auto maybe_context = CreateGfal2Context();
+  if (!maybe_context) {
+    logger->error("Failed to create Gfal2Context");
+  }
+
+  auto &context = maybe_context.value();
 
   auto local_path = fmt::format("{}/{}", ftInfo.currentPath, ftInfo.fileName);
   if (ftInfo.type == FileTransferType::Outbound && IsDirectory(local_path, false).value()) {
@@ -363,7 +387,12 @@ ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
     }
   } else {
     // For remote paths, we need to use gfal2_stat
-    auto context = TRY(CreateGfal2Context());
+    auto maybe_context = CreateGfal2Context();
+    if (!maybe_context) {
+      logger->error("Failed to create Gfal2Context");
+    }
+
+    auto &context = maybe_context.value();
 
     GError *error = nullptr;
 
