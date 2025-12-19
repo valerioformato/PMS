@@ -208,16 +208,16 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
   if (ftInfo.type == FileTransferType::Outbound && IsDirectory(local_path, false).value()) {
     logger->warn("Directory transfer requested, this is still experimental");
 
-    auto base_path = from;
-    auto ft_info_list = std::views::all(FlattenDirectory(from)) | std::views::transform([&](const std::string &file) {
-                          return FileTransferInfo{
-                              .type = FileTransferType::Outbound,
-                              .protocol = ftInfo.protocol,
-                              .fileName = file,
-                              .remotePath = fmt::format("{}/{}", to, file),
-                              .currentPath = base_path,
-                          };
-                        });
+    auto ft_info_list =
+        std::views::all(FlattenDirectory(local_path)) | std::views::transform([&](const std::string &file) {
+          return FileTransferInfo{
+              .type = FileTransferType::Outbound,
+              .protocol = ftInfo.protocol,
+              .fileName = file,
+              .remotePath = fmt::format("{}/{}", to, file),
+              .currentPath = from,
+          };
+        });
 
     for (const auto &ft_info : ft_info_list) {
       TRY(GfalFileTransfer(ft_info));
@@ -351,7 +351,7 @@ std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_pa
 }
 
 ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
-  auto logger = spdlog::stdout_color_st("IsDirectory");
+  static auto logger = spdlog::stdout_color_st("IsDirectory");
 
   // Helper function to check if a path is a directory
   if (!is_remote) {
