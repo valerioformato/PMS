@@ -23,8 +23,21 @@ std::vector<std::string> FlattenRemoteDirectory(std::string_view remote_path,
                                                 std::optional<gfal2_context_t> o_context = std::nullopt);
 
 #ifdef ENABLE_GFAL2
+
+struct GfalContextHandle {
+  gfal2_context_t context;
+
+  ~GfalContextHandle() {
+    if (context) {
+      gfal2_context_free(context);
+    }
+  }
+
+  gfal2_context_t operator*() const { return context; }
+};
+
 // Helper functions and types
-ErrorOr<gfal2_context_t> CreateGfal2Context() {
+ErrorOr<GfalContextHandle> CreateGfal2Context() {
   GError *error = nullptr;
   gfal2_context_t context = gfal2_context_new(&error);
 
@@ -32,7 +45,7 @@ ErrorOr<gfal2_context_t> CreateGfal2Context() {
     return Error{static_cast<std::errc>(error->code), error->message};
   }
 
-  return context;
+  return GfalContextHandle{context};
 }
 
 struct TransferParameters {
@@ -202,7 +215,7 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
 
 #else
   // First, we need to create a gfal2 context
-  static gfal2_context_t context = TRY(CreateGfal2Context());
+  static GfalContextHandle context = TRY(CreateGfal2Context());
 
   auto local_path = fmt::format("{}/{}", ftInfo.currentPath, ftInfo.fileName);
   if (ftInfo.type == FileTransferType::Outbound && IsDirectory(local_path, false).value()) {
@@ -233,11 +246,9 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
     };
 
     // Now, we can start the transfer
-    TRY_REPEATED(Gfal2CopyFile(from, to, params, context), m_max_tries);
+    TRY_REPEATED(Gfal2CopyFile(from, to, params, *context), m_max_tries);
   }
 
-  // Lastly, we free the context
-  gfal2_context_free(context);
 #endif
 
   return outcome::success();
@@ -280,10 +291,10 @@ std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
 }
 
 std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_path,
-                                                std::optional<gfal2_context_t> o_context) {
+                                                std::optional<GfalContextHandle> o_context) {
   std::vector<std::string> files;
 
-  static gfal2_context_t context;
+  static GfalContextHandle context;
 
   // First, we need to create a gfal2 context
   if (!o_context) {
@@ -299,8 +310,8 @@ std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_pa
 
   static bool timeout_setup{false};
   if (!timeout_setup) {
-    gfal2_set_opt_integer(context, "CORE", "NAMESPACE_TIMEOUT", 1000000, nullptr);
-    int timeout = gfal2_get_opt_integer(context, "CORE", "NAMESPACE_TIMEOUT", nullptr);
+    gfal2_set_opt_integer(*context, "CORE", "NAMESPACE_TIMEOUT", 1000000, nullptr);
+    int timeout = gfal2_get_opt_integer(*context, "CORE", "NAMESPACE_TIMEOUT", nullptr);
     if (timeout != 1000000) {
       spdlog::error("Timeout not set. Got value of {}", timeout);
       return {};
@@ -314,8 +325,8 @@ std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_pa
 
     // If the path is a directory, we can list its contents
     GError *error = nullptr;
-    DIR *dir = gfal2_opendir(context, remote_path.data(), &error);
-    dirent *dir_entry = gfal2_readdir(context, dir, &error);
+    DIR *dir = gfal2_opendir(*context, remote_path.data(), &error);
+    dirent *dir_entry = gfal2_readdir(*context, dir, &error);
     while (dir_entry || !error) {
       if (error) {
         spdlog::error("Failed to read directory {}: {}", remote_path, error->message);
@@ -326,14 +337,14 @@ std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_pa
 
       std::string_view entry_name(dir_entry->d_name);
       if (IsDirectory(fmt::format("{}/{}", remote_path, entry_name), true)) {
-        auto sub_files = FlattenRemoteDirectory(fmt::format("{}/{}", remote_path, entry_name));
+        auto sub_files = FlattenRemoteDirectory(fmt::format("{}/{}", remote_path, entry_name), context);
 
         files.reserve(files.size() + sub_files.size() + 1);
         // Reserve space for the sub-files and the current directory entry
         std::ranges::copy(sub_files, std::back_inserter(files));
       }
 
-      dir_entry = gfal2_readdir(context, dir, &error);
+      dir_entry = gfal2_readdir(*context, dir, &error);
       spdlog::trace("Current: {} - Next dir_entry: {} {} ({} {})", entry_name, fmt::ptr(dir_entry),
                     dir_entry ? dir_entry->d_name : "", fmt::ptr(error), error ? error->message : "");
     }
@@ -342,7 +353,7 @@ std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_pa
       g_error_free(error);
     }
 
-    gfal2_closedir(context, dir, &error);
+    gfal2_closedir(*context, dir, &error);
 
     spdlog::trace("FlattenDirectory on {} returned {} files", remote_path, files.size());
   } else {
@@ -367,12 +378,12 @@ ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
     }
   } else {
     // For remote paths, we need to use gfal2_stat
-    static auto context = TRY(CreateGfal2Context());
+    auto context = TRY(CreateGfal2Context());
 
     GError *error = nullptr;
 
     struct stat statbuf;
-    int ret = gfal2_stat(context, path.data(), &statbuf, &error);
+    int ret = gfal2_stat(*context, path.data(), &statbuf, &error);
     logger->trace("{} is {} a directory", path, S_ISDIR(statbuf.st_mode) ? "" : "not");
 
     if (ret == -1) {
