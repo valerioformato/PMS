@@ -15,11 +15,13 @@
 namespace bp = boost::process;
 
 namespace PMS::Pilot {
-
 ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote);
+
 std::vector<std::string> FlattenDirectory(const std::filesystem::path &path);
-  std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_path, std::optional<gfal2_context_t> o_context = std::nullopt);
-  
+
+std::vector<std::string> FlattenRemoteDirectory(std::string_view remote_path,
+                                                std::optional<gfal2_context_t> o_context = std::nullopt);
+
 #ifdef ENABLE_GFAL2
 // Helper functions and types
 ErrorOr<gfal2_context_t> CreateGfal2Context() {
@@ -198,44 +200,43 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
 
 #else
   // First, we need to create a gfal2 context
-  gfal2_context_t context = TRY(CreateGfal2Context());
+  static gfal2_context_t context = TRY(CreateGfal2Context());
 
-  if ( ftInfo.type == FileTransferType::Outbound && IsDirectory(from, false).value() ){
+  auto local_path = fmt::format("{}/{}", ftInfo.currentPath, ftInfo.fileName);
+  if (ftInfo.type == FileTransferType::Outbound && IsDirectory(local_path, false).value()) {
     spdlog::warn("Directory transfer requested, this is still experimental");
 
     auto base_path = from;
     auto ft_info_list = std::views::all(FlattenDirectory(from)) | std::views::transform([&](const std::string &file) {
-      return FileTransferInfo{
-	.type = FileTransferType::Outbound,
-	.protocol = ftInfo.protocol,
-	.fileName = file,
-	.remotePath = fmt::format("{}/{}", to, file),
-	.currentPath = base_path,
-      };
-    });
-    
+                          return FileTransferInfo{
+                              .type = FileTransferType::Outbound,
+                              .protocol = ftInfo.protocol,
+                              .fileName = file,
+                              .remotePath = fmt::format("{}/{}", to, file),
+                              .currentPath = base_path,
+                          };
+                        });
+
     for (const auto &ft_info : ft_info_list) {
       TRY(GfalFileTransfer(ft_info));
     }
   } else {
-
     TransferParameters params{
-      .replace_existing_file = true,
-      .checksum_mode = GFALT_CHECKSUM_TARGET,
-      .create_parent_directory = true,
+        .replace_existing_file = true,
+        .checksum_mode = GFALT_CHECKSUM_TARGET,
+        .create_parent_directory = true,
     };
-    
+
     // Now, we can start the transfer
-    TRY_REPEATED(Gfal2CopyFile(from, to, params, context), m_max_tries);    
+    TRY_REPEATED(Gfal2CopyFile(from, to, params, context), m_max_tries);
   }
-  
+
   // Lastly, we free the context
   gfal2_context_free(context);
 #endif
 
   return outcome::success();
 }
-
 
 std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
   std::vector<std::string> files;
@@ -252,7 +253,6 @@ std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
     // Recursively iterate through the directory
     for (const auto &entry : std::filesystem::recursive_directory_iterator(
              canonical_path, std::filesystem::directory_options::follow_directory_symlink)) {
-
       // Only include regular files, not directories
       if (std::filesystem::is_regular_file(entry)) {
         // Calculate the relative path from the base directory
@@ -272,11 +272,12 @@ std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
   return files;
 }
 
-std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_path, std::optional<gfal2_context_t> o_context) {
+std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_path,
+                                                std::optional<gfal2_context_t> o_context) {
   std::vector<std::string> files;
 
   static gfal2_context_t context;
-  
+
   // First, we need to create a gfal2 context
   if (!o_context) {
     auto maybe_context = CreateGfal2Context();
@@ -376,5 +377,5 @@ ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
 
     return S_ISDIR(statbuf.st_mode);
   }
-}  
+}
 } // namespace PMS::Pilot

@@ -45,7 +45,7 @@ if(NOT spdlog_POPULATED)
 endif()
 
 # === boost ===
-find_package(Boost REQUIRED COMPONENTS filesystem system thread regex)
+find_package(Boost REQUIRED COMPONENTS filesystem thread regex)
 
 # === nlohmannjson ===
 set(JSON_ImplicitConversions OFF CACHE INTERNAL "")
@@ -83,7 +83,7 @@ endif()
 # add interface library with all websocketpp dependencies
 add_library(PMSWebsockets INTERFACE)
 target_include_directories(PMSWebsockets INTERFACE ${websocketpp_SOURCE_DIR})
-target_link_libraries(PMSWebsockets INTERFACE Boost::system Boost::thread Boost::regex)
+target_link_libraries(PMSWebsockets INTERFACE Boost::headers Boost::thread Boost::regex)
 
 # === mongocxx ===
 set(ENABLE_TESTS
