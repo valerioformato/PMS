@@ -5,12 +5,12 @@
 // external headers
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <fmt/ostream.h>
-#include <fmt/ranges.h>
 #include <mongocxx/bulk_write.hpp>
 #include <mongocxx/exception/exception.hpp>
 #include <mongocxx/pipeline.hpp>
 #include <nlohmann/json.hpp>
+#include <spdlog/fmt/bundled/ostream.h>
+#include <spdlog/fmt/bundled/ranges.h>
 
 // our headers
 #include "common/Job.h"

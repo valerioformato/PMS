@@ -1,5 +1,5 @@
 // external dependencies
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/format.h>
 
 // our headers
 #include "db/backends/MongoDB/PoolHandle.h"

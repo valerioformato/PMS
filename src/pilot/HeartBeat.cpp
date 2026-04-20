@@ -1,7 +1,7 @@
 // external headers
 #include <boost/uuid/uuid_io.hpp>
-#include <fmt/chrono.h>
 #include <nlohmann/json.hpp>
+#include <spdlog/fmt/bundled/chrono.h>
 #include <spdlog/spdlog.h>
 
 // our headers

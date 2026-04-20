@@ -10,7 +10,7 @@
 #include <string_view>
 #include <type_traits>
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/format.h>
 
 #include <boost/outcome.hpp>
 namespace outcome = boost::outcome_v2;

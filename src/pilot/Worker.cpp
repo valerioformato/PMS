@@ -7,12 +7,11 @@
 
 // external headers
 #include <boost/uuid/uuid_io.hpp>
-#include <fmt/chrono.h>
-#include <fmt/format.h>
-#include <fmt/os.h>
-#include <fmt/ranges.h>
 #include <magic_enum/magic_enum.hpp>
 #include <nlohmann/json.hpp>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/format.h>
+#include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/spdlog.h>
 
 // our headers
@@ -220,10 +219,10 @@ void Worker::MainLoop() {
 
       // make the shell script executable
       fs::path shellScriptPath = wdPath / "pilot_task.sh";
-      auto shellScript = fmt::output_file(shellScriptPath.string());
+      std::ofstream shellScript(shellScriptPath.string());
       fs::permissions(shellScriptPath, fs::perms::owner_all | fs::perms::group_read);
 
-      shellScript.print("#! /bin/bash\n");
+      shellScript << "#! /bin/bash\n";
 
       std::string executable;
       std::vector<std::string> arguments;
@@ -252,7 +251,7 @@ void Worker::MainLoop() {
         case EnvInfoType::Script:
           try {
             if (!job["env"].contains("args")) {
-              shellScript.print(". {}\n", fs::canonical(to_string(job["env"]["file"])).string());
+              shellScript << fmt::format(". {}\n", fs::canonical(to_string(job["env"]["file"])).string());
             } else {
               std::vector<std::string> dummy;
               auto scriptArgs = job["env"]["args"];
@@ -260,7 +259,7 @@ void Worker::MainLoop() {
                                      [](const auto &arg) { return to_string(arg); });
               std::string scriptWithArgs =
                   fmt::format("{} {}\n", fs::canonical(to_string(job["env"]["file"])).string(), fmt::join(dummy, " "));
-              shellScript.print(". {}", scriptWithArgs);
+              shellScript << fmt::format(". {}", scriptWithArgs);
             }
           } catch (const fs::filesystem_error &e) {
             spdlog::error("{}", e.what());
@@ -310,10 +309,10 @@ void Worker::MainLoop() {
       spdlog::info("Worker:  - {}", executableWithArgs);
 
       // set the shell to exit as soon as a command fails
-      shellScript.print("set -e\n");
+      shellScript << "set -e\n";
 
       // run the executable
-      shellScript.print("{}\n", executableWithArgs);
+      shellScript << fmt::format("{}\n", executableWithArgs);
 
       // close the script file before execution, or the child will silently fail
       shellScript.close();

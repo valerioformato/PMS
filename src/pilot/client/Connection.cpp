@@ -1,8 +1,8 @@
 #include <functional>
 #include <utility>
 
-#include <fmt/format.h>
 #include <magic_enum/magic_enum.hpp>
+#include <spdlog/fmt/bundled/format.h>
 #include <spdlog/spdlog.h>
 
 #include "pilot/client/Connection.h"

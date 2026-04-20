@@ -17,7 +17,7 @@ namespace bp = boost::process::v1;
 #ifdef ENABLE_GFAL2
 #include <gfal_api.h>
 #endif
-#include <fmt/chrono.h>
+#include <spdlog/fmt/bundled/chrono.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 

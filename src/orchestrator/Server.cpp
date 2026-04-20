@@ -5,10 +5,10 @@
 #include <vector>
 
 // external dependencies
-#include <fmt/format.h>
-#include <fmt/ostream.h>
-#include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
+#include <spdlog/fmt/bundled/format.h>
+#include <spdlog/fmt/bundled/ostream.h>
+#include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/spdlog.h>
 
 // our headers
