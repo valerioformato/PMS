@@ -22,8 +22,9 @@ endif ()
 # RPATH
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-# Check for C++ standard and set it to C++20 if not already set
-set(CMAKE_CXX_STANDARD 20)
+if (NOT DEFINED CMAKE_CXX_STANDARD)
+set(CMAKE_CXX_STANDARD 23)
+endif()
 
 # -------------------------------------------------------------------
 # -------------------------- Begin project --------------------------
