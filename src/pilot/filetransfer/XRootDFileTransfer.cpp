@@ -7,7 +7,7 @@
 #include <XrdCl/XrdClFileSystem.hh>
 #include <filesystem>
 #include <fmt/ranges.h>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
 // our headers

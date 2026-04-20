@@ -10,7 +10,18 @@
 #include <utility>
 
 // external headers
+#include <boost/version.hpp>
+#if BOOST_VERSION < 108800
 #include <boost/process.hpp>
+namespace bp = boost::process;
+#else
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/pipe.hpp>
+#include <boost/process/v1/search_path.hpp>
+#include <boost/process/v1/start_dir.hpp>
+namespace bp = boost::process::v1;
+#endif
 #include <boost/uuid/uuid.hpp>
 #include <nlohmann/json.hpp>
 
@@ -66,7 +77,7 @@ private:
   std::promise<void> m_exitSignal;
   std::shared_future<void> m_exitSignalFuture{m_exitSignal.get_future()};
 
-  boost::process::child m_jobProcess;
+  bp::child m_jobProcess;
   boost::uuids::uuid m_uuid{};
 
   void MainLoop();

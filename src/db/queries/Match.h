@@ -1,6 +1,6 @@
 #pragma once
 
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 #include "common/JsonUtils.h"
 #include "common/Utils.h"

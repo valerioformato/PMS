@@ -1,104 +1,30 @@
 # handle dependencies
-include(FetchContent)
+include(cmake/CPM.cmake)
+
 
 # needed for the fmt and spdlog static libraries
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-# https://github.com/Neargye/magic_enum.git
-# === magic_enum ===
-FetchContent_Declare(
-        magic_enum
-        GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
-        GIT_TAG v0.7.3
-        EXCLUDE_FROM_ALL)
-FetchContent_GetProperties(magic_enum)
-if(NOT magic_enum_POPULATED)
-  FetchContent_MakeAvailable(magic_enum)
-endif()
-
-# === fmt ===
-FetchContent_Declare(
-  fmt
-  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG 11.0.2
-  EXCLUDE_FROM_ALL)
-FetchContent_GetProperties(fmt)
-if(NOT fmt_POPULATED)
-  set(FMT_INSTALL ON)
-  FetchContent_MakeAvailable(fmt)
-endif()
-
-# === spdlog ===
-# Force spdlog to use downloaded fmt library
-set(SPDLOG_FMT_EXTERNAL
-    ON
-    CACHE INTERNAL "") # Forces the value
-FetchContent_Declare(
-  spdlog
-  GIT_REPOSITORY https://github.com/gabime/spdlog.git
-  GIT_TAG v1.14.1
-  EXCLUDE_FROM_ALL)
-FetchContent_GetProperties(spdlog)
-if(NOT spdlog_POPULATED)
-  set(SPDLOG_INSTALL ON)
-  FetchContent_MakeAvailable(spdlog)
-endif()
-
-# === boost ===
-find_package(Boost REQUIRED COMPONENTS filesystem thread regex)
-
-# === nlohmannjson ===
+# needed to avoid implicit conversions for json documents
 set(JSON_ImplicitConversions OFF CACHE INTERNAL "")
 
-FetchContent_Declare(json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG v3.11.3
-  EXCLUDE_FROM_ALL)
-FetchContent_GetProperties(json)
-if(NOT json_POPULATED)
-  FetchContent_MakeAvailable(json)
-endif()
+CPMAddPackage("gh:Neargye/magic_enum#v0.9.7")
+CPMAddPackage("gh:gabime/spdlog#v1.14.1")
+CPMAddPackage(
+  URI "gh:nlohmann/json#v3.11.3"
+  OPTIONS "JSON_ImplicitConversions OFF" 
+)
+CPMAddPackage("gh:docopt/docopt.cpp#v0.6.3")
+CPMAddPackage("gh:valerioformato/websocketpp#boost")
+CPMAddPackage("gh:mongodb/mongo-cxx-driver#r4.2.0")
 
-# === docopt ===
-FetchContent_Declare(docopt
-GIT_REPOSITORY https://github.com/docopt/docopt.cpp
-  GIT_TAG v0.6.3
-  EXCLUDE_FROM_ALL)
-FetchContent_GetProperties(docopt)
-if(NOT docopt_POPULATED)
-  FetchContent_MakeAvailable(docopt)
-endif()
-install(TARGETS docopt DESTINATION lib)
+# === boost ===
+set(BOOST_COMPONENTS filesystem thread regex)
+find_package(Boost COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 
-
-# === websocket++ ===
-FetchContent_Declare(websocketpp
-GIT_REPOSITORY https://github.com/valerioformato/websocketpp.git
-  GIT_TAG master
-  EXCLUDE_FROM_ALL)
-FetchContent_GetProperties(websocketpp)
-if(NOT websocketpp_POPULATED)
-  FetchContent_MakeAvailable(websocketpp)
-endif()
 # add interface library with all websocketpp dependencies
 add_library(PMSWebsockets INTERFACE)
 target_include_directories(PMSWebsockets INTERFACE ${websocketpp_SOURCE_DIR})
 target_link_libraries(PMSWebsockets INTERFACE Boost::headers Boost::thread Boost::regex)
-
-# === mongocxx ===
-set(ENABLE_TESTS
-    OFF
-    CACHE INTERNAL "") # Forces the value
-set(BUILD_SHARED_LIBS_WITH_STATIC_MONGOC ON CACHE INTERNAL "")
-FetchContent_Declare(mongo-cxx
-GIT_REPOSITORY https://github.com/mongodb/mongo-cxx-driver.git
-  GIT_TAG r3.9.0
-  EXCLUDE_FROM_ALL)
-FetchContent_GetProperties(mongo-cxx)
-if(NOT mongo-cxx_POPULATED)
-  FetchContent_MakeAvailable(mongo-cxx)
-  install(TARGETS bsoncxx_shared mongocxx_shared DESTINATION lib)
-endif()
 
 # non-cmake packages
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake/Modules)

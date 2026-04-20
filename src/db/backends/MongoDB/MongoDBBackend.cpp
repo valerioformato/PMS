@@ -1,6 +1,6 @@
 #include <ranges>
 
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
 #include <bsoncxx/builder/basic/document.hpp>

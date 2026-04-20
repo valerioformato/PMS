@@ -11,7 +11,7 @@
 #include <fmt/format.h>
 #include <fmt/os.h>
 #include <fmt/ranges.h>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -24,7 +24,6 @@
 #include "pilot/Worker.h"
 
 using json = nlohmann::json;
-namespace bp = boost::process;
 namespace fs = std::filesystem;
 
 using namespace PMS::JsonUtils;

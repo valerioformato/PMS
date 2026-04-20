@@ -1,7 +1,7 @@
 #ifndef PMS_COMMON_ENUMARRAY_H
 #define PMS_COMMON_ENUMARRAY_H
 
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 template <typename ContainedClass, typename Enum>
 class EnumArray : public std::array<ContainedClass, magic_enum::enum_count<Enum>()> {

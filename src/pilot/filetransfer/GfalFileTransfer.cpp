@@ -1,7 +1,19 @@
 // external dependencies
 #include "pilot/filetransfer/FileTransferQueue.h"
 
+#include <boost/version.hpp>
+#if BOOST_VERSION < 108800
 #include <boost/process.hpp>
+namespace bp = boost::process;
+#else
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/io.hpp>
+#include <boost/process/v1/pipe.hpp>
+#include <boost/process/v1/search_path.hpp>
+#include <boost/process/v1/start_dir.hpp>
+namespace bp = boost::process::v1;
+#endif
+
 #ifdef ENABLE_GFAL2
 #include <gfal_api.h>
 #endif
@@ -11,8 +23,6 @@
 
 #include <filesystem>
 #include <ranges>
-
-namespace bp = boost::process;
 
 namespace PMS::Pilot {
 #ifdef ENABLE_GFAL2
@@ -312,6 +322,7 @@ std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
   return files;
 }
 
+#ifdef ENABLE_GFAL2
 std::vector<std::string> FlattenRemoteDirectory(const std::string_view remote_path, GfalContextHandle &context) {
   std::vector<std::string> files;
 
@@ -412,4 +423,5 @@ ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
     return S_ISDIR(statbuf.st_mode);
   }
 }
+#endif
 } // namespace PMS::Pilot

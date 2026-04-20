@@ -70,11 +70,17 @@ ErrorOr<std::string> read_file(const std::filesystem::path &file) {
 Pilot::Info ReadPilotInfo() {
   Pilot::Info result{};
 
-  auto get_ip_address = []() {
-    boost::asio::io_service ioService;
+  auto get_ip_address = []() -> std::string {
+    boost::asio::io_context ioService;
     boost::asio::ip::tcp::resolver resolver(ioService);
 
-    return resolver.resolve(boost::asio::ip::host_name(), "")->endpoint().address().to_string();
+    auto results = resolver.resolve(boost::asio::ip::host_name(), "");
+    for (const auto &result : results) {
+      // FIXME: we only return the first one, what if there's more than one?
+      return result.endpoint().address().to_string();
+    }
+
+    return {};
   };
 
   result.hostname = boost::asio::ip::host_name();

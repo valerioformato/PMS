@@ -2,7 +2,7 @@
 #include <utility>
 
 #include <fmt/format.h>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
 #include "pilot/client/Connection.h"
@@ -122,7 +122,7 @@ ErrorOr<std::string> Connection::Send(const std::string &message) {
 #ifdef DEBUG_WEBSOCKETS
   spdlog::trace("Send - lock acquired");
 #endif
-  
+
   std::promise<std::string>{}.swap(m_in_flight_message);
   auto message_future = m_in_flight_message.get_future();
 
