@@ -1,6 +1,8 @@
 // c++ headers
 #include <chrono>
 #include <ranges>
+#include <stdexec/__detail/__execution_fwd.hpp>
+#include <stdexec/__detail/__let.hpp>
 #include <thread>
 #include <vector>
 
@@ -255,7 +257,14 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
 
   // TODO: implement stdexec flow with senders
   namespace ex = stdexec;
-  auto snd_parsed_message = ex::just(msg->get_payload()) | ex::then([](auto &&input) { return json::parse(input); });
+  auto snd_parsed_message = ex::just(msg->get_payload()) | ex::then([](auto &&input) { return json::parse(input); }) |
+                            ex::let_value([this, &hdl](auto &&parsed_message) {
+                              if (parsed_message.contains("livenessProbe")) {
+                                m_logger->trace("Received liveness probe. Sending back OK...");
+                                m_endpoint.send(hdl, "OK", websocketpp::frame::opcode::text);
+                                return ex::just_stopped();
+                              }
+                            });
 
   // if the message contains a liveness probe send back a HTTP 200 OK response
   if (parsedMessage.contains("livenessProbe")) {
