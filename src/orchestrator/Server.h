@@ -8,6 +8,7 @@
 #include <thread>
 
 // external dependencies
+#include <exec/static_thread_pool.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 
@@ -39,6 +40,7 @@ private:
   std::shared_ptr<Director> m_director;
 
   Thread::Pool m_threadPool{32};
+  exec::static_thread_pool m_thread_pool{32};
 
   std::pair<bool, std::string> ValidateTaskToken(std::string_view task, std::string_view token) const;
 

@@ -16,6 +16,10 @@ CPMAddPackage(
 CPMAddPackage("gh:docopt/docopt.cpp#v0.6.3")
 CPMAddPackage("gh:valerioformato/websocketpp#boost")
 CPMAddPackage("gh:mongodb/mongo-cxx-driver#r4.2.0")
+CPMAddPackage(
+	URI "gh:nvidia/stdexec#gtc-2026"
+	OPTIONS "STDEXEC_BUILD_EXAMPLES OFF"
+)
 
 # === boost ===
 set(BOOST_COMPONENTS filesystem thread regex)

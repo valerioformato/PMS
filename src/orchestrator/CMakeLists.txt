@@ -8,7 +8,7 @@ set(PMSOrchestrator_src
 add_executable(PMSOrchestrator ${PMSOrchestrator_src})
 target_include_directories(PMSOrchestrator SYSTEM PRIVATE ${Boost_INCLUDE_DIR})
 target_include_directories(PMSOrchestrator PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(PMSOrchestrator PRIVATE Boost::filesystem spdlog::spdlog_header_only docopt nlohmann_json::nlohmann_json PMSVersion PMSWebsockets DBUtils)
+target_link_libraries(PMSOrchestrator PRIVATE STDEXEC::stdexec spdlog::spdlog_header_only docopt nlohmann_json::nlohmann_json PMSVersion PMSWebsockets DBUtils)
 target_compile_definitions(PMSOrchestrator PRIVATE FMT_HEADER_ONLY)
 
 if (DEBUG_WEBSOCKETS)

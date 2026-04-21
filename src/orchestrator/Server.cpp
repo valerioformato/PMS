@@ -253,6 +253,10 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
     return;
   }
 
+  // TODO: implement stdexec flow with senders
+  namespace ex = stdexec;
+  auto snd_parsed_message = ex::just(msg->get_payload()) | ex::then([](auto &&input) { return json::parse(input); });
+
   // if the message contains a liveness probe send back a HTTP 200 OK response
   if (parsedMessage.contains("livenessProbe")) {
     m_logger->trace("Received liveness probe. Sending back OK...");
