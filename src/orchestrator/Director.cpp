@@ -288,15 +288,15 @@ ErrorOr<void> Director::UpdateJobStatus(std::string_view pilotUuid, std::string_
                                         JobStatus status) {
   auto maybe_pilotInfo = GetPilotInfo(pilotUuid);
   if (!maybe_pilotInfo.has_value()) {
-    return Error{std::errc::invalid_argument, fmt::format("Unknown pilot {}", pilotUuid)};
+    return make_error(std::errc::invalid_argument, fmt::format("Unknown pilot {}", pilotUuid));
   }
 
   const auto &pilotInfo = maybe_pilotInfo.value();
 
   auto pilotTasks = pilotInfo.tasks;
   if (std::find(begin(pilotTasks), end(pilotTasks), task) == end(pilotTasks)) {
-    return Error{std::errc::invalid_argument,
-                 fmt::format("Pilot {} is not allowed to work on task {}", pilotUuid, task)};
+    return make_error(std::errc::invalid_argument,
+                      fmt::format("Pilot {} is not allowed to work on task {}", pilotUuid, task));
   }
 
   DB::Queries::Matches matches{
@@ -330,7 +330,7 @@ ErrorOr<void> Director::UpdateJobStatus(std::string_view pilotUuid, std::string_
       .update = update_action,
   });
 
-  return outcome::success();
+  return {};
 }
 
 void Director::WriteJobUpdates() {
@@ -351,7 +351,7 @@ void Director::WriteJobUpdates() {
 
       auto write_result = m_frontDB->BulkWrite("jobs", job_update_requests);
       if (!write_result) {
-        m_logger->error("Failed to write job updates: {}", write_result.assume_error().Message());
+        m_logger->error("Failed to write job updates: {}", write_result.error().Message());
         m_logger->error("Will retry...");
 
         std::lock_guard lock{m_jobUpdateRequests_mx};
@@ -420,7 +420,7 @@ Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
 
 ErrorOr<void> Director::UpdateHeartBeat(std::string_view pilotUuid) {
   m_heartbeatUpdates.emplace(std::string{pilotUuid}, std::chrono::system_clock::now());
-  return outcome::success();
+  return {};
 }
 
 void Director::WriteHeartBeatUpdates() {
@@ -456,7 +456,7 @@ void Director::WriteHeartBeatUpdates() {
       m_logger->debug("Updating {} heartbeats", requests.size());
       auto write_result = m_frontDB->BulkWrite("pilots", requests);
       if (!write_result) {
-        m_logger->error("Failed to write heartbeat updates: {}", write_result.assume_error().Message());
+        m_logger->error("Failed to write heartbeat updates: {}", write_result.error().Message());
       }
     }
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
@@ -475,7 +475,7 @@ ErrorOr<void> Director::DeleteHeartBeat(std::string_view pilotUuid) {
       .match = matches,
   }));
 
-  return outcome::success();
+  return {};
 }
 
 ErrorOr<void> Director::AddTaskDependency(const std::string &task, const std::string &dependsOn) {
@@ -502,12 +502,12 @@ ErrorOr<void> Director::AddTaskDependency(const std::string &task, const std::st
       .update = update_action,
   }));
 
-  return outcome::success();
+  return {};
 }
 
 ErrorOr<std::string> Director::CreateTask(const std::string &task) {
   if (m_tasks.find(task) != end(m_tasks)) {
-    return Error{std::errc::file_exists, "Task already exists"};
+    return make_error(std::errc::file_exists, "Task already exists");
   }
 
   m_logger->trace("Creating task {}", task);
@@ -554,7 +554,7 @@ ErrorOr<void> Director::ClearTask(const std::string &task, bool deleteTask) {
     m_logger->debug("Task {} deleted", task);
   }
 
-  return outcome::success();
+  return {};
 }
 
 void Director::JobInsert() {
@@ -732,7 +732,7 @@ void Director::UpdateTasks() {
             .update = updateQuery,
         }));
 
-        return outcome::success();
+        return {};
       };
 
       if (task.dependencies.empty()) {
@@ -790,7 +790,7 @@ ErrorOr<void> Director::UpdateTaskCounts(Task &task) { // update job counters in
 
   task.totJobs = std::accumulate(task.jobs.begin(), task.jobs.end(), 0u);
 
-  return outcome::success();
+  return {};
 }
 
 void Director::UpdateDeadPilots() {
@@ -815,7 +815,7 @@ void Director::UpdateDeadPilots() {
       continue;
     }
 
-    auto queryResult = pilot_query_result.assume_value();
+    auto queryResult = pilot_query_result.value();
 
     std::vector<DB::Queries::Query> requests;
 
@@ -850,8 +850,8 @@ void Director::UpdateDeadPilots() {
         continue;
       }
 
-      if (!job_query_result.assume_value().empty()) {
-        json job = std::move(job_query_result.assume_value().front());
+      if (!job_query_result.value().empty()) {
+        json job = std::move(job_query_result.value().front());
         m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_string_view(pilot["uuid"]),
                         to_string_view(job["hash"]));
 
@@ -913,7 +913,7 @@ void Director::DBSync() {
 
     // auto chunks = query_result | std::views::chunk(m_maxJobTransferQuerySize);
     std::vector<DB::Queries::Query> writeOps;
-    std::ranges::transform(query_result.assume_value(), std::back_inserter(writeOps), [](const auto &job) {
+    std::ranges::transform(query_result.value(), std::back_inserter(writeOps), [](const auto &job) {
       DB::Queries::Matches job_query_match{{"hash", job["hash"]}};
 
       DB::Queries::Updates job_update_action = {{"status", job["status"]}};
@@ -1097,7 +1097,7 @@ ErrorOr<std::string> Director::QueryBackDB(QueryOperation operation, const json 
   }
   }
 
-  return Error(std::errc::not_supported, "Operation not supported");
+  return make_error(std::errc::not_supported, "Operation not supported");
 }
 
 ErrorOr<std::string> Director::QueryFrontDB(DBCollection collection, const json &match, const json &filter) const {
@@ -1167,7 +1167,7 @@ ErrorOr<void> Director::ResetFailedJobs(std::string_view taskname) {
   std::string s_taskname{taskname};
   TRY(UpdateTaskCounts(m_tasks.at(s_taskname)));
 
-  return outcome::success();
+  return {};
 }
 
 } // namespace PMS::Orchestrator

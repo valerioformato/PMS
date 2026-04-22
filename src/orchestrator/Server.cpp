@@ -191,16 +191,16 @@ std::string Server::HandleCommand(PilotCommand &&command) const {
                         // request a new job
                         [this](const OrchCommand<ClaimJob> &pcmd) {
                           auto result = m_director->PilotClaimJob(pcmd.cmd.uuid);
-                          if (result.has_error()) {
+                          if (!result) {
                             m_logger->error("{}", result.error().Message());
                           }
-                          return result ? result.value().dump() : std::string{result.assume_error().Message()};
+                          return result ? result.value().dump() : std::string{result.error().Message()};
                         },
                         // update job status
                         [this](const OrchCommand<UpdateJobStatus> &pcmd) {
                           auto result =
                               m_director->UpdateJobStatus(pcmd.cmd.uuid, pcmd.cmd.hash, pcmd.cmd.task, pcmd.cmd.status);
-                          return result ? fmt::format("Ok") : std::string{result.assume_error().Message()};
+                          return result ? fmt::format("Ok") : std::string{result.error().Message()};
                         },
                         // register a new pilot
                         [this](const OrchCommand<RegisterNewPilot> &pcmd) {
@@ -257,14 +257,18 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
 
   // TODO: implement stdexec flow with senders
   namespace ex = stdexec;
-  auto snd_parsed_message = ex::just(msg->get_payload()) | ex::then([](auto &&input) { return json::parse(input); }) |
-                            ex::let_value([this, &hdl](auto &&parsed_message) {
-                              if (parsed_message.contains("livenessProbe")) {
-                                m_logger->trace("Received liveness probe. Sending back OK...");
-                                m_endpoint.send(hdl, "OK", websocketpp::frame::opcode::text);
-                                return ex::just_stopped();
-                              }
-                            });
+  auto snd_get_reply = ex::just(msg->get_payload()) | ex::then([](auto &&input) { return json::parse(input); }) |
+                       ex::let_value([this](auto &&parsed_message) {
+                         if (parsed_message.contains("livenessProbe")) {
+                           m_logger->trace("Received liveness probe. Sending back OK...");
+                           return ex::just(ErrorOr<std::string>{"OK"});
+                         } else if (!parsed_message.contains("command")) {
+                           return ex::just(ErrorOr<std::string>{make_error(
+                               std::errc::argument_out_of_domain, "Invalid message, missing \"command\" field")});
+                         }
+
+                         return ex::just(ErrorOr<std::string>{""});
+                       });
 
   // if the message contains a liveness probe send back a HTTP 200 OK response
   if (parsedMessage.contains("livenessProbe")) {

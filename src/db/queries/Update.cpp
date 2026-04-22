@@ -9,7 +9,7 @@ auto ToUpdates(const json &match_json) -> ErrorOr<DB::Queries::Updates> {
     std::ranges::transform(op_name, op_name.begin(), ::toupper);
     auto op = magic_enum::enum_cast<DB::Queries::UpdateOp>(op_name);
     if (!op.has_value()) {
-      return Error(std::errc::invalid_argument, fmt::format("Invalid comparison operator: {}", full_op));
+      return make_error(std::errc::invalid_argument, fmt::format("Invalid comparison operator: {}", full_op));
     }
 
     for (const auto &[key, value] : field_update.items()) {

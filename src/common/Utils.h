@@ -12,8 +12,7 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
-#include <boost/outcome.hpp>
-namespace outcome = boost::outcome_v2;
+#include "Types/Error.h"
 
 namespace std {
 #ifndef __cpp_lib_remove_cvref
@@ -36,6 +35,13 @@ template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi
 #endif
 } // namespace std
 
+#define TODO(message)                                                                                                  \
+  {                                                                                                                    \
+    const auto loc = std::source_location::current();                                                                  \
+    spdlog::error("TODO reached in {}:{} ({}): {}", loc.file_name(), loc.line(), loc.function_name(), message);        \
+    assert(false);                                                                                                     \
+  };
+
 // adapted from https://github.com/SerenityOS/serenity/blob/master/AK/Try.h
 // FIXME: At some point we should use the AK implementation or at least make this one more robust
 #define TRY(expression)                                                                                                \
@@ -43,9 +49,19 @@ template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi
     auto &&_temporary_result = (expression);                                                                           \
     static_assert(!std::is_lvalue_reference_v<std::remove_cvref_t<decltype(_temporary_result)>::value_type>,           \
                   "Do not return a reference from a fallible expression");                                             \
-    if (_temporary_result.has_error()) [[unlikely]]                                                                    \
-      return _temporary_result.error();                                                                                \
-    _temporary_result.value();                                                                                         \
+    if (!_temporary_result.has_value()) [[unlikely]]                                                                   \
+      return std::unexpected(_temporary_result.error());                                                               \
+    std::forward<decltype(_temporary_result)>(_temporary_result).value();                                              \
+  })
+
+#define TRY_MOVE(expression)                                                                                           \
+  ({                                                                                                                   \
+    auto &&_temporary_result = (expression);                                                                           \
+    static_assert(!std::is_lvalue_reference_v<std::remove_cvref_t<decltype(_temporary_result)>::value_type>,           \
+                  "Do not return a reference from a fallible expression");                                             \
+    if (!_temporary_result.has_value()) [[unlikely]]                                                                   \
+      return std::unexpected(_temporary_result.error());                                                               \
+    std::move(_temporary_result.value());                                                                              \
   })
 
 #define TRY_REPEATED(expression, max_tries)                                                                            \
@@ -54,41 +70,14 @@ template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi
     auto &&_temporary_result = (expression);                                                                           \
     static_assert(!std::is_lvalue_reference_v<std::remove_cvref_t<decltype(_temporary_result)>::value_type>,           \
                   "Do not return a reference from a fallible expression");                                             \
-    while (_temporary_result.has_error() && tries < max_tries) {                                                       \
+    while (!_temporary_result.has_value() && tries < max_tries) {                                                      \
       _temporary_result = (expression);                                                                                \
       ++tries;                                                                                                         \
     }                                                                                                                  \
-    if (_temporary_result.has_error()) [[unlikely]]                                                                    \
+    if (!_temporary_result.has_value()) [[unlikely]]                                                                   \
       return _temporary_result;                                                                                        \
     _temporary_result.value();                                                                                         \
   })
-
-namespace PMS {
-struct Error {
-  Error() = default;
-  Error(std::error_code code, std::string_view msg) : m_code(code), m_msg(msg) {}
-  Error(std::errc code, std::string_view msg) : m_code(std::make_error_code(code)), m_msg(msg) {}
-
-  const std::string_view Message() const { return m_msg; }
-  std::error_code Code() const { return m_code; }
-
-private:
-  std::error_code m_code;
-  std::string m_msg;
-};
-static_assert(std::is_default_constructible_v<Error>, "PMS::Error must be default constructible");
-
-inline std::error_code make_error_code(Error e) { return e.Code(); }
-static_assert(outcome::trait::is_error_code_available_v<Error>, "Error must have a make_error_code function");
-
-inline void outcome_throw_as_system_error_with_payload(const ::PMS::Error &error) {
-  BOOST_OUTCOME_THROW_EXCEPTION(std::system_error(error.Code())); // NOLINT
-}
-} // namespace PMS
-
-namespace PMS {
-template <typename T> using ErrorOr = outcome::result<T, Error>;
-} // namespace PMS
 
 namespace PMS::Utils {
 template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };

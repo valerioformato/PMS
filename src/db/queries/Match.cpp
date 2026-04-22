@@ -18,7 +18,7 @@ auto ToMatches(const json &match_json) -> ErrorOr<DB::Queries::Matches> {
         if (comp.has_value()) {
           matches.emplace_back(key, val, comp.value());
         } else {
-          return Error(std::errc::invalid_argument, fmt::format("Invalid comparison operator: {}", op));
+          return make_error(std::errc::invalid_argument, fmt::format("Invalid comparison operator: {}", op));
         }
       }
     } else {

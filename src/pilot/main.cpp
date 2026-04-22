@@ -55,8 +55,8 @@ void signal_watcher(Pilot::Worker &worker) {
 ErrorOr<std::string> read_file(const std::filesystem::path &file) {
   std::ifstream is(file);
   if (!is.good()) {
-    return PMS::Error{std::make_error_code(std::errc::no_such_file_or_directory),
-                      fmt::format("File {} not found", file.string())};
+    return make_error(std::make_error_code(std::errc::no_such_file_or_directory),
+                      fmt::format("File {} not found", file.string()));
   }
 
   std::stringstream ss;

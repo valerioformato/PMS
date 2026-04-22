@@ -36,10 +36,10 @@ ErrorOr<void> FileTransferQueue::LocalFileTransfer(const FileTransferInfo &ftInf
   try {
     fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
   } catch (const std::exception &e) {
-    return Error{std::make_error_code(std::errc::io_error), e.what()};
+    return make_error(std::make_error_code(std::errc::io_error), e.what());
   }
 
-  return outcome::success();
+  return {};
 }
 
 ErrorOr<void> FileTransferQueue::Process() {
@@ -68,7 +68,7 @@ ErrorOr<void> FileTransferQueue::Process() {
   TRY(RunXRootDFileTransfer());
 #endif
 
-  return outcome::success();
+  return {};
 }
 
 void FileTransferQueue::ProcessWildcards(std::string &fileName) {

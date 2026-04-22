@@ -56,12 +56,11 @@ ErrorOr<void> Worker::Register(const Info &info) {
   try {
     reply = json::parse(response);
   } catch (const std::exception &e) {
-    return Error{std::make_error_code(std::errc::io_error), e.what()};
+    return make_error(std::errc::io_error, e.what());
   }
 
-  return reply["validTasks"].size() > 0 ? ErrorOr<void>{outcome::success()}
-                                        : ErrorOr<void>{Error{std::make_error_code(std::errc::permission_denied),
-                                                              "No valid tasks for this pilot"}};
+  return reply["validTasks"].size() > 0 ? ErrorOr<void>{}
+                                        : make_error(std::errc::permission_denied, "No valid tasks for this pilot");
 }
 
 void Worker::Start() {
@@ -117,14 +116,14 @@ void Worker::SendJobUpdates() {
     auto maybe_reply = m_wsConnection->Send(request.dump());
     if (!maybe_reply) {
       spdlog::error("{}", maybe_reply.error().Message());
-    } else if (maybe_reply.assume_value() == "Ok"sv) {
+    } else if (maybe_reply.value() == "Ok"sv) {
       // m_queuedJobUpdates.pop();
       spdlog::trace("Job update received by server");
-    } else if (auto &reply = maybe_reply.assume_value(); reply.find_first_of("not allowed") != std::string::npos) {
+    } else if (auto &reply = maybe_reply.value(); reply.find_first_of("not allowed") != std::string::npos) {
       spdlog::error("Server replied: {}", reply);
       m_workerState = State::EXIT;
     } else {
-      spdlog::error("Unexpected server reply: {}", maybe_reply.assume_value());
+      spdlog::error("Unexpected server reply: {}", maybe_reply.value());
     }
   }
 }
@@ -179,7 +178,7 @@ void Worker::MainLoop() {
 
     auto response = m_wsConnection->Send(request.dump());
     if (!response) {
-      spdlog::error("{}", response.assume_error().Message());
+      spdlog::error("{}", response.error().Message());
       if (!hb.IsAlive()) {
         spdlog::warn("No connection to server and heartbeat is not alive. Exiting...");
         m_workerState = State::EXIT;
@@ -193,7 +192,7 @@ void Worker::MainLoop() {
 
     json job;
     try {
-      job = json::parse(response.assume_value());
+      job = json::parse(response.value());
       m_workerState = State::JOB_ACQUIRED;
     } catch (const std::exception &e) {
       spdlog::error("{}", e.what());
@@ -285,7 +284,7 @@ void Worker::MainLoop() {
 
         auto result = ftQueue.Process();
         if (!result) {
-          spdlog::error("File transfer process failed: {}", result.assume_error().Message());
+          spdlog::error("File transfer process failed: {}", result.error().Message());
           UpdateJobStatus(to_string(job["hash"]), to_string(job["task"]), JobStatus::InboundTransferError);
           m_workerState = State::WAIT;
 
@@ -368,7 +367,7 @@ void Worker::MainLoop() {
         // Call the Process method and check the return value
         auto result = ftQueue.Process();
         if (!result) {
-          spdlog::error("File transfer process failed: {}", result.assume_error().Message());
+          spdlog::error("File transfer process failed: {}", result.error().Message());
           nextJobStatus = JobStatus::OutboundTransferError;
         } else {
           spdlog::trace("Outbound transfers completed");

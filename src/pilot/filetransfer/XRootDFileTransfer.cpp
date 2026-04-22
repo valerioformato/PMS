@@ -127,7 +127,7 @@ ErrorOr<void> FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &f
       std::error_code ec;
       dest += fs::current_path(ec).string() + '/';
       if (ec) {
-        return Error{ec, ec.message()};
+        return make_error(ec, ec.message());
       }
     }
   }
@@ -166,7 +166,7 @@ ErrorOr<void> FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &f
         std::string url = source.GetURL();
         sourceFiles = IndexRemote(fs.get(), url);
         if (sourceFiles.empty()) {
-          return Error{std::make_error_code(std::errc::io_error), "Error indexing remote directory."};
+          return make_error(std::make_error_code(std::errc::io_error), "Error indexing remote directory.");
         }
       } else {
         sourceFiles.push_back(std::string{sourceFile});
@@ -189,7 +189,7 @@ ErrorOr<void> FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &f
         std::error_code ec;
         sfile = "file://" + fs::current_path(ec).string() + '/' + sfile;
         if (ec) {
-          return Error{ec, ec.message()};
+          return make_error(ec, ec.message());
         }
       }
     }
@@ -232,7 +232,7 @@ ErrorOr<void> FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &f
     m_results.push_back(results);
   }
 
-  return outcome::success();
+  return {};
 }
 
 ErrorOr<void> FileTransferQueue::RunXRootDFileTransfer() {
@@ -249,7 +249,7 @@ ErrorOr<void> FileTransferQueue::RunXRootDFileTransfer() {
   XrdCl::XRootDStatus st = m_xrdProcess.Prepare();
   if (!st.IsOK()) {
     CleanUpResults(m_results);
-    return Error{std::make_error_code(std::errc::io_error), st.ToStr()};
+    return make_error(std::make_error_code(std::errc::io_error), st.ToStr());
   }
 
   st = m_xrdProcess.Run(nullptr);
@@ -274,11 +274,11 @@ ErrorOr<void> FileTransferQueue::RunXRootDFileTransfer() {
       spdlog::error("Jobs total: {}, run: {}, errors: {}", m_results.size(), jobsRun, errors);
     }
     CleanUpResults(m_results);
-    return Error{std::make_error_code(std::errc::io_error), st.ToStr()};
+    return make_error(std::make_error_code(std::errc::io_error), st.ToStr());
   }
 
   CleanUpResults(m_results);
-  return outcome::success();
+  return {};
 }
 
 std::vector<std::string> FileTransferQueue::IndexXRootDRemote(std::string_view dir) {

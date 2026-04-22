@@ -30,9 +30,9 @@ ErrorOr<void> MongoDBBackend::Connect() {
   try {
     m_pool = std::make_unique<mongocxx::pool>(mongocxx::uri{fmt::format("mongodb://{}/{}", m_dbhost, m_dbname)});
   } catch (const mongocxx::exception &e) {
-    return Error{e.code(), e.what()};
+    return make_error(e.code(), e.what());
   }
-  return outcome::success();
+  return {};
 }
 
 ErrorOr<void> MongoDBBackend::Connect(std::string_view user, std::string_view password) {
@@ -40,9 +40,9 @@ ErrorOr<void> MongoDBBackend::Connect(std::string_view user, std::string_view pa
     m_pool = std::make_unique<mongocxx::pool>(
         mongocxx::uri{fmt::format("mongodb://{}:{}@{}/{}", user, password, m_dbhost, m_dbname)});
   } catch (const mongocxx::exception &e) {
-    return Error{e.code(), e.what()};
+    return make_error(e.code(), e.what());
   }
-  return outcome::success();
+  return {};
 }
 
 ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
@@ -60,7 +60,7 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
     try {
       db["jobs"].create_index(make_document(kvp("hash", 1)), index_options);
     } catch (const mongocxx::exception &e) {
-      return Error{e.code(), e.what()};
+      return make_error(e.code(), e.what());
     }
 
     // task is not a unique index :)
@@ -68,7 +68,7 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
     try {
       db["jobs"].create_index(make_document(kvp("task", 1)), index_options);
     } catch (const mongocxx::exception &e) {
-      return Error{e.code(), e.what()};
+      return make_error(e.code(), e.what());
     }
   }
   if (!db.has_collection("tasks")) {
@@ -79,7 +79,7 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
     try {
       db["tasks"].create_index(make_document(kvp("name", 1)), index_options);
     } catch (const mongocxx::exception &e) {
-      return Error{e.code(), e.what()};
+      return make_error(e.code(), e.what());
     }
   }
   if (!db.has_collection("pilots")) {
@@ -91,11 +91,11 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
     try {
       db["pilots"].create_index(make_document(kvp("uuid", 1)), index_options);
     } catch (const mongocxx::exception &e) {
-      return Error{e.code(), e.what()};
+      return make_error(e.code(), e.what());
     }
   }
 
-  return outcome::success();
+  return {};
 }
 
 json MongoDBBackend::MatchesToJson(const Queries::Matches &matches) {
@@ -156,7 +156,7 @@ ErrorOr<mongocxx::model::write> MongoDBBackend::QueryToWriteOp(const Queries::Qu
   return std::visit(PMS::Utils::overloaded{
                         [&](const Queries::Insert &query) -> ErrorOr<mongocxx::model::write> {
                           if (query.documents.size() > 1) {
-                            return Error{std::errc::not_supported, "Insert many not supported by mongocxx driver"};
+                            return make_error(std::errc::not_supported, "Insert many not supported by mongocxx driver");
                           }
 
                           return mongocxx::model::insert_one{JsonUtils::json2bson(query.documents[0])};
@@ -180,8 +180,8 @@ ErrorOr<mongocxx::model::write> MongoDBBackend::QueryToWriteOp(const Queries::Qu
                           }
                         },
                         [](auto &query) -> ErrorOr<mongocxx::model::write> {
-                          return Error{std::errc::not_supported,
-                                       fmt::format("Query type {} not supported in bulk writes", query.name)};
+                          return make_error(std::errc::not_supported,
+                                            fmt::format("Query type {} not supported in bulk writes", query.name));
                         },
                     },
                     query);
@@ -207,7 +207,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
               std::transform(query_result.begin(), query_result.end(), std::back_inserter(result),
                              [](const auto &doc) { return JsonUtils::bson2json(doc); });
             } catch (const mongocxx::exception &e) {
-              return Error{e.code(), e.what()};
+              return make_error(e.code(), e.what());
             }
             return result;
           },
@@ -226,7 +226,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
               if (query_result)
                 result = JsonUtils::bson2json(query_result.value());
             } catch (const mongocxx::exception &e) {
-              return Error{e.code(), e.what()};
+              return make_error(e.code(), e.what());
             }
             return result;
           },
@@ -242,7 +242,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                 // If we're inserting only one document we use insert_one
                 auto query_result = db[query.collection].insert_one(JsonUtils::json2bson(query.documents[0]));
                 if (!query_result) {
-                  return Error{std::errc::operation_canceled, "Insert not acknowledged"};
+                  return make_error(std::errc::operation_canceled, "Insert not acknowledged");
                 }
                 result["inserted_id"] = query_result.value().inserted_id().get_oid().value.to_string();
               } break;
@@ -253,13 +253,13 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                                        [&](const auto &doc) { return JsonUtils::json2bson(doc); });
                 auto query_result = db[query.collection].insert_many(to_be_inserted);
                 if (!query_result) {
-                  return Error{std::errc::operation_canceled, "Insert not acknowledged"};
+                  return make_error(std::errc::operation_canceled, "Insert not acknowledged");
                 }
                 result["inserted_count"] = query_result.value().inserted_count();
               } break;
               }
             } catch (const mongocxx::exception &e) {
-              return Error{e.code(), e.what()};
+              return make_error(e.code(), e.what());
             }
 
             return result;
@@ -278,7 +278,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                     db[query.collection].update_one(JsonUtils::json2bson(MatchesToJson(query.match)),
                                                     JsonUtils::json2bson(UpdatesToJson(query.update)), options);
                 if (!query_result) {
-                  return Error{std::errc::operation_canceled, "Update not acknowledged"};
+                  return make_error(std::errc::operation_canceled, "Update not acknowledged");
                 }
                 result["matched_count"] = query_result.value().matched_count();
                 result["modified_count"] = query_result.value().modified_count();
@@ -289,14 +289,14 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                     db[query.collection].update_many(JsonUtils::json2bson(MatchesToJson(query.match)),
                                                      JsonUtils::json2bson(UpdatesToJson(query.update)), options);
                 if (!query_result) {
-                  return Error{std::errc::operation_canceled, "Update not acknowledged"};
+                  return make_error(std::errc::operation_canceled, "Update not acknowledged");
                 }
                 result["matched_count"] = query_result.value().matched_count();
                 result["modified_count"] = query_result.value().modified_count();
               } break;
               }
             } catch (const mongocxx::exception &e) {
-              return Error{e.code(), e.what()};
+              return make_error(e.code(), e.what());
             }
 
             return result;
@@ -311,7 +311,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                 // If we're deleting only one document we use delete_one
                 auto query_result = db[query.collection].delete_one(JsonUtils::json2bson(MatchesToJson(query.match)));
                 if (!query_result) {
-                  return Error{std::errc::operation_canceled, "Delete not acknowledged"};
+                  return make_error(std::errc::operation_canceled, "Delete not acknowledged");
                 }
                 result["deleted_count"] = query_result.value().deleted_count();
               } break;
@@ -319,13 +319,13 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                 // If we're deleting more than one document we use delete_many
                 auto query_result = db[query.collection].delete_many(JsonUtils::json2bson(MatchesToJson(query.match)));
                 if (!query_result) {
-                  return Error{std::errc::operation_canceled, "Delete not acknowledged"};
+                  return make_error(std::errc::operation_canceled, "Delete not acknowledged");
                 }
                 result["deleted_count"] = query_result.value().deleted_count();
               } break;
               }
             } catch (const mongocxx::exception &e) {
-              return Error{e.code(), e.what()};
+              return make_error(e.code(), e.what());
             }
 
             return result;
@@ -335,7 +335,7 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
               auto result = db[query.collection].count_documents(JsonUtils::json2bson(MatchesToJson(query.match)));
               return json{{"count", result}};
             } catch (const mongocxx::exception &e) {
-              return Error{e.code(), e.what()};
+              return make_error(e.code(), e.what());
             }
           },
           [&](const Queries::Distinct &query) -> ErrorOr<QueryResult> {
@@ -351,25 +351,26 @@ ErrorOr<QueryResult> MongoDBBackend::RunQuery(Queries::Query query) {
                              [](const auto &doc) { return JsonUtils::bson2json(doc); });
 
               if (dummy.empty()) {
-                return Error{std::errc::no_such_file_or_directory, "No distinct values found"};
+                return make_error(std::errc::no_such_file_or_directory, "No distinct values found");
               }
 
               if (dummy.size() > 1) {
-                return Error{std::errc::not_supported, "Distinct query returned more than one value. Rporto this to "
-                                                       "the developers which should check if the mongocxx API changed"};
+                return make_error(std::errc::not_supported,
+                                  "Distinct query returned more than one value. Rporto this to "
+                                  "the developers which should check if the mongocxx API changed");
               }
 
               if (dummy[0]["ok"] == 0) {
-                return Error{std::errc::no_such_file_or_directory,
-                             fmt::format("Unexpected result to Distinct query: {}", dummy[0].dump())};
+                return make_error(std::errc::no_such_file_or_directory,
+                                  fmt::format("Unexpected result to Distinct query: {}", dummy[0].dump()));
               }
 
               result = dummy[0]["values"];
               return result;
             } catch (const mongocxx::exception &e) {
-              return Error{e.code(), e.what()};
+              return make_error(e.code(), e.what());
             } catch (const std::exception &e) {
-              return Error{std::errc::invalid_argument, e.what()};
+              return make_error(std::errc::invalid_argument, e.what());
             }
 
             return result;
@@ -393,7 +394,7 @@ ErrorOr<QueryResult> MongoDBBackend::BulkWrite(std::string_view collection, std:
   try {
     auto query_result = db[collection].bulk_write(write_ops);
     if (!query_result) {
-      return Error{std::errc::operation_canceled, "BulkWrite not acknowledged"};
+      return make_error(std::errc::operation_canceled, "BulkWrite not acknowledged");
     }
 
     QueryResult result;
@@ -404,7 +405,7 @@ ErrorOr<QueryResult> MongoDBBackend::BulkWrite(std::string_view collection, std:
 
     return result;
   } catch (const mongocxx::exception &e) {
-    return Error{e.code(), e.what()};
+    return make_error(e.code(), e.what());
   }
 }
 } // namespace PMS::DB

@@ -69,7 +69,7 @@ ErrorOr<GfalContextHandle> CreateGfal2Context() {
   gfal2_context_t context = gfal2_context_new(&error);
 
   if (error) {
-    return Error{static_cast<std::errc>(error->code), error->message};
+    return make_error(static_cast<std::errc>(error->code), error->message);
   }
 
   return GfalContextHandle{context};
@@ -88,7 +88,7 @@ struct TransferParameters {
 
     gfalt_params_t params = gfalt_params_handle_new(&error);
     if (error) {
-      return Error{static_cast<std::errc>(error->code), error->message};
+      return make_error(static_cast<std::errc>(error->code), error->message);
     }
 
     gfalt_set_timeout(params, timeout, &error);
@@ -174,16 +174,16 @@ ErrorOr<void> Gfal2CopyFile(const std::string &from, const std::string &to,
 
   if (error) {
     gfalt_params_handle_delete(gt_params, &error);
-    return Error{static_cast<std::errc>(error->code), error->message};
+    return make_error(static_cast<std::errc>(error->code), error->message);
   }
 
   if (ret) {
     gfalt_params_handle_delete(gt_params, &error);
-    return Error{std::errc::io_error, "gfalt_copy_file failed"};
+    return make_error(std::errc::io_error, "gfalt_copy_file failed");
   }
 
   gfalt_params_handle_delete(gt_params, &error);
-  return outcome::success();
+  return {};
 }
 #endif
 
@@ -211,10 +211,11 @@ ErrorOr<void> Gfal2CopyFileExternal(const std::string &from, const std::string &
     spdlog::error("stderr: {}", err);
 
   if (proc_ec || proc_exit_code) {
-    return Error{proc_ec, fmt::format("gfal-copy failed with exit code {} - {}", proc_exit_code, proc_ec.message())};
+    return make_error(proc_ec,
+                      fmt::format("gfal-copy failed with exit code {} - {}", proc_exit_code, proc_ec.message()));
   }
 
-  return outcome::success();
+  return {};
 }
 
 ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo) {
@@ -283,7 +284,7 @@ ErrorOr<void> FileTransferQueue::GfalFileTransfer(const FileTransferInfo &ftInfo
 
 #endif
 
-  return outcome::success();
+  return {};
 }
 
 std::vector<std::string> FlattenDirectory(const std::filesystem::path &path) {
