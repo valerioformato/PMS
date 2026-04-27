@@ -73,3 +73,97 @@
 ### Defer
 
 - **Glaze experimental websocket/HTTP server**: the README explicitly warns the API is under active development and likely to change. Do not replace websocketpp until glaze networking is stable. Evaluate separately after the JSON migration settles.
+
+---
+
+## Test coverage expansion
+
+**Current state**: 124 assertions across 9 test cases. Coverage is limited to the DB query builders, `Harness`, `MongoDBBackend` helpers, and `Utils`. The orchestrator layer (`Server`, `Director`, `Task`) has zero test coverage.
+
+### Prerequisite refactor: extract `IDirector` interface
+
+Extract `IDirector` as an abstract base class in `Director.h` (or a dedicated `IDirector.h`) with all public `Director` methods as pure virtuals. `Director` implements `IDirector`. `Server` holds `std::shared_ptr<IDirector>`.
+
+**Rationale**: consistent with the existing `Backend` / `MockBackend` pattern (already a virtual interface mocked via `trompeloeil::mock_interface<Backend>`). Keeps `Server` a concrete class (avoids forcing its substantial `.cpp` implementation into headers). The virtual dispatch cost is irrelevant for a service object called once per request. An explicit interface will also make the future async refactor easier — changing what Director methods return (e.g. to senders) is a single, well-scoped change.
+
+`MockDirector` will use `trompeloeil::mock_interface<IDirector>`, mirroring the existing `MockBackend`.
+
+### Step 1 — `Task` struct (pure logic, no deps)
+
+New file: `testsuite/orchestrator/testTask.cpp`
+
+All four predicates tested across boundary conditions:
+- `IsActive()`: zero jobs, jobs present + readyForScheduling, readyForScheduling=false, all done/failed
+- `IsFinished()`: totJobs=0 (false), all Done, partial Done
+- `IsExhausted()`: pending=0 and error=0 (true), pending > 0 (false)
+- `IsFailed()`: exhausted + failed > 0 (true), exhausted + failed = 0 (false)
+
+### Step 2 — `EnumArray` and `ts_queue`
+
+New files: `testsuite/common/testEnumArray.cpp`, `testsuite/common/testQueue.cpp`
+
+- `EnumArray`: enum-keyed access, default construction, value assignment, out-of-bounds check
+- `ts_queue`: push/pop, empty(), size(), `consume_all()` drains queue correctly, concurrent pushes from N threads (all items recovered)
+
+### Step 3 — `toUserCommand` and `toPilotCommand`
+
+Extract both static methods from `Server` into free functions (or a `CommandParser` namespace) to make them independently testable without constructing a full `Server` instance. This extraction also helps with the future glaze migration.
+
+New file: `testsuite/orchestrator/testCommandParsing.cpp`
+
+Cover for both user and pilot sides:
+- Non-object JSON input → `InvalidCommand`
+- Missing `"command"` field → `InvalidCommand`
+- Non-string `"command"` field → `InvalidCommand`
+- Empty string command → `InvalidCommand`
+- Unknown command name → `InvalidCommand`
+- `livenessProbe` detection
+- Each valid command with all required fields present → correct variant
+- Each valid command with a required field missing → `InvalidCommand`
+
+### Step 4 — `Director` with mocked Harness
+
+Add a constructor overload to `Director`: `Director(unique_ptr<Harness> frontDB, unique_ptr<Harness> backDB)` for test injection (alongside the existing `SetFrontDB`/`SetBackDB` approach). Use `MockBackend` → `Harness` → `Director`, mirroring the existing `testHarness.cpp` pattern.
+
+New file: `testsuite/orchestrator/testDirector.cpp`
+
+| Method | Cases |
+|---|---|
+| `CreateTask` | success (token returned, DB insert called); duplicate (error, no insert) |
+| `ValidateTaskToken` | known task + correct token → Success; correct task + wrong token → ProcessError; unknown task → DatabaseError |
+| `UpdateJobStatus` | unknown pilot → error; pilot not authorized for task → error; Running → startTime injected; Done/Error → endTime injected |
+| `RegisterNewPilot` | all tasks valid; mixed valid/invalid (split correctly); zero valid tasks |
+| `PilotClaimJob` | unknown pilot; all tasks inactive → finished reply; all tasks exhausted → sleep reply; happy-path claim |
+| `DeleteHeartBeat` | removed from `m_activePilots`, DB Delete called |
+| `AddTaskDependency` | in-memory task updated, DB Update called |
+| `ClearTask` | `deleteTask=true`: both DBs cleared + task map entry removed; `deleteTask=false`: jobs cleared only |
+
+### Step 5 — `Server::HandleCommand` with `MockDirector`
+
+Depends on the `IDirector` prerequisite refactor.
+
+New file: `testsuite/orchestrator/testHandleCommand.cpp`
+
+One scenario per variant arm for both `HandleCommand(UserCommand&&)` and `HandleCommand(PilotCommand&&)`. Key cases:
+- `SubmitJob`: SHA256 hash is injected into the job and appears in the reply
+- `ClearTask`/`CleanTask`: token validation failure short-circuits (Director never called)
+- `InvalidCommand`: returns the `errorMessage` field verbatim
+- `LivenessProbe`: returns `"OK"`, Director never called
+
+### Step 6 — `message_handler` / `pilot_handler` sender chains
+
+Extract the sender pipeline construction from the websocket callback into a standalone function returning a sender, to allow testing without a live websocket. Then test:
+- Malformed JSON → `upon_error` fires → error reply returned
+- Valid JSON, unknown command → `InvalidCommand` flows through, reply returned
+- Valid JSON, known command → expected reply content
+
+### Priority order
+
+| Priority | Step | Effort | Prerequisite |
+|---|---|---|---|
+| 1 | Step 1 (`Task`) | Small | None |
+| 1 | Step 2 (`EnumArray`, `ts_queue`) | Small | None |
+| 2 | Step 3 (`toUserCommand`/`toPilotCommand`) | Medium | Extract as free functions |
+| 2 | Step 4 (`Director`) | Medium–Large | Injection constructor |
+| 3 | Step 5 (`HandleCommand`) | Medium | `IDirector` interface |
+| 3 | Step 6 (sender chains) | Medium | Pipeline extraction |

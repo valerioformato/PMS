@@ -395,7 +395,7 @@ ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
       return std::filesystem::is_directory(path);
     } catch (const std::filesystem::filesystem_error &e) {
       logger->error("Error checking if path is a directory: {}", e.what());
-      return Error(std::make_error_code(std::errc::io_error), e.what());
+      return make_error(std::make_error_code(std::errc::io_error), e.what());
     }
   } else {
     // For remote paths, we need to use gfal2_stat
@@ -414,7 +414,7 @@ ErrorOr<bool> IsDirectory(const std::string_view &path, bool is_remote) {
 
     if (ret == -1) {
       logger->error("Failed to stat remote path {}: {}", path, error->message);
-      return Error(std::make_error_code(std::errc::io_error), error->message);
+      return make_error(std::make_error_code(std::errc::io_error), error->message);
     }
 
     if (error) {
