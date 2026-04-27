@@ -2,7 +2,7 @@
 #include <chrono>
 #include <ranges>
 #include <stdexec/__detail/__execution_fwd.hpp>
-#include <stdexec/__detail/__let.hpp>
+#include <stdexec/__detail/__upon_error.hpp>
 #include <thread>
 #include <vector>
 
@@ -76,6 +76,11 @@ std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, st
 std::string Server::HandleCommand(UserCommand &&command) const {
   return std::visit(
       PMS::Utils::overloaded{
+          // Liveness probe
+          [this](const OrchCommand<LivenessProbe> &) {
+            m_logger->trace("Received liveness probe. Sending back OK...");
+            return std::string{"OK"};
+          },
           // Create a new task
           [this](const OrchCommand<CreateTask> &ucmd) {
             auto result = m_director->CreateTask(ucmd.cmd.task);
@@ -245,47 +250,22 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
   m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
                   msg->get_payload());
 
-  json parsedMessage;
-  try {
-    parsedMessage = json::parse(msg->get_payload());
-  } catch (const std::exception &e) {
-    m_logger->error("Error in parsing message: {}", e.what());
-    m_endpoint.send(hdl, fmt::format("Invalid message, please check... :|\n  Error: {}", e.what()),
-                    websocketpp::frame::opcode::text);
-    return;
-  }
-
-  // TODO: implement stdexec flow with senders
   namespace ex = stdexec;
-  auto snd_get_reply = ex::just(msg->get_payload()) | ex::then([](auto &&input) { return json::parse(input); }) |
-                       ex::let_value([this](auto &&parsed_message) {
-                         if (parsed_message.contains("livenessProbe")) {
-                           m_logger->trace("Received liveness probe. Sending back OK...");
-                           return ex::just(ErrorOr<std::string>{"OK"});
-                         } else if (!parsed_message.contains("command")) {
-                           return ex::just(ErrorOr<std::string>{make_error(
-                               std::errc::argument_out_of_domain, "Invalid message, missing \"command\" field")});
+  auto snd_get_reply = ex::just(msg->get_payload()) |
+                       ex::then([](const std::string &input) { return json::parse(input); }) |
+                       ex::then([this](const json &parsed_message) { return toUserCommand(parsed_message); }) |
+                       ex::then([this](UserCommand &&cmd) { return HandleCommand(std::move(cmd)); }) |
+                       ex::upon_error([this](std::exception_ptr eptr) -> std::string {
+                         try {
+                           std::rethrow_exception(eptr);
+                         } catch (const std::exception &e) {
+                           m_logger->error("Error in parsing message: {}", e.what());
+                           return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
                          }
-
-                         return ex::just(ErrorOr<std::string>{""});
+                         return "Unknown error";
                        });
 
-  // if the message contains a liveness probe send back a HTTP 200 OK response
-  if (parsedMessage.contains("livenessProbe")) {
-    m_logger->trace("Received liveness probe. Sending back OK...");
-    m_endpoint.send(hdl, "OK", websocketpp::frame::opcode::text);
-    return;
-  }
-
-  // if the message does not contain a command, send back an error
-  if (!parsedMessage.contains("command")) {
-    m_logger->error("No command in message. Sending back error...");
-    m_endpoint.send(hdl, "Invalid message, missing \"command\" field", websocketpp::frame::opcode::text);
-    return;
-  }
-
-  std::string reply = HandleCommand(toUserCommand(parsedMessage));
-
+  auto [reply] = ex::sync_wait(std::move(snd_get_reply)).value();
   m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
 
@@ -385,6 +365,12 @@ void Server::Stop() {
 }
 
 UserCommand Server::toUserCommand(const json &msg) {
+  if (msg.contains("livenessProbe"))
+    return OrchCommand<LivenessProbe>{};
+
+  if (!msg.contains("command"))
+    return OrchCommand<InvalidCommand>{"Invalid message, missing \"command\" field"};
+
   auto command = msg["command"].get<std::string_view>();
   auto cmdTypeP = m_commandLUT.find(command);
 

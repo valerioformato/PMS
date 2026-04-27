@@ -19,10 +19,11 @@ struct InvalidCommand {
   std::string errorMessage;
 };
 
-using UserCommand = std::variant<OrchCommand<InvalidCommand>, OrchCommand<SubmitJob>, OrchCommand<FindJobs>,
-                                 OrchCommand<FindPilots>, OrchCommand<ResetJobs>, OrchCommand<CreateTask>,
-                                 OrchCommand<ClearTask>, OrchCommand<CleanTask>, OrchCommand<DeclareTaskDependency>,
-                                 OrchCommand<CheckTaskToken>, OrchCommand<Summary>, OrchCommand<ResetFailedJobs>>;
+using UserCommand =
+    std::variant<OrchCommand<InvalidCommand>, OrchCommand<LivenessProbe>, OrchCommand<SubmitJob>, OrchCommand<FindJobs>,
+                 OrchCommand<FindPilots>, OrchCommand<ResetJobs>, OrchCommand<CreateTask>, OrchCommand<ClearTask>,
+                 OrchCommand<CleanTask>, OrchCommand<DeclareTaskDependency>, OrchCommand<CheckTaskToken>,
+                 OrchCommand<Summary>, OrchCommand<ResetFailedJobs>>;
 
 using PilotCommand = std::variant<OrchCommand<InvalidCommand>, OrchCommand<ClaimJob>, OrchCommand<UpdateJobStatus>,
                                   OrchCommand<RegisterNewPilot>, OrchCommand<UpdateHeartBeat>,

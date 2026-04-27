@@ -93,5 +93,7 @@ struct ResetFailedJobs {
   constexpr static std::array requiredFields{"task"sv, "token"sv};
 };
 
+struct LivenessProbe {};
+
 } // namespace PMS::Orchestrator
 #endif // PMS_USERCOMMANDS_H
