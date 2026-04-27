@@ -49,9 +49,9 @@ SCENARIO("ToMatches function", "[ToMatches]") {
       auto result = ToMatches(match_json);
 
       THEN("It should return a failure outcome") {
-        REQUIRE(result.has_error());
-        REQUIRE(result.assume_error().Code() == std::errc::invalid_argument);
-        REQUIRE(result.assume_error().Message() == "Invalid comparison operator: $invalid");
+        REQUIRE(!result.has_value());
+        REQUIRE(result.error().Code() == std::errc::invalid_argument);
+        REQUIRE(result.error().Message() == "Invalid comparison operator: $invalid");
       }
     }
   }

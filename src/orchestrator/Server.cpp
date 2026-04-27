@@ -273,25 +273,22 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
   m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
                   msg->get_payload());
 
-  json parsedMessage;
-  try {
-    parsedMessage = json::parse(msg->get_payload());
-  } catch (const std::exception &e) {
-    m_logger->error("Error in parsing message: {}", e.what());
-    m_pilot_endpoint.send(hdl, fmt::format("Invalid message, please check... :|\n  Error: {}", e.what()),
-                          websocketpp::frame::opcode::text);
-    return;
-  }
+  namespace ex = stdexec;
+  auto snd_get_reply = ex::just(msg->get_payload()) |
+                       ex::then([](const std::string &input) { return json::parse(input); }) |
+                       ex::then([this](const json &parsed_message) { return toPilotCommand(parsed_message); }) |
+                       ex::then([this](PilotCommand &&cmd) { return HandleCommand(std::move(cmd)); }) |
+                       ex::upon_error([this](std::exception_ptr eptr) -> std::string {
+                         try {
+                           std::rethrow_exception(eptr);
+                         } catch (const std::exception &e) {
+                           m_logger->error("Error handling pilot message: {}", e.what());
+                           return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
+                         }
+                         return "Unknown error";
+                       });
 
-  if (parsedMessage["command"].empty()) {
-    m_logger->error("No command in message. Sending back error...");
-    m_pilot_endpoint.send(hdl, "Invalid message, missing \"command\" field", websocketpp::frame::opcode::text);
-    return;
-  }
-
-  auto &&pcommand = toPilotCommand(parsedMessage);
-  std::string reply = HandleCommand(std::move(pcommand));
-
+  auto [reply] = ex::sync_wait(std::move(snd_get_reply)).value();
   m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
 
@@ -467,6 +464,10 @@ UserCommand Server::toUserCommand(const json &msg) {
 }
 
 PilotCommand Server::toPilotCommand(const json &msg) {
+  if (!msg.is_object() || !msg.contains("command") || !msg["command"].is_string() ||
+      msg["command"].get_ref<const std::string &>().empty())
+    return OrchCommand<InvalidCommand>{"Invalid message, missing \"command\" field"};
+
   auto command = msg["command"].get<std::string_view>();
   auto cmdTypeP = m_pilot_commandLUT.find(command);
 

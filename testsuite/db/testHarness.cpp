@@ -25,17 +25,17 @@ SCENARIO("Harness Test", "[Harness]") {
     PMS::DB::Harness harness(std::move(mockBackend));
 
     WHEN("Connect is called") {
-      REQUIRE_CALL(*mockBackendPtr, Connect()).RETURN(outcome::success());
+      REQUIRE_CALL(*mockBackendPtr, Connect()).RETURN(ErrorOr<void>{});
       auto connection_result = harness.Connect();
 
       THEN("The connection should be successful") { REQUIRE(connection_result.has_value()); }
     }
 
     WHEN("The backend fails to connect") {
-      REQUIRE_CALL(*mockBackendPtr, Connect()).RETURN(Error(std::errc::connection_refused, "Connection refused"));
+      REQUIRE_CALL(*mockBackendPtr, Connect()).RETURN(make_error(std::errc::connection_refused, "Connection refused"));
       auto connection_result = harness.Connect();
 
-      THEN("The connection should fail") { REQUIRE(connection_result.has_error()); }
+      THEN("The connection should fail") { REQUIRE(!connection_result.has_value()); }
     }
 
     WHEN("RunQuery is called") {
@@ -48,10 +48,11 @@ SCENARIO("Harness Test", "[Harness]") {
 
     WHEN("The backend fails to run the query") {
       PMS::DB::Queries::Query query = PMS::DB::Queries::Find{};
-      REQUIRE_CALL(*mockBackendPtr, RunQuery(query)).RETURN(Error(std::errc::operation_canceled, "Operation canceled"));
+      REQUIRE_CALL(*mockBackendPtr, RunQuery(query))
+          .RETURN(make_error(std::errc::operation_canceled, "Operation canceled"));
       auto query_result = harness.RunQuery(query);
 
-      THEN("The query should fail") { REQUIRE(query_result.has_error()); }
+      THEN("The query should fail") { REQUIRE(!query_result.has_value()); }
     }
 
     WHEN("BulkWrite is called") {
@@ -65,24 +66,25 @@ SCENARIO("Harness Test", "[Harness]") {
     WHEN("The backend fails to bulk write") {
       std::vector<PMS::DB::Queries::Query> queries;
       REQUIRE_CALL(*mockBackendPtr, BulkWrite("collection", queries))
-          .RETURN(Error(std::errc::operation_canceled, "Operation canceled"));
+          .RETURN(make_error(std::errc::operation_canceled, "Operation canceled"));
       auto bulk_write_result = harness.BulkWrite("collection", queries);
 
-      THEN("The bulk write should fail") { REQUIRE(bulk_write_result.has_error()); }
+      THEN("The bulk write should fail") { REQUIRE(!bulk_write_result.has_value()); }
     }
 
     WHEN("SetupIfNeeded is called") {
-      REQUIRE_CALL(*mockBackendPtr, SetupIfNeeded()).RETURN(outcome::success());
+      REQUIRE_CALL(*mockBackendPtr, SetupIfNeeded()).RETURN(ErrorOr<void>{});
       auto setup_result = harness.SetupIfNeeded();
 
       THEN("The setup should be successful") { REQUIRE(setup_result.has_value()); }
     }
 
     WHEN("The backend fails to setup") {
-      REQUIRE_CALL(*mockBackendPtr, SetupIfNeeded()).RETURN(Error(std::errc::operation_canceled, "Operation canceled"));
+      REQUIRE_CALL(*mockBackendPtr, SetupIfNeeded())
+          .RETURN(make_error(std::errc::operation_canceled, "Operation canceled"));
       auto setup_result = harness.SetupIfNeeded();
 
-      THEN("The setup should fail") { REQUIRE(setup_result.has_error()); }
+      THEN("The setup should fail") { REQUIRE(!setup_result.has_value()); }
     }
   }
 }

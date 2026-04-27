@@ -209,7 +209,7 @@ SCENARIO("Testing the TRY macros", "[Utils][TRY]") {
           auto result = TRY(success());
           REQUIRE(result == 42);
 
-          return outcome::success();
+          return {};
         };
 
         REQUIRE(test_func());
@@ -218,18 +218,18 @@ SCENARIO("Testing the TRY macros", "[Utils][TRY]") {
   }
 
   GIVEN("A failing operation") {
-    auto failure = []() -> ErrorOr<int> { return Error{std::errc::invalid_argument, "Test error"}; };
+    auto failure = []() -> ErrorOr<int> { return make_error(std::errc::invalid_argument, "Test error"); };
     WHEN("TRY is called") {
       THEN("It should return the error") {
         auto test_func = [&]() -> ErrorOr<void> {
           [[maybe_unused]] auto result = TRY(failure());
 
-          return outcome::success();
+          return {};
         };
 
         auto result = test_func();
 
-        REQUIRE(result.has_error());
+        REQUIRE(!result.has_value());
         REQUIRE(result.error().Code() == std::errc::invalid_argument);
         REQUIRE(result.error().Message() == "Test error");
       }
@@ -237,18 +237,18 @@ SCENARIO("Testing the TRY macros", "[Utils][TRY]") {
   }
 
   GIVEN("A repeatedly failing operation") {
-    auto failure = []() -> ErrorOr<void> { return Error{std::errc::invalid_argument, "Test error"}; };
+    auto failure = []() -> ErrorOr<void> { return make_error(std::errc::invalid_argument, "Test error"); };
     WHEN("TRY is called") {
       THEN("It should return the error") {
         auto test_func = [&]() -> ErrorOr<void> {
           TRY_REPEATED(failure(), 3);
 
-          return outcome::success();
+          return {};
         };
 
         auto result = test_func();
 
-        REQUIRE(result.has_error());
+        REQUIRE(!result.has_value());
         REQUIRE(result.error().Code() == std::errc::invalid_argument);
         REQUIRE(result.error().Message() == "Test error");
       }
@@ -260,10 +260,10 @@ SCENARIO("Testing the TRY macros", "[Utils][TRY]") {
     auto failure = [&n]() -> ErrorOr<void> {
       if (n < 2) {
         ++n;
-        return Error{std::errc::invalid_argument, "Test error"};
+        return make_error(std::errc::invalid_argument, "Test error");
       }
 
-      return outcome::success();
+      return {};
     };
 
     WHEN("TRY is called") {
@@ -271,7 +271,7 @@ SCENARIO("Testing the TRY macros", "[Utils][TRY]") {
         auto test_func = [&]() -> ErrorOr<void> {
           TRY_REPEATED(failure(), 3);
 
-          return outcome::success();
+          return {};
         };
 
         auto result = test_func();

@@ -48,9 +48,9 @@ SCENARIO("ToUpdates function converts JSON to Updates correctly", "[ToUpdates]")
       auto result = ToUpdates(match_json);
 
       THEN("It should return a failure outcome") {
-        REQUIRE(result.has_error());
-        REQUIRE(result.assume_error().Code() == std::errc::invalid_argument);
-        REQUIRE(result.assume_error().Message() == "Invalid comparison operator: $unknown");
+        REQUIRE(!result.has_value());
+        REQUIRE(result.error().Code() == std::errc::invalid_argument);
+        REQUIRE(result.error().Message() == "Invalid comparison operator: $unknown");
       }
     }
   }
