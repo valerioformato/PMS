@@ -12,7 +12,7 @@ set(DBUtils_src
     )
 add_library(DBUtils SHARED ${DBUtils_src})
 target_include_directories(DBUtils PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(DBUtils PUBLIC Boost::boost spdlog::spdlog_header_only magic_enum::magic_enum mongocxx_shared bsoncxx_shared nlohmann_json::nlohmann_json)
+target_link_libraries(DBUtils PUBLIC Boost::boost STDEXEC::stdexec spdlog::spdlog_header_only magic_enum::magic_enum mongocxx_shared bsoncxx_shared nlohmann_json::nlohmann_json)
 target_compile_definitions(DBUtils PUBLIC FMT_HEADER_ONLY)
 install(TARGETS DBUtils DESTINATION lib)
     

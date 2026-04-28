@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
+#include <stdexec/execution.hpp>
 
 // our headers
 #include "common/queue.h"
@@ -27,6 +28,8 @@ using json = nlohmann::json;
 namespace PMS::Orchestrator {
 class Director {
 public:
+  template <typename T> using Async = stdexec::task<T>;
+
   Director() : m_logger{spdlog::stdout_color_st("Director")} {}
 
   void Start();
@@ -47,35 +50,35 @@ public:
   OperationResult AddNewJob(const json &job);
   OperationResult AddNewJob(json &&job);
 
-  ErrorOr<json> PilotClaimJob(std::string_view pilotUuid);
-  ErrorOr<void> UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
-                                JobStatus status);
+  Async<ErrorOr<json>> PilotClaimJob(std::string_view pilotUuid);
+  Async<ErrorOr<void>> UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
+                                       JobStatus status);
 
   struct NewPilotResult {
     OperationResult result;
     std::vector<std::string> validTasks;
     std::vector<std::string> invalidTasks;
   };
-  ErrorOr<NewPilotResult> RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
-                                           const std::vector<std::pair<std::string, std::string>> &tasks,
-                                           const std::vector<std::string> &tags, const json &host_info);
+  Async<ErrorOr<NewPilotResult>> RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
+                                                  const std::vector<std::pair<std::string, std::string>> &tasks,
+                                                  const std::vector<std::string> &tags, const json &host_info);
   ErrorOr<void> UpdateHeartBeat(std::string_view pilotUuid);
-  ErrorOr<void> DeleteHeartBeat(std::string_view pilotUuid);
+  Async<ErrorOr<void>> DeleteHeartBeat(std::string_view pilotUuid);
 
-  ErrorOr<void> AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
+  Async<ErrorOr<void>> AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
 
-  ErrorOr<std::string> CreateTask(const std::string &task);
-  ErrorOr<void> ClearTask(const std::string &task, bool deleteTask = true);
+  Async<ErrorOr<std::string>> CreateTask(const std::string &task);
+  Async<ErrorOr<void>> ClearTask(const std::string &task, bool deleteTask = true);
 
-  ErrorOr<std::string> Summary(const std::string &user) const;
+  Async<ErrorOr<std::string>> Summary(const std::string &user) const;
 
   enum class DBCollection { Jobs, Pilots };
   enum class QueryOperation { Find, UpdateOne, UpdateMany, DeleteOne, DeleteMany };
-  ErrorOr<std::string> QueryBackDB(QueryOperation operation, const json &match, const json &option) const;
-  ErrorOr<std::string> QueryFrontDB(DBCollection collection, const json &match, const json &filter) const;
+  Async<ErrorOr<std::string>> QueryBackDB(QueryOperation operation, const json &match, const json &option) const;
+  Async<ErrorOr<std::string>> QueryFrontDB(DBCollection collection, const json &match, const json &filter) const;
 
   OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const;
-  ErrorOr<void> ResetFailedJobs(std::string_view taskname);
+  Async<ErrorOr<void>> ResetFailedJobs(std::string_view taskname);
 
 private:
   void JobInsert();
@@ -86,7 +89,7 @@ private:
   void WriteHeartBeatUpdates();
   void DBSync();
 
-  ErrorOr<void> UpdateTaskCounts(Task &task);
+  ErrorOr<void> UpdateTaskCounts(Orchestrator::Task &task);
 
   unsigned int m_maxJobTransferQuerySize = 1000u;
 
@@ -95,7 +98,7 @@ private:
     std::vector<std::string> tasks;
     std::vector<std::string> tags;
   };
-  ErrorOr<PilotInfo> GetPilotInfo(std::string_view uuid);
+  Async<ErrorOr<PilotInfo>> GetPilotInfo(std::string_view uuid);
   std::unordered_map<std::string, PilotInfo> m_activePilots;
 
   void RunClaimQueries();

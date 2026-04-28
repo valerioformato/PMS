@@ -54,6 +54,19 @@ template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi
     std::forward<decltype(_temporary_result)>(_temporary_result).value();                                              \
   })
 
+// CO_TRY is identical to TRY but uses co_return for use inside coroutines.
+// NOTE: co_await cannot appear inside a GNU statement expression, so co_await must be on a separate
+// line before CO_TRY: `auto r = co_await expr; auto val = CO_TRY(r);`
+#define CO_TRY(expression)                                                                                             \
+  ({                                                                                                                   \
+    auto &&_temporary_result = (expression);                                                                           \
+    static_assert(!std::is_lvalue_reference_v<std::remove_cvref_t<decltype(_temporary_result)>::value_type>,           \
+                  "Do not return a reference from a fallible expression");                                             \
+    if (!_temporary_result.has_value()) [[unlikely]]                                                                   \
+      co_return std::unexpected(_temporary_result.error());                                                            \
+    std::forward<decltype(_temporary_result)>(_temporary_result).value();                                              \
+  })
+
 #define TRY_MOVE(expression)                                                                                           \
   ({                                                                                                                   \
     auto &&_temporary_result = (expression);                                                                           \

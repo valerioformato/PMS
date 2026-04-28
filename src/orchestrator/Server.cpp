@@ -73,199 +73,186 @@ std::pair<bool, std::string> Server::ValidateTaskToken(std::string_view task, st
   return {false, {}};
 }
 
-std::string Server::HandleCommand(UserCommand &&command) const {
-  return std::visit(
+Director::Async<std::string> Server::HandleCommand(UserCommand &&command) const {
+  co_return co_await std::visit(
       PMS::Utils::overloaded{
           // Liveness probe
-          [this](const OrchCommand<LivenessProbe> &) {
+          [this](const OrchCommand<LivenessProbe> &) -> Director::Async<std::string> {
             m_logger->trace("Received liveness probe. Sending back OK...");
-            return std::string{"OK"};
+            co_return std::string{"OK"};
           },
           // Create a new task
-          [this](const OrchCommand<CreateTask> &ucmd) {
-            auto result = m_director->CreateTask(ucmd.cmd.task);
-            return result ? fmt::format("Task {} created. Token: {}", ucmd.cmd.task, result.value())
-                          : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
+          [this](const OrchCommand<CreateTask> &ucmd) -> Director::Async<std::string> {
+            auto result = co_await m_director->CreateTask(ucmd.cmd.task);
+            co_return result ? fmt::format("Task {} created. Token: {}", ucmd.cmd.task, result.value())
+                             : fmt::format("Failed to create task \"{}\"", ucmd.cmd.task);
           },
           // Remove an existing task
-          [this](const OrchCommand<ClearTask> &ucmd) {
+          [this](const OrchCommand<ClearTask> &ucmd) -> Director::Async<std::string> {
             auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
             if (!valid) {
-              return serverReply;
+              co_return serverReply;
             }
-
-            auto result = m_director->ClearTask(ucmd.cmd.task);
-            return result ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
-                          : fmt::format("Failed to clear task \"{}\"", ucmd.cmd.task);
+            auto result = co_await m_director->ClearTask(ucmd.cmd.task);
+            co_return result ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
+                             : fmt::format("Failed to clear task \"{}\"", ucmd.cmd.task);
           },
           // Remove jobs from an existing task
-          [this](const OrchCommand<CleanTask> &ucmd) {
+          [this](const OrchCommand<CleanTask> &ucmd) -> Director::Async<std::string> {
             auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
             if (!valid) {
-              return serverReply;
+              co_return serverReply;
             }
-
-            auto result = m_director->ClearTask(ucmd.cmd.task, false);
-            return result ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
-                          : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
+            auto result = co_await m_director->ClearTask(ucmd.cmd.task, false);
+            co_return result ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
+                             : fmt::format("Failed to clean task \"{}\"", ucmd.cmd.task);
           },
           // Declare a dependency between tasks
-          [this](const OrchCommand<DeclareTaskDependency> &ucmd) {
+          [this](const OrchCommand<DeclareTaskDependency> &ucmd) -> Director::Async<std::string> {
             auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
             if (!valid) {
-              return serverReply;
+              co_return serverReply;
             }
-
-            auto result = m_director->AddTaskDependency(ucmd.cmd.task, ucmd.cmd.dependsOn);
-            return result ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task, ucmd.cmd.dependsOn)
-                          : fmt::format("Failed to add task dependency");
+            auto result = co_await m_director->AddTaskDependency(ucmd.cmd.task, ucmd.cmd.dependsOn);
+            co_return result ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task, ucmd.cmd.dependsOn)
+                             : fmt::format("Failed to add task dependency");
           },
           // Check if a task/token pair is valid
-          [this](const OrchCommand<CheckTaskToken> &ucmd) {
+          [this](const OrchCommand<CheckTaskToken> &ucmd) -> Director::Async<std::string> {
             auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
             if (!valid) {
-              return serverReply;
+              co_return serverReply;
             }
-            return fmt::format("Task/token pair is valid.");
+            co_return fmt::format("Task/token pair is valid.");
           },
           // Submit a new job
-          [this](OrchCommand<SubmitJob> &ucmd) {
+          [this](OrchCommand<SubmitJob> &ucmd) -> Director::Async<std::string> {
             auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
             if (!valid) {
-              return serverReply;
+              co_return serverReply;
             }
-
-            // create an hash for this job
             std::string job_hash;
             ucmd.cmd.job["task"] = ucmd.cmd.task;
             picosha2::hash256_hex_string(ucmd.cmd.job.dump(), job_hash);
             ucmd.cmd.job["hash"] = job_hash;
-
             auto result = m_director->AddNewJob(ucmd.cmd.job);
-
-            return result == Director::OperationResult::Success
-                       ? fmt::format("Job received, generated hash: {}", job_hash)
-                       : fmt::format("Job submission failed.");
+            co_return result == Director::OperationResult::Success
+                ? fmt::format("Job received, generated hash: {}", job_hash)
+                : fmt::format("Job submission failed.");
           },
           // query db for jobs info
-          [this](const OrchCommand<FindJobs> &ucmd) {
-            auto result = m_director->QueryBackDB(Director::QueryOperation::Find, ucmd.cmd.match, ucmd.cmd.filter);
-            return result ? result.value() : std::string{result.error().Message()};
+          [this](const OrchCommand<FindJobs> &ucmd) -> Director::Async<std::string> {
+            auto result =
+                co_await m_director->QueryBackDB(Director::QueryOperation::Find, ucmd.cmd.match, ucmd.cmd.filter);
+            co_return result ? result.value() : std::string{result.error().Message()};
           },
           // reset jobs to pending status and 0 retries
-          [this](const OrchCommand<ResetJobs> &ucmd) {
+          [this](const OrchCommand<ResetJobs> &ucmd) -> Director::Async<std::string> {
             json updateAction;
             updateAction["$set"]["status"] = magic_enum::enum_name(JobStatus::Pending);
             updateAction["$set"]["retries"] = 0;
-
-            auto result = m_director->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match, updateAction);
-            return result ? result.value() : std::string{result.error().Message()};
+            auto result =
+                co_await m_director->QueryBackDB(Director::QueryOperation::UpdateMany, ucmd.cmd.match, updateAction);
+            co_return result ? result.value() : std::string{result.error().Message()};
           },
           // query db for pilot info
-          [this](const OrchCommand<FindPilots> &ucmd) {
-            auto result = m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter);
-            return result ? result.value() : std::string{result.error().Message()};
+          [this](const OrchCommand<FindPilots> &ucmd) -> Director::Async<std::string> {
+            auto result =
+                co_await m_director->QueryFrontDB(Director::DBCollection::Pilots, ucmd.cmd.match, ucmd.cmd.filter);
+            co_return result ? result.value() : std::string{result.error().Message()};
           },
           // Get user summary
-          [this](const OrchCommand<Summary> &ucmd) {
-            auto result = m_director->Summary(ucmd.cmd.user);
-            return result ? result.value() : std::string{result.error().Message()};
+          [this](const OrchCommand<Summary> &ucmd) -> Director::Async<std::string> {
+            auto result = co_await m_director->Summary(ucmd.cmd.user);
+            co_return result ? result.value() : std::string{result.error().Message()};
           },
           // Reset jobs in a given task that have status Failed
-          [this](const OrchCommand<ResetFailedJobs> &ucmd) {
+          [this](const OrchCommand<ResetFailedJobs> &ucmd) -> Director::Async<std::string> {
             auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
             if (!valid) {
-              return serverReply;
+              co_return serverReply;
             }
-
-            auto result = m_director->ResetFailedJobs(ucmd.cmd.task);
-
-            return result ? fmt::format("Jobs reset") : result.error().Message().data();
+            auto result = co_await m_director->ResetFailedJobs(ucmd.cmd.task);
+            co_return result ? fmt::format("Jobs reset") : result.error().Message().data();
           },
           // Handle errors
-          [this](const OrchCommand<InvalidCommand> &ucmd) {
+          [this](const OrchCommand<InvalidCommand> &ucmd) -> Director::Async<std::string> {
             m_logger->debug("Replying to invalid pilot command with {}", ucmd.cmd.errorMessage);
-            return ucmd.cmd.errorMessage;
+            co_return ucmd.cmd.errorMessage;
           },
       },
       command);
 }
 
-std::string Server::HandleCommand(PilotCommand &&command) const {
-  return std::visit(PMS::Utils::overloaded{
-                        // request a new job
-                        [this](const OrchCommand<ClaimJob> &pcmd) {
-                          auto result = m_director->PilotClaimJob(pcmd.cmd.uuid);
-                          if (!result) {
-                            m_logger->error("{}", result.error().Message());
-                          }
-                          return result ? result.value().dump() : std::string{result.error().Message()};
-                        },
-                        // update job status
-                        [this](const OrchCommand<UpdateJobStatus> &pcmd) {
-                          auto result =
-                              m_director->UpdateJobStatus(pcmd.cmd.uuid, pcmd.cmd.hash, pcmd.cmd.task, pcmd.cmd.status);
-                          return result ? fmt::format("Ok") : std::string{result.error().Message()};
-                        },
-                        // register a new pilot
-                        [this](const OrchCommand<RegisterNewPilot> &pcmd) {
-                          m_logger->trace("Registering new pilot: {}", pcmd.cmd.uuid);
-                          const auto result = m_director->RegisterNewPilot(pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks,
-                                                                           pcmd.cmd.tags, pcmd.cmd.host_info);
+Director::Async<std::string> Server::HandleCommand(PilotCommand &&command) const {
+  co_return co_await std::visit(
+      PMS::Utils::overloaded{// request a new job
+                             [this](const OrchCommand<ClaimJob> &pcmd) -> Director::Async<std::string> {
+                               auto result = co_await m_director->PilotClaimJob(pcmd.cmd.uuid);
+                               if (!result) {
+                                 m_logger->error("{}", result.error().Message());
+                               }
+                               co_return result ? result.value().dump() : std::string{result.error().Message()};
+                             },
+                             // update job status
+                             [this](const OrchCommand<UpdateJobStatus> &pcmd) -> Director::Async<std::string> {
+                               auto result = co_await m_director->UpdateJobStatus(pcmd.cmd.uuid, pcmd.cmd.hash,
+                                                                                  pcmd.cmd.task, pcmd.cmd.status);
+                               co_return result ? fmt::format("Ok") : std::string{result.error().Message()};
+                             },
+                             // register a new pilot
+                             [this](const OrchCommand<RegisterNewPilot> &pcmd) -> Director::Async<std::string> {
+                               m_logger->trace("Registering new pilot: {}", pcmd.cmd.uuid);
+                               const auto result = co_await m_director->RegisterNewPilot(
+                                   pcmd.cmd.uuid, pcmd.cmd.user, pcmd.cmd.tasks, pcmd.cmd.tags, pcmd.cmd.host_info);
+                               if (!result)
+                                 co_return fmt::format("Could not register pilot {}", pcmd.cmd.uuid);
 
-                          if (!result)
-                            return fmt::format("Could not register pilot {}", pcmd.cmd.uuid);
+                               json replyDoc;
+                               replyDoc["validTasks"] = json::array({});
+                               for (const auto &task : result.value().validTasks) {
+                                 replyDoc["validTasks"].push_back(task);
+                               }
 
-                          json replyDoc;
-                          replyDoc["validTasks"] = json::array({});
-                          for (const auto &task : result.value().validTasks) {
-                            replyDoc["validTasks"].push_back(task);
-                          }
-
-                          return replyDoc.dump();
-                        },
-                        // update pilot heartbeat
-                        [this](const OrchCommand<UpdateHeartBeat> &pcmd) {
-                          auto result = m_director->UpdateHeartBeat(pcmd.cmd.uuid);
-
-                          return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
-                        },
-                        // delete pilot
-                        [this](const OrchCommand<DeleteHeartBeat> &pcmd) {
-                          auto result = m_director->DeleteHeartBeat(pcmd.cmd.uuid);
-
-                          return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
-                        },
-                        // Handle errors
-                        [this](const OrchCommand<InvalidCommand> &pcmd) {
-                          m_logger->debug("Replying to invalid pilot command with {}", pcmd.cmd.errorMessage);
-                          return pcmd.cmd.errorMessage;
-                        },
-                        // Stress tests
-                        [this]([[maybe_unused]] const OrchCommand<Test> &pcmd) { return std::string{"ok"}; }},
-                    command);
+                               co_return replyDoc.dump();
+                             },
+                             // update pilot heartbeat
+                             [this](const OrchCommand<UpdateHeartBeat> &pcmd) -> Director::Async<std::string> {
+                               auto result = m_director->UpdateHeartBeat(pcmd.cmd.uuid);
+                               co_return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
+                             },
+                             // delete pilot
+                             [this](const OrchCommand<DeleteHeartBeat> &pcmd) -> Director::Async<std::string> {
+                               auto result = co_await m_director->DeleteHeartBeat(pcmd.cmd.uuid);
+                               co_return result ? fmt::format("Ok") : fmt::format("Failed to update heartbeat");
+                             },
+                             // Handle errors
+                             [this](const OrchCommand<InvalidCommand> &pcmd) -> Director::Async<std::string> {
+                               m_logger->debug("Replying to invalid pilot command with {}", pcmd.cmd.errorMessage);
+                               co_return pcmd.cmd.errorMessage;
+                             },
+                             // Stress tests
+                             [this]([[maybe_unused]] const OrchCommand<Test> &pcmd) -> Director::Async<std::string> {
+                               co_return std::string{"ok"};
+                             }},
+      command);
 }
 
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
   m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
                   msg->get_payload());
 
-  namespace ex = stdexec;
-  auto snd_get_reply = ex::just(msg->get_payload()) |
-                       ex::then([](const std::string &input) { return json::parse(input); }) |
-                       ex::then([this](const json &parsed_message) { return toUserCommand(parsed_message); }) |
-                       ex::then([this](UserCommand &&cmd) { return HandleCommand(std::move(cmd)); }) |
-                       ex::upon_error([this](std::exception_ptr eptr) -> std::string {
-                         try {
-                           std::rethrow_exception(eptr);
-                         } catch (const std::exception &e) {
-                           m_logger->error("Error in parsing message: {}", e.what());
-                           return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
-                         }
-                         return "Unknown error";
-                       });
+  std::string reply;
+  try {
+    auto parsed = json::parse(msg->get_payload());
+    auto cmd = toUserCommand(parsed);
+    auto [r] = stdexec::sync_wait(stdexec::on(m_thread_pool.get_scheduler(), HandleCommand(std::move(cmd)))).value();
+    reply = std::move(r);
+  } catch (const std::exception &e) {
+    m_logger->error("Error handling message: {}", e.what());
+    reply = fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
+  }
 
-  auto [reply] = ex::sync_wait(std::move(snd_get_reply)).value();
   m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
 
@@ -273,22 +260,17 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
   m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
                   msg->get_payload());
 
-  namespace ex = stdexec;
-  auto snd_get_reply = ex::just(msg->get_payload()) |
-                       ex::then([](const std::string &input) { return json::parse(input); }) |
-                       ex::then([this](const json &parsed_message) { return toPilotCommand(parsed_message); }) |
-                       ex::then([this](PilotCommand &&cmd) { return HandleCommand(std::move(cmd)); }) |
-                       ex::upon_error([this](std::exception_ptr eptr) -> std::string {
-                         try {
-                           std::rethrow_exception(eptr);
-                         } catch (const std::exception &e) {
-                           m_logger->error("Error handling pilot message: {}", e.what());
-                           return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
-                         }
-                         return "Unknown error";
-                       });
+  std::string reply;
+  try {
+    auto parsed = json::parse(msg->get_payload());
+    auto cmd = toPilotCommand(parsed);
+    auto [r] = stdexec::sync_wait(stdexec::on(m_thread_pool.get_scheduler(), HandleCommand(std::move(cmd)))).value();
+    reply = std::move(r);
+  } catch (const std::exception &e) {
+    m_logger->error("Error handling pilot message: {}", e.what());
+    reply = fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
+  }
 
-  auto [reply] = ex::sync_wait(std::move(snd_get_reply)).value();
   m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
 

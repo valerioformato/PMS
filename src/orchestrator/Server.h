@@ -62,7 +62,7 @@ private:
     Summary,
     ResetFailedJobs,
   };
-  std::string HandleCommand(UserCommand &&command) const;
+  Director::Async<std::string> HandleCommand(UserCommand &&command) const;
   static UserCommand toUserCommand(const json &msg);
   static std::unordered_map<std::string_view, UserCommandType> m_commandLUT;
 
@@ -74,7 +74,7 @@ private:
     DeleteHeartBeat,
     Test,
   };
-  std::string HandleCommand(PilotCommand &&command) const;
+  Director::Async<std::string> HandleCommand(PilotCommand &&command) const;
   static PilotCommand toPilotCommand(const json &msg);
   static std::unordered_map<std::string_view, PilotCommandType> m_pilot_commandLUT;
 };
