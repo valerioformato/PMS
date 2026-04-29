@@ -21,16 +21,20 @@
 #include "db/backends/MongoDB/MongoDBBackend.h"
 #include "db/backends/MongoDB/PoolHandle.h"
 #include "db/harness/Harness.h"
+#include "orchestrator/IDirector.h"
 #include "orchestrator/Task.h"
 
 using json = nlohmann::json;
 
 namespace PMS::Orchestrator {
-class Director {
+class Director : public IDirector {
 public:
-  template <typename T> using Async = stdexec::task<T>;
+  Director() : m_logger{spdlog::get("Director") ? spdlog::get("Director") : spdlog::stdout_color_st("Director")} {}
 
-  Director() : m_logger{spdlog::stdout_color_st("Director")} {}
+  // Injection constructor for testing: accepts pre-built Harness instances.
+  Director(std::unique_ptr<DB::Harness> frontDB, std::unique_ptr<DB::Harness> backDB)
+      : m_logger{spdlog::get("Director") ? spdlog::get("Director") : spdlog::stdout_color_st("Director")},
+        m_frontDB{std::move(frontDB)}, m_backDB{std::move(backDB)} {}
 
   void Start();
   void Stop();
@@ -45,40 +49,33 @@ public:
   }
   void SetMaxJobTransferQuerySize(unsigned int size) { m_maxJobTransferQuerySize = size; }
 
-  enum class OperationResult { Success, ProcessError, DatabaseError };
+  OperationResult AddNewJob(const json &job) override;
+  OperationResult AddNewJob(json &&job) override;
 
-  OperationResult AddNewJob(const json &job);
-  OperationResult AddNewJob(json &&job);
-
-  Async<ErrorOr<json>> PilotClaimJob(std::string_view pilotUuid);
+  Async<ErrorOr<json>> PilotClaimJob(std::string_view pilotUuid) override;
   Async<ErrorOr<void>> UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,
-                                       JobStatus status);
+                                       JobStatus status) override;
 
-  struct NewPilotResult {
-    OperationResult result;
-    std::vector<std::string> validTasks;
-    std::vector<std::string> invalidTasks;
-  };
   Async<ErrorOr<NewPilotResult>> RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
                                                   const std::vector<std::pair<std::string, std::string>> &tasks,
-                                                  const std::vector<std::string> &tags, const json &host_info);
-  ErrorOr<void> UpdateHeartBeat(std::string_view pilotUuid);
-  Async<ErrorOr<void>> DeleteHeartBeat(std::string_view pilotUuid);
+                                                  const std::vector<std::string> &tags, const json &host_info) override;
+  ErrorOr<void> UpdateHeartBeat(std::string_view pilotUuid) override;
+  Async<ErrorOr<void>> DeleteHeartBeat(std::string_view pilotUuid) override;
 
-  Async<ErrorOr<void>> AddTaskDependency(const std::string &taskName, const std::string &dependsOn);
+  Async<ErrorOr<void>> AddTaskDependency(const std::string &taskName, const std::string &dependsOn) override;
 
-  Async<ErrorOr<std::string>> CreateTask(const std::string &task);
-  Async<ErrorOr<void>> ClearTask(const std::string &task, bool deleteTask = true);
+  Async<ErrorOr<std::string>> CreateTask(const std::string &task) override;
+  Async<ErrorOr<void>> ClearTask(const std::string &task, bool deleteTask = true) override;
 
-  Async<ErrorOr<std::string>> Summary(const std::string &user) const;
+  Async<ErrorOr<std::string>> Summary(const std::string &user) const override;
 
-  enum class DBCollection { Jobs, Pilots };
-  enum class QueryOperation { Find, UpdateOne, UpdateMany, DeleteOne, DeleteMany };
-  Async<ErrorOr<std::string>> QueryBackDB(QueryOperation operation, const json &match, const json &option) const;
-  Async<ErrorOr<std::string>> QueryFrontDB(DBCollection collection, const json &match, const json &filter) const;
+  Async<ErrorOr<std::string>> QueryBackDB(QueryOperation operation, const json &match,
+                                          const json &option) const override;
+  Async<ErrorOr<std::string>> QueryFrontDB(DBCollection collection, const json &match,
+                                           const json &filter) const override;
 
-  OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const;
-  Async<ErrorOr<void>> ResetFailedJobs(std::string_view taskname);
+  OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const override;
+  Async<ErrorOr<void>> ResetFailedJobs(std::string_view taskname) override;
 
 private:
   void JobInsert();
