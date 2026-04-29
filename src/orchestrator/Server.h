@@ -49,6 +49,11 @@ private:
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
   void pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
 
+protected:
+  static UserCommand toUserCommand(const json &msg);
+  static PilotCommand toPilotCommand(const json &msg);
+
+private:
   enum class UserCommandType {
     SubmitJob,
     FindJobs,
@@ -63,7 +68,6 @@ private:
     ResetFailedJobs,
   };
   Director::Async<std::string> HandleCommand(UserCommand &&command) const;
-  static UserCommand toUserCommand(const json &msg);
   static std::unordered_map<std::string_view, UserCommandType> m_commandLUT;
 
   enum class PilotCommandType {
@@ -75,7 +79,6 @@ private:
     Test,
   };
   Director::Async<std::string> HandleCommand(PilotCommand &&command) const;
-  static PilotCommand toPilotCommand(const json &msg);
   static std::unordered_map<std::string_view, PilotCommandType> m_pilot_commandLUT;
 };
 
