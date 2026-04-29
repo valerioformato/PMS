@@ -105,6 +105,8 @@ class ServerProxy : public Server {
 public:
   explicit ServerProxy(std::shared_ptr<IDirector> d) : Server(std::move(d)) {}
   using Server::HandleCommand;
+  using Server::ProcessPilotMessage;
+  using Server::ProcessUserMessage;
   using Server::ValidateTaskToken;
 };
 
@@ -478,6 +480,69 @@ SCENARIO("HandleCommand: Test", "[Server][HandleCommand]") {
   GIVEN("a stress-test command") {
     auto reply = run_pilot(server, OrchCommand<Test>{});
     THEN("the reply is 'ok'") { REQUIRE(reply == "ok"); }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ProcessUserMessage / ProcessPilotMessage scenarios
+// ---------------------------------------------------------------------------
+
+SCENARIO("ProcessUserMessage: liveness probe via JSON", "[Server][ProcessMessage]") {
+  auto mock = std::make_shared<MockDirector>();
+  ServerProxy server{mock};
+
+  GIVEN("valid JSON containing livenessProbe key") {
+    WHEN("ProcessUserMessage is called") {
+      auto reply = server.ProcessUserMessage(R"({"livenessProbe": true})");
+      THEN("the reply is OK") { REQUIRE(reply == "OK"); }
+    }
+  }
+
+  GIVEN("invalid (non-parseable) JSON") {
+    WHEN("ProcessUserMessage is called") {
+      auto reply = server.ProcessUserMessage("{not valid json}");
+      THEN("the reply reports an invalid message") { REQUIRE(reply.find("Invalid message") != std::string::npos); }
+    }
+  }
+
+  GIVEN("valid JSON with an unknown command name") {
+    WHEN("ProcessUserMessage is called") {
+      auto reply = server.ProcessUserMessage(R"({"command": "unknownCmd"})");
+      THEN("the reply reports an unsupported command") { REQUIRE(reply.find("not supported") != std::string::npos); }
+    }
+  }
+
+  GIVEN("valid JSON missing the command field") {
+    WHEN("ProcessUserMessage is called") {
+      auto reply = server.ProcessUserMessage(R"({"foo": "bar"})");
+      THEN("the reply reports a missing command field") { REQUIRE(reply.find("missing") != std::string::npos); }
+    }
+  }
+}
+
+SCENARIO("ProcessPilotMessage: test command via JSON", "[Server][ProcessMessage]") {
+  auto mock = std::make_shared<MockDirector>();
+  ServerProxy server{mock};
+
+  GIVEN("valid JSON with p_test command") {
+    WHEN("ProcessPilotMessage is called") {
+      auto reply = server.ProcessPilotMessage(R"({"command": "p_test"})");
+      THEN("the reply is 'ok'") { REQUIRE(reply == "ok"); }
+    }
+  }
+
+  GIVEN("invalid (non-parseable) JSON") {
+    WHEN("ProcessPilotMessage is called") {
+      auto reply = server.ProcessPilotMessage("{not valid json}");
+      THEN("the reply reports an invalid message") { REQUIRE(reply.find("Invalid message") != std::string::npos); }
+    }
+  }
+
+  GIVEN("valid JSON with an unknown pilot command") {
+    WHEN("ProcessPilotMessage is called") {
+      auto reply = server.ProcessPilotMessage(R"({"command": "p_unknown"})");
+      THEN("the reply reports an unsupported command") { REQUIRE(reply.find("not supported") != std::string::npos); }
+    }
   }
 }
 

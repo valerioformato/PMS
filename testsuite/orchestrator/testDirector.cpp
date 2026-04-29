@@ -435,4 +435,301 @@ SCENARIO("Director: ResetFailedJobs", "[Director]") {
   }
 }
 
+// ---------------------------------------------------------------------------
+// AddNewJob
+// ---------------------------------------------------------------------------
+
+SCENARIO("Director: AddNewJob", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  GIVEN("a job as a const-ref") {
+    json job{{"param", 1}};
+    WHEN("AddNewJob is called") {
+      THEN("it returns Success immediately without any DB call") {
+        REQUIRE(director.AddNewJob(job) == IDirector::OperationResult::Success);
+      }
+    }
+  }
+
+  GIVEN("a job as an rvalue") {
+    WHEN("AddNewJob is called") {
+      THEN("it returns Success immediately without any DB call") {
+        REQUIRE(director.AddNewJob(json{{"param", 2}}) == IDirector::OperationResult::Success);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UpdateHeartBeat
+// ---------------------------------------------------------------------------
+
+SCENARIO("Director: UpdateHeartBeat", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  GIVEN("a pilot UUID") {
+    WHEN("UpdateHeartBeat is called") {
+      THEN("it returns success without any DB call") {
+        auto result = director.UpdateHeartBeat("pilot-uuid-1");
+        REQUIRE(result.has_value());
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Summary
+// ---------------------------------------------------------------------------
+
+SCENARIO("Director: Summary", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  // Pre-create task so m_tasks is populated.
+  ALLOW_CALL(*f.backMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<PMS::DB::Queries::Insert>(_1))
+      .RETURN(json{});
+  run_async(director.CreateTask("myTask"));
+
+  GIVEN("the front DB Distinct returns the task name") {
+    WHEN("Summary is called") {
+      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Distinct>(_1))
+          .RETURN(json::array({"myTask"}));
+
+      auto result = run_async(director.Summary("alice"));
+
+      THEN("the result is a JSON array containing the task summary") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE(r.has_value());
+        auto parsed = json::parse(r.value());
+        REQUIRE(parsed.is_array());
+        REQUIRE(parsed.size() == 1);
+        REQUIRE(parsed[0]["taskname"] == "myTask");
+      }
+    }
+  }
+
+  GIVEN("the front DB Distinct returns an empty array") {
+    WHEN("Summary is called") {
+      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Distinct>(_1))
+          .RETURN(json::array());
+
+      auto result = run_async(director.Summary("alice"));
+
+      THEN("the result is an empty JSON array") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE(r.has_value());
+        REQUIRE(json::parse(r.value()).empty());
+      }
+    }
+  }
+
+  GIVEN("the front DB Distinct returns an error") {
+    WHEN("Summary is called") {
+      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Distinct>(_1))
+          .RETURN(make_error(std::errc::io_error, "DB error"));
+
+      auto result = run_async(director.Summary("alice"));
+
+      THEN("an error is propagated") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE_FALSE(r.has_value());
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// QueryBackDB
+// ---------------------------------------------------------------------------
+
+SCENARIO("Director: QueryBackDB — Find", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  GIVEN("valid match JSON and back DB returns results") {
+    WHEN("QueryBackDB is called with Find") {
+      REQUIRE_CALL(*f.backMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Find>(_1))
+          .RETURN(json::array({json{{"hash", "abc"}}}));
+
+      auto result = run_async(director.QueryBackDB(IDirector::QueryOperation::Find, json{{"task", "t1"}}, json{}));
+
+      THEN("the result wraps the array in a 'result' key") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE(r.has_value());
+        auto parsed = json::parse(r.value());
+        REQUIRE(parsed.contains("result"));
+        REQUIRE(parsed["result"].size() == 1);
+      }
+    }
+  }
+}
+
+SCENARIO("Director: QueryBackDB — UpdateOne", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  GIVEN("valid match/option JSON and front DB update succeeds") {
+    WHEN("QueryBackDB is called with UpdateOne") {
+      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Update>(_1) &&
+                std::get<PMS::DB::Queries::Update>(_1).options.limit == 1)
+          .RETURN(json{});
+
+      auto result = run_async(director.QueryBackDB(IDirector::QueryOperation::UpdateOne, json{{"hash", "abc123"}},
+                                                   json{{"$set", {{"status", "Done"}}}}));
+
+      THEN("the result mentions 'Updated job'") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE(r.has_value());
+        REQUIRE(r.value().find("Updated job") != std::string::npos);
+      }
+    }
+  }
+}
+
+SCENARIO("Director: QueryBackDB — UpdateMany", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  GIVEN("valid match/option JSON and front DB update returns counts") {
+    WHEN("QueryBackDB is called with UpdateMany") {
+      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Update>(_1))
+          .RETURN(json{{"matched_count", 3}, {"modified_count", 3}});
+
+      auto result = run_async(director.QueryBackDB(IDirector::QueryOperation::UpdateMany, json{{"task", "myTask"}},
+                                                   json{{"$set", {{"status", "Done"}}}}));
+
+      THEN("the result mentions 'Matched' and 'Updated'") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE(r.has_value());
+        REQUIRE(r.value().find("Matched") != std::string::npos);
+        REQUIRE(r.value().find("Updated") != std::string::npos);
+      }
+    }
+  }
+}
+
+SCENARIO("Director: QueryBackDB — DeleteOne", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  GIVEN("valid match JSON and both DBs delete successfully") {
+    WHEN("QueryBackDB is called with DeleteOne") {
+      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Delete>(_1) &&
+                std::get<PMS::DB::Queries::Delete>(_1).options.limit == 1)
+          .RETURN(json{{"deleted_count", 1}});
+      REQUIRE_CALL(*f.backMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Delete>(_1) &&
+                std::get<PMS::DB::Queries::Delete>(_1).options.limit == 1)
+          .RETURN(json{{"deleted_count", 1}});
+
+      auto result =
+          run_async(director.QueryBackDB(IDirector::QueryOperation::DeleteOne, json{{"hash", "abc123"}}, json{}));
+
+      THEN("the result mentions 'Deleted job'") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE(r.has_value());
+        REQUIRE(r.value().find("Deleted job") != std::string::npos);
+      }
+    }
+  }
+}
+
+SCENARIO("Director: QueryBackDB — DeleteMany", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  GIVEN("valid match JSON and both DBs delete successfully") {
+    WHEN("QueryBackDB is called with DeleteMany") {
+      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Delete>(_1) &&
+                std::get<PMS::DB::Queries::Delete>(_1).options.limit == 0)
+          .RETURN(json{{"deleted_count", 5}});
+      REQUIRE_CALL(*f.backMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Delete>(_1) &&
+                std::get<PMS::DB::Queries::Delete>(_1).options.limit == 0)
+          .RETURN(json{{"deleted_count", 5}});
+
+      auto result =
+          run_async(director.QueryBackDB(IDirector::QueryOperation::DeleteMany, json{{"task", "myTask"}}, json{}));
+
+      THEN("the result mentions 'Deleted 5 jobs'") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE(r.has_value());
+        REQUIRE(r.value().find("Deleted 5 jobs") != std::string::npos);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// QueryFrontDB
+// ---------------------------------------------------------------------------
+
+SCENARIO("Director: QueryFrontDB — Jobs collection", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  GIVEN("a match and front DB returns job results") {
+    WHEN("QueryFrontDB is called with DBCollection::Jobs") {
+      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Find>(_1) &&
+                std::get<PMS::DB::Queries::Find>(_1).collection == "jobs")
+          .RETURN(json::array({json{{"hash", "abc"}}}));
+
+      auto result = run_async(director.QueryFrontDB(IDirector::DBCollection::Jobs, json{{"task", "myTask"}}, json{}));
+
+      THEN("the result wraps the array in a 'result' key") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE(r.has_value());
+        auto parsed = json::parse(r.value());
+        REQUIRE(parsed.contains("result"));
+        REQUIRE(parsed["result"].size() == 1);
+      }
+    }
+  }
+}
+
+SCENARIO("Director: QueryFrontDB — Pilots collection", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  GIVEN("a match and front DB returns pilot results") {
+    WHEN("QueryFrontDB is called with DBCollection::Pilots") {
+      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Find>(_1) &&
+                std::get<PMS::DB::Queries::Find>(_1).collection == "pilots")
+          .RETURN(json::array({json{{"uuid", "p1"}}}));
+
+      auto result = run_async(director.QueryFrontDB(IDirector::DBCollection::Pilots, json{{"uuid", "p1"}}, json{}));
+
+      THEN("the result wraps the array in a 'result' key") {
+        REQUIRE(result.has_value());
+        auto [r] = result.value();
+        REQUIRE(r.has_value());
+        auto parsed = json::parse(r.value());
+        REQUIRE(parsed.contains("result"));
+      }
+    }
+  }
+}
+
 } // namespace PMS::Tests::Orchestrator

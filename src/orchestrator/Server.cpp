@@ -217,37 +217,41 @@ IDirector::Async<std::string> Server::HandleCommand(PilotCommand &&command) cons
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
   m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
                   msg->get_payload());
-
-  std::string reply;
-  try {
-    auto parsed = json::parse(msg->get_payload());
-    auto cmd = CommandParser::toUserCommand(parsed);
-    auto [r] = stdexec::sync_wait(stdexec::on(m_thread_pool.get_scheduler(), HandleCommand(std::move(cmd)))).value();
-    reply = std::move(r);
-  } catch (const std::exception &e) {
-    m_logger->error("Error handling message: {}", e.what());
-    reply = fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
-  }
-
-  m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
+  m_endpoint.send(hdl, ProcessUserMessage(msg->get_payload()), websocketpp::frame::opcode::text);
 }
 
 void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
   m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
                   msg->get_payload());
+  m_pilot_endpoint.send(hdl, ProcessPilotMessage(msg->get_payload()), websocketpp::frame::opcode::text);
+}
 
-  std::string reply;
+std::string Server::ProcessUserMessage(std::string_view payload) {
+  auto parsed = json::parse(payload, nullptr, false);
+  if (parsed.is_discarded())
+    return "Invalid message, please check... :| (JSON parse error)";
   try {
-    auto parsed = json::parse(msg->get_payload());
+    auto cmd = CommandParser::toUserCommand(parsed);
+    auto [r] = stdexec::sync_wait(stdexec::on(m_thread_pool.get_scheduler(), HandleCommand(std::move(cmd)))).value();
+    return r;
+  } catch (const std::exception &e) {
+    m_logger->error("Error handling message: {}", e.what());
+    return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
+  }
+}
+
+std::string Server::ProcessPilotMessage(std::string_view payload) {
+  auto parsed = json::parse(payload, nullptr, false);
+  if (parsed.is_discarded())
+    return "Invalid message, please check... :| (JSON parse error)";
+  try {
     auto cmd = CommandParser::toPilotCommand(parsed);
     auto [r] = stdexec::sync_wait(stdexec::on(m_thread_pool.get_scheduler(), HandleCommand(std::move(cmd)))).value();
-    reply = std::move(r);
+    return r;
   } catch (const std::exception &e) {
     m_logger->error("Error handling pilot message: {}", e.what());
-    reply = fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
+    return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
   }
-
-  m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text);
 }
 
 void Server::SetupEndpoint(WSserver &endpoint, unsigned int port) {
