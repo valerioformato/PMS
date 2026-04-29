@@ -8,7 +8,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(JSON_ImplicitConversions OFF CACHE INTERNAL "")
 
 CPMAddPackage("gh:Neargye/magic_enum#v0.9.7")
-CPMAddPackage("gh:gabime/spdlog#v1.14.1")
+CPMAddPackage("gh:gabime/spdlog#v1.16.0")
 CPMAddPackage(
   URI "gh:nlohmann/json#v3.11.3"
   OPTIONS "JSON_ImplicitConversions OFF" 
