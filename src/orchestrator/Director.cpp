@@ -562,9 +562,9 @@ Async<ErrorOr<void>> Director::ClearTask(const std::string &task, bool deleteTas
 
   DB::Queries::Matches filter{{"task", task}};
 
-  auto s1 = m_backDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = filter});
-  auto s2 = m_frontDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = filter});
-  auto [r1, r2] = co_await stdexec::when_all(std::move(s1), std::move(s2));
+  auto [r1, r2] = co_await stdexec::when_all(
+      m_backDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = filter}),
+      m_frontDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = filter}));
   CO_TRY(r1);
   CO_TRY(r2);
 
@@ -1086,20 +1086,20 @@ Async<ErrorOr<std::string>> Director::QueryBackDB(QueryOperation operation, cons
   }
   case QueryOperation::DeleteOne: {
     auto matches = CO_TRY(PMS::DB::Queries::ToMatches(match));
-    auto s1 = m_frontDB->RunQuery(scheduler,
-                                  DB::Queries::Delete{.collection = "jobs", .options = {.limit = 1}, .match = matches});
-    auto s2 = m_backDB->RunQuery(scheduler,
-                                 DB::Queries::Delete{.collection = "jobs", .options = {.limit = 1}, .match = matches});
-    auto [r1, r2] = co_await stdexec::when_all(std::move(s1), std::move(s2));
+    auto [r1, r2] = co_await stdexec::when_all(
+        m_frontDB->RunQuery(scheduler,
+                            DB::Queries::Delete{.collection = "jobs", .options = {.limit = 1}, .match = matches}),
+        m_backDB->RunQuery(scheduler,
+                           DB::Queries::Delete{.collection = "jobs", .options = {.limit = 1}, .match = matches}));
     CO_TRY(r1);
     CO_TRY(r2);
     co_return fmt::format("Deleted job {}", to_string_view(match["hash"]));
   }
   case QueryOperation::DeleteMany: {
     auto matches = CO_TRY(PMS::DB::Queries::ToMatches(match));
-    auto s1 = m_frontDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = matches});
-    auto s2 = m_backDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = matches});
-    auto [r1, r2] = co_await stdexec::when_all(std::move(s1), std::move(s2));
+    auto [r1, r2] = co_await stdexec::when_all(
+        m_frontDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = matches}),
+        m_backDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = matches}));
     CO_TRY(r1);
     auto back_result = CO_TRY(r2);
     co_return fmt::format("Deleted {} jobs", back_result["deleted_count"].get<size_t>());
@@ -1179,11 +1179,11 @@ Async<ErrorOr<void>> Director::ResetFailedJobs(std::string_view taskname) {
 
   auto scheduler = co_await stdexec::read_env(stdexec::get_scheduler);
 
-  auto s1 = m_frontDB->RunQuery(scheduler,
-                                DB::Queries::Update{.collection = "jobs", .match = matches, .update = update_action});
-  auto s2 = m_backDB->RunQuery(scheduler,
-                               DB::Queries::Update{.collection = "jobs", .match = matches, .update = update_action});
-  auto [r1, r2] = co_await stdexec::when_all(std::move(s1), std::move(s2));
+  auto [r1, r2] = co_await stdexec::when_all(
+      m_frontDB->RunQuery(scheduler,
+                          DB::Queries::Update{.collection = "jobs", .match = matches, .update = update_action}),
+      m_backDB->RunQuery(scheduler,
+                         DB::Queries::Update{.collection = "jobs", .match = matches, .update = update_action}));
 
   auto front_result = CO_TRY(r1);
   m_logger->debug("ResetFailedJobs: Found {} documents in front DB to update",

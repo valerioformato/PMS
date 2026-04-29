@@ -89,9 +89,9 @@ Director::Async<std::string> Server::HandleCommand(UserCommand &&command) const 
           },
           // Remove an existing task
           [this](const OrchCommand<ClearTask> &ucmd) -> Director::Async<std::string> {
-            auto tokenResult = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!tokenResult.first) {
-              co_return std::move(tokenResult.second);
+            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+            if (!valid) {
+              co_return serverReply;
             }
             auto result = co_await m_director->ClearTask(ucmd.cmd.task);
             co_return result ? fmt::format("Task \"{}\" cleared", ucmd.cmd.task)
@@ -99,9 +99,9 @@ Director::Async<std::string> Server::HandleCommand(UserCommand &&command) const 
           },
           // Remove jobs from an existing task
           [this](const OrchCommand<CleanTask> &ucmd) -> Director::Async<std::string> {
-            auto tokenResult = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!tokenResult.first) {
-              co_return std::move(tokenResult.second);
+            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+            if (!valid) {
+              co_return serverReply;
             }
             auto result = co_await m_director->ClearTask(ucmd.cmd.task, false);
             co_return result ? fmt::format("Task \"{}\" cleaned", ucmd.cmd.task)
@@ -109,9 +109,9 @@ Director::Async<std::string> Server::HandleCommand(UserCommand &&command) const 
           },
           // Declare a dependency between tasks
           [this](const OrchCommand<DeclareTaskDependency> &ucmd) -> Director::Async<std::string> {
-            auto tokenResult = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!tokenResult.first) {
-              co_return std::move(tokenResult.second);
+            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+            if (!valid) {
+              co_return serverReply;
             }
             auto result = co_await m_director->AddTaskDependency(ucmd.cmd.task, ucmd.cmd.dependsOn);
             co_return result ? fmt::format(R"(Task "{}" now depends on task "{}")", ucmd.cmd.task, ucmd.cmd.dependsOn)
@@ -119,17 +119,17 @@ Director::Async<std::string> Server::HandleCommand(UserCommand &&command) const 
           },
           // Check if a task/token pair is valid
           [this](const OrchCommand<CheckTaskToken> &ucmd) -> Director::Async<std::string> {
-            auto tokenResult = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!tokenResult.first) {
-              co_return std::move(tokenResult.second);
+            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+            if (!valid) {
+              co_return serverReply;
             }
             co_return fmt::format("Task/token pair is valid.");
           },
           // Submit a new job
           [this](OrchCommand<SubmitJob> &ucmd) -> Director::Async<std::string> {
-            auto tokenResult = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!tokenResult.first) {
-              co_return std::move(tokenResult.second);
+            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+            if (!valid) {
+              co_return serverReply;
             }
             std::string job_hash;
             ucmd.cmd.job["task"] = ucmd.cmd.task;
@@ -168,9 +168,9 @@ Director::Async<std::string> Server::HandleCommand(UserCommand &&command) const 
           },
           // Reset jobs in a given task that have status Failed
           [this](const OrchCommand<ResetFailedJobs> &ucmd) -> Director::Async<std::string> {
-            auto tokenResult = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
-            if (!tokenResult.first) {
-              co_return std::move(tokenResult.second);
+            auto [valid, serverReply] = ValidateTaskToken(ucmd.cmd.task, ucmd.cmd.token);
+            if (!valid) {
+              co_return serverReply;
             }
             auto result = co_await m_director->ResetFailedJobs(ucmd.cmd.task);
             co_return result ? fmt::format("Jobs reset") : result.error().Message().data();
