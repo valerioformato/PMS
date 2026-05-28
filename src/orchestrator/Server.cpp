@@ -1,8 +1,6 @@
 // c++ headers
 #include <chrono>
 #include <ranges>
-#include <stdexec/__detail/__execution_fwd.hpp>
-#include <stdexec/__detail/__upon_error.hpp>
 #include <thread>
 #include <vector>
 
@@ -215,15 +213,75 @@ IDirector::Async<std::string> Server::HandleCommand(PilotCommand &&command) cons
 }
 
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-  m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
-                  msg->get_payload());
-  m_endpoint.send(hdl, ProcessUserMessage(msg->get_payload()), websocketpp::frame::opcode::text);
+  auto payload = std::string{msg->get_payload()};
+  m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
+
+  exec::start_detached(stdexec::on(m_thread_pool.get_scheduler(),
+                                   stdexec::just(std::move(payload)) | stdexec::then([this](std::string p) {
+                                     auto parsed = json::parse(p, nullptr, false);
+                                     if (parsed.is_discarded())
+                                       throw std::runtime_error("JSON parse error");
+                                     return CommandParser::toUserCommand(parsed);
+                                   }) | stdexec::let_value([this](auto &&cmd) {
+                                     return HandleCommand(std::move(cmd));
+                                   }) | stdexec::then([this, hdl](std::string reply) {
+                                     websocketpp::lib::error_code ec;
+                                     m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
+                                     if (ec)
+                                       m_logger->error("Error sending reply: {}", ec.message());
+                                   }) | stdexec::upon_error([this, hdl](std::exception_ptr ep) {
+                                     std::string error_reply;
+                                     try {
+                                       std::rethrow_exception(ep);
+                                     } catch (const std::exception &e) {
+                                       m_logger->error("Error handling message: {}", e.what());
+                                       error_reply =
+                                           fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
+                                     } catch (...) {
+                                       m_logger->error("Unknown error handling message");
+                                       error_reply = "Invalid message, please check... :|";
+                                     }
+                                     websocketpp::lib::error_code ec;
+                                     m_endpoint.send(hdl, error_reply, websocketpp::frame::opcode::text, ec);
+                                     if (ec)
+                                       m_logger->error("Error sending error reply: {}", ec.message());
+                                   })));
 }
 
 void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
-  m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
-                  msg->get_payload());
-  m_pilot_endpoint.send(hdl, ProcessPilotMessage(msg->get_payload()), websocketpp::frame::opcode::text);
+  auto payload = std::string{msg->get_payload()};
+  m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
+
+  exec::start_detached(stdexec::on(m_thread_pool.get_scheduler(),
+                                   stdexec::just(std::move(payload)) | stdexec::then([this](std::string p) {
+                                     auto parsed = json::parse(p, nullptr, false);
+                                     if (parsed.is_discarded())
+                                       throw std::runtime_error("JSON parse error");
+                                     return CommandParser::toPilotCommand(parsed);
+                                   }) | stdexec::let_value([this](auto &&cmd) {
+                                     return HandleCommand(std::move(cmd));
+                                   }) | stdexec::then([this, hdl](std::string reply) {
+                                     websocketpp::lib::error_code ec;
+                                     m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
+                                     if (ec)
+                                       m_logger->error("Error sending pilot reply: {}", ec.message());
+                                   }) | stdexec::upon_error([this, hdl](std::exception_ptr ep) {
+                                     std::string error_reply;
+                                     try {
+                                       std::rethrow_exception(ep);
+                                     } catch (const std::exception &e) {
+                                       m_logger->error("Error handling pilot message: {}", e.what());
+                                       error_reply =
+                                           fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
+                                     } catch (...) {
+                                       m_logger->error("Unknown error handling pilot message");
+                                       error_reply = "Invalid message, please check... :|";
+                                     }
+                                     websocketpp::lib::error_code ec;
+                                     m_pilot_endpoint.send(hdl, error_reply, websocketpp::frame::opcode::text, ec);
+                                     if (ec)
+                                       m_logger->error("Error sending pilot error reply: {}", ec.message());
+                                   })));
 }
 
 std::string Server::ProcessUserMessage(std::string_view payload) {
@@ -293,12 +351,10 @@ void Server::Start() {
 
   // Set the default message handler to our own handler
   m_endpoint.set_message_handler([this](auto &&PH1, auto &&PH2) {
-    m_threadPool.AddTask(&Server::message_handler, this, std::forward<decltype(PH1)>(PH1),
-                         std::forward<decltype(PH2)>(PH2));
+    message_handler(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
   });
   m_pilot_endpoint.set_message_handler([this](auto &&PH1, auto &&PH2) {
-    m_threadPool.AddTask(&Server::pilot_handler, this, std::forward<decltype(PH1)>(PH1),
-                         std::forward<decltype(PH2)>(PH2));
+    pilot_handler(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
   });
 
   SetupEndpoint(m_endpoint, m_port);
