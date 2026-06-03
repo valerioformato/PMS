@@ -212,104 +212,62 @@ IDirector::Async<std::string> Server::HandleCommand(PilotCommand &&command) cons
       command);
 }
 
+IDirector::Async<std::string> Server::MakeUserReplySender(std::string payload) {
+  try {
+    auto parsed = json::parse(payload, nullptr, false);
+    if (parsed.is_discarded())
+      throw std::runtime_error("JSON parse error");
+    co_return co_await HandleCommand(CommandParser::toUserCommand(parsed));
+  } catch (const std::exception &e) {
+    m_logger->error("Error handling message: {}", e.what());
+    co_return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
+  } catch (...) {
+    m_logger->error("Unknown error handling message");
+    co_return std::string{"Invalid message, please check... :|"};
+  }
+}
+
+IDirector::Async<std::string> Server::MakePilotReplySender(std::string payload) {
+  try {
+    auto parsed = json::parse(payload, nullptr, false);
+    if (parsed.is_discarded())
+      throw std::runtime_error("JSON parse error");
+    co_return co_await HandleCommand(CommandParser::toPilotCommand(parsed));
+  } catch (const std::exception &e) {
+    m_logger->error("Error handling pilot message: {}", e.what());
+    co_return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
+  } catch (...) {
+    m_logger->error("Unknown error handling pilot message");
+    co_return std::string{"Invalid message, please check... :|"};
+  }
+}
+
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
   auto payload = std::string{msg->get_payload()};
   m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
 
-  exec::start_detached(stdexec::on(m_thread_pool.get_scheduler(),
-                                   stdexec::just(std::move(payload)) | stdexec::then([this](std::string p) {
-                                     auto parsed = json::parse(p, nullptr, false);
-                                     if (parsed.is_discarded())
-                                       throw std::runtime_error("JSON parse error");
-                                     return CommandParser::toUserCommand(parsed);
-                                   }) | stdexec::let_value([this](auto &&cmd) {
-                                     return HandleCommand(std::move(cmd));
-                                   }) | stdexec::then([this, hdl](std::string reply) {
-                                     websocketpp::lib::error_code ec;
-                                     m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
-                                     if (ec)
-                                       m_logger->error("Error sending reply: {}", ec.message());
-                                   }) | stdexec::upon_error([this, hdl](std::exception_ptr ep) {
-                                     std::string error_reply;
-                                     try {
-                                       std::rethrow_exception(ep);
-                                     } catch (const std::exception &e) {
-                                       m_logger->error("Error handling message: {}", e.what());
-                                       error_reply =
-                                           fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
-                                     } catch (...) {
-                                       m_logger->error("Unknown error handling message");
-                                       error_reply = "Invalid message, please check... :|";
-                                     }
-                                     websocketpp::lib::error_code ec;
-                                     m_endpoint.send(hdl, error_reply, websocketpp::frame::opcode::text, ec);
-                                     if (ec)
-                                       m_logger->error("Error sending error reply: {}", ec.message());
-                                   })));
+  exec::start_detached(
+      stdexec::on(m_thread_pool.get_scheduler(),
+                  MakeUserReplySender(std::move(payload)) | stdexec::then([this, hdl](std::string reply) {
+                    websocketpp::lib::error_code ec;
+                    m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
+                    if (ec)
+                      m_logger->error("Error sending reply: {}", ec.message());
+                  })));
 }
 
 void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
   auto payload = std::string{msg->get_payload()};
   m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
 
-  exec::start_detached(stdexec::on(m_thread_pool.get_scheduler(),
-                                   stdexec::just(std::move(payload)) | stdexec::then([this](std::string p) {
-                                     auto parsed = json::parse(p, nullptr, false);
-                                     if (parsed.is_discarded())
-                                       throw std::runtime_error("JSON parse error");
-                                     return CommandParser::toPilotCommand(parsed);
-                                   }) | stdexec::let_value([this](auto &&cmd) {
-                                     return HandleCommand(std::move(cmd));
-                                   }) | stdexec::then([this, hdl](std::string reply) {
-                                     websocketpp::lib::error_code ec;
-                                     m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
-                                     if (ec)
-                                       m_logger->error("Error sending pilot reply: {}", ec.message());
-                                   }) | stdexec::upon_error([this, hdl](std::exception_ptr ep) {
-                                     std::string error_reply;
-                                     try {
-                                       std::rethrow_exception(ep);
-                                     } catch (const std::exception &e) {
-                                       m_logger->error("Error handling pilot message: {}", e.what());
-                                       error_reply =
-                                           fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
-                                     } catch (...) {
-                                       m_logger->error("Unknown error handling pilot message");
-                                       error_reply = "Invalid message, please check... :|";
-                                     }
-                                     websocketpp::lib::error_code ec;
-                                     m_pilot_endpoint.send(hdl, error_reply, websocketpp::frame::opcode::text, ec);
-                                     if (ec)
-                                       m_logger->error("Error sending pilot error reply: {}", ec.message());
-                                   })));
-}
-
-std::string Server::ProcessUserMessage(std::string_view payload) {
-  auto parsed = json::parse(payload, nullptr, false);
-  if (parsed.is_discarded())
-    return "Invalid message, please check... :| (JSON parse error)";
-  try {
-    auto cmd = CommandParser::toUserCommand(parsed);
-    auto [r] = stdexec::sync_wait(stdexec::on(m_thread_pool.get_scheduler(), HandleCommand(std::move(cmd)))).value();
-    return r;
-  } catch (const std::exception &e) {
-    m_logger->error("Error handling message: {}", e.what());
-    return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
-  }
-}
-
-std::string Server::ProcessPilotMessage(std::string_view payload) {
-  auto parsed = json::parse(payload, nullptr, false);
-  if (parsed.is_discarded())
-    return "Invalid message, please check... :| (JSON parse error)";
-  try {
-    auto cmd = CommandParser::toPilotCommand(parsed);
-    auto [r] = stdexec::sync_wait(stdexec::on(m_thread_pool.get_scheduler(), HandleCommand(std::move(cmd)))).value();
-    return r;
-  } catch (const std::exception &e) {
-    m_logger->error("Error handling pilot message: {}", e.what());
-    return fmt::format("Invalid message, please check... :|\n  Error: {}", e.what());
-  }
+  exec::start_detached(
+      stdexec::on(m_thread_pool.get_scheduler(),
+                  MakePilotReplySender(std::move(payload)) | stdexec::then([this, hdl](std::string reply) {
+                    websocketpp::lib::error_code ec;
+                    m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
+                    if (ec)
+                      m_logger->error("Error sending pilot reply: {}", ec.message());
+                  })));
 }
 
 void Server::SetupEndpoint(WSserver &endpoint, unsigned int port) {

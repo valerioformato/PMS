@@ -43,8 +43,8 @@ protected:
   IDirector::Async<std::string> HandleCommand(UserCommand &&command) const;
   IDirector::Async<std::string> HandleCommand(PilotCommand &&command) const;
 
-  std::string ProcessUserMessage(std::string_view payload);
-  std::string ProcessPilotMessage(std::string_view payload);
+  IDirector::Async<std::string> MakeUserReplySender(std::string payload);
+  IDirector::Async<std::string> MakePilotReplySender(std::string payload);
 
 private:
   std::shared_ptr<spdlog::logger> m_logger;

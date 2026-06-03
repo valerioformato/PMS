@@ -11,6 +11,7 @@ orchestrator/testCommandParsing.cpp
 orchestrator/testTask.cpp
 orchestrator/testDirector.cpp
 orchestrator/testHandleCommand.cpp
+orchestrator/testSenderChain.cpp
 orchestrator/testOrchestratorConfig.cpp
 )
 target_include_directories(run_tests PRIVATE ${CMAKE_SOURCE_DIR}/testsuite)
