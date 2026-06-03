@@ -12,7 +12,6 @@
 #include <mongocxx/client.hpp>
 #include <mongocxx/exception/exception.hpp>
 
-#include "MongoDBBackend.h"
 #include "db/backends/MongoDB/MongoDBBackend.h"
 
 namespace PMS::JsonUtils {

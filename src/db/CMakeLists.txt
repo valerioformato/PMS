@@ -1,6 +1,4 @@
 set(MongoDBBackend_src
-backends/MongoDB/PoolHandle.cpp
-backends/MongoDB/DBHandle.cpp
 backends/MongoDB/MongoDBBackend.cpp    
 )
 

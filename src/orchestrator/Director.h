@@ -19,7 +19,6 @@
 // our headers
 #include "common/queue.h"
 #include "db/backends/MongoDB/MongoDBBackend.h"
-#include "db/backends/MongoDB/PoolHandle.h"
 #include "db/harness/Harness.h"
 #include "orchestrator/IDirector.h"
 #include "orchestrator/Task.h"
