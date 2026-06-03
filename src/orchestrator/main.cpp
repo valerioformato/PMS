@@ -78,7 +78,7 @@ int main(int argc, const char **argv) {
   director->SetBackDB(config.back_dbhost, config.back_dbname);
   director->SetMaxJobTransferQuerySize(config.maxJobTransferQuerySize);
 
-  Orchestrator::Server server{config.listeningPort, director, config.nConnectionThreads};
+  Orchestrator::Server server{config.listeningPort, director, config.n_connection_threads};
 
   // prepare to run everything...
   std::vector<std::thread> threads;

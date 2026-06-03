@@ -3,6 +3,7 @@
 
 // c++ headers
 #include <string>
+#include <thread>
 
 // our headers
 #include "db/CredType.h"
@@ -29,7 +30,8 @@ struct Config {
 
   unsigned int listeningPort = 0;
 
-  unsigned int nConnectionThreads = 32;
+  unsigned int n_connection_threads = 4 * std::thread::hardware_concurrency();
+  unsigned int n_IO_threads = 4 * std::thread::hardware_concurrency();
 
   unsigned int maxJobTransferQuerySize = 1000u;
 };

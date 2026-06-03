@@ -49,7 +49,7 @@ SCENARIO("OrchestratorConfig: all fields present", "[OrchestratorConfig]") {
         REQUIRE(c.front_dbhost == "mongo://front:27017");
         REQUIRE(c.front_dbname == "front_db");
         REQUIRE(c.listeningPort == 8080u);
-        REQUIRE(c.nConnectionThreads == 16u);
+        REQUIRE(c.n_connection_threads == 16u);
         REQUIRE(c.maxJobTransferQuerySize == 500u);
       }
     }
@@ -74,7 +74,7 @@ SCENARIO("OrchestratorConfig: optional fields absent", "[OrchestratorConfig]") {
       Config c{path.string()};
 
       THEN("optional fields retain their default values") {
-        REQUIRE(c.nConnectionThreads == 32u);
+        REQUIRE(c.n_connection_threads == 32u);
         REQUIRE(c.maxJobTransferQuerySize == 1000u);
       }
 

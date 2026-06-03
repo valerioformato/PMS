@@ -28,7 +28,11 @@ Config::Config(std::string_view fileName) {
   listeningPort = configJson["listeningPort"].get<unsigned int>();
 
   if (configJson.contains("nConnectionThreads")) {
-    nConnectionThreads = configJson["nConnectionThreads"].get<unsigned int>();
+    n_connection_threads = configJson["nConnectionThreads"].get<unsigned int>();
+  }
+
+  if (configJson.contains("nIOThreads")) {
+    n_IO_threads = configJson["nIOThreads"].get<unsigned int>();
   }
 
   if (configJson.contains("maxJobTransferQuerySize")) {
