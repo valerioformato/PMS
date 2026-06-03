@@ -20,19 +20,6 @@
 - `websocketpp::send()` is thread-safe (posts through the asio strand internally), so calling it from a stdexec pool thread is safe.
 - The `hdl` captured in the `start_detached` lambda remains valid as long as the connection is open. Connection lifetime is independent of `message_handler` returning — the connection stays open until a close frame is exchanged or a network error occurs.
 
-### Separate compute and I/O thread pools
-
-`mongocxx` is a blocking driver. Even with a fully sender-based pipeline, a thread is held for the entire DB roundtrip whenever a DB call is made via `ex::then`. Under load (many pilots, high DB latency), compute threads pile up waiting on MongoDB and fast operations (liveness probes, heartbeats) queue behind them — the same problem as the old `Thread::Pool` model.
-
-**Fix**: split `m_thread_pool` into two distinct stdexec pools:
-
-- **Compute pool** (`hardware_concurrency` threads): JSON parsing, command dispatch, response serialization — pure CPU, microseconds per task.
-- **I/O pool** (`~4× hardware_concurrency` threads, co-configured with `mongocxx::pool` size): all blocking DB calls, scheduled via `ex::on(io_scheduler, ...)` at the Harness layer.
-
-The `ex::read_env(ex::get_scheduler)` injection point already planned in the Harness step (Step 1 above) naturally supports this: the Harness picks up whichever scheduler is in its environment. The Server injects the compute scheduler at the top of the pipeline; the Harness switches to the I/O scheduler internally for each DB operation and resumes on the compute scheduler when done.
-
-Sizing guidance: I/O pool thread count should equal `mongocxx::pool` max size — more I/O threads than DB connections gain nothing (threads queue on the connection pool). Expose both as `OrchestratorConfig` fields with sensible defaults.
-
 ### Steps
 
 1. **Harness**: add `RunQuery` / `BulkWrite` overloads returning `sender<ErrorOr<QueryResult>>` by scheduling on the ambient scheduler via `ex::read_env(ex::get_scheduler)`.
