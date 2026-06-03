@@ -34,8 +34,13 @@ std::filesystem::path write_temp_config(const json &cfg) {
 SCENARIO("OrchestratorConfig: all fields present", "[OrchestratorConfig]") {
   GIVEN("a config file with all mandatory and optional fields") {
     json cfg = {
-        {"back_dbhost", "mongo://back:27017"}, {"back_dbname", "back_db"}, {"front_dbhost", "mongo://front:27017"},
-        {"front_dbname", "front_db"},          {"listeningPort", 8080u},   {"nConnectionThreads", 16u},
+        {"back_dbhost", "mongo://back:27017"},
+        {"back_dbname", "back_db"},
+        {"front_dbhost", "mongo://front:27017"},
+        {"front_dbname", "front_db"},
+        {"listeningPort", 8080u},
+        {"nConnectionThreads", 16u},
+        {"nIOThreads", 16u},
         {"maxJobTransferQuerySize", 500u},
     };
     auto path = write_temp_config(cfg);
@@ -50,6 +55,7 @@ SCENARIO("OrchestratorConfig: all fields present", "[OrchestratorConfig]") {
         REQUIRE(c.front_dbname == "front_db");
         REQUIRE(c.listeningPort == 8080u);
         REQUIRE(c.n_connection_threads == 16u);
+        REQUIRE(c.n_IO_threads == 16u);
         REQUIRE(c.maxJobTransferQuerySize == 500u);
       }
     }
@@ -73,8 +79,10 @@ SCENARIO("OrchestratorConfig: optional fields absent", "[OrchestratorConfig]") {
     WHEN("Config is constructed") {
       Config c{path.string()};
 
+      auto hardware_concurrency = std::thread::hardware_concurrency();
       THEN("optional fields retain their default values") {
-        REQUIRE(c.n_connection_threads == 32u);
+        REQUIRE(c.n_connection_threads == hardware_concurrency);
+        REQUIRE(c.n_IO_threads == 4u * hardware_concurrency);
         REQUIRE(c.maxJobTransferQuerySize == 1000u);
       }
 
