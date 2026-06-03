@@ -73,7 +73,7 @@ int main(int argc, const char **argv) {
   std::string configFileName = args["<configfile>"].asString();
   const Orchestrator::Config config{configFileName};
 
-  auto director = std::make_shared<Orchestrator::Director>();
+  auto director = std::make_shared<Orchestrator::Director>(config.n_IO_threads);
   director->SetFrontDB(config.front_dbhost, config.front_dbname);
   director->SetBackDB(config.back_dbhost, config.back_dbname);
   director->SetMaxJobTransferQuerySize(config.maxJobTransferQuerySize);

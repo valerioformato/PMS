@@ -2,6 +2,7 @@
 #define PMS_ORCHESTRATOR_DIRECTOR_H
 
 // c++ headers
+#include <exec/static_thread_pool.hpp>
 #include <future>
 #include <mutex>
 #include <queue>
@@ -28,12 +29,14 @@ using json = nlohmann::json;
 namespace PMS::Orchestrator {
 class Director : public IDirector {
 public:
-  Director() : m_logger{spdlog::get("Director") ? spdlog::get("Director") : spdlog::stdout_color_st("Director")} {}
+  Director(unsigned int n_io_threads)
+      : m_logger{spdlog::get("Director") ? spdlog::get("Director") : spdlog::stdout_color_st("Director")},
+        m_io_thread_pool{n_io_threads} {}
 
   // Injection constructor for testing: accepts pre-built Harness instances.
-  Director(std::unique_ptr<DB::Harness> frontDB, std::unique_ptr<DB::Harness> backDB)
+  Director(unsigned int n_io_threads, std::unique_ptr<DB::Harness> frontDB, std::unique_ptr<DB::Harness> backDB)
       : m_logger{spdlog::get("Director") ? spdlog::get("Director") : spdlog::stdout_color_st("Director")},
-        m_frontDB{std::move(frontDB)}, m_backDB{std::move(backDB)} {}
+        m_io_thread_pool{n_io_threads}, m_frontDB{std::move(frontDB)}, m_backDB{std::move(backDB)} {}
 
   void Start();
   void Stop();
@@ -107,6 +110,8 @@ private:
   std::unordered_map<std::string, ClaimedJob> m_claimedJobs;
 
   std::shared_ptr<spdlog::logger> m_logger;
+
+  exec::static_thread_pool m_io_thread_pool;
 
   std::unique_ptr<DB::Harness> m_frontDB;
   std::unique_ptr<DB::Harness> m_backDB;

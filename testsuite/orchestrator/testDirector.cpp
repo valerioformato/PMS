@@ -56,7 +56,7 @@ struct Fixture {
   }
 
   Director make_director() {
-    return Director{std::make_unique<DB::Harness>(std::move(frontOwned)),
+    return Director{1u, std::make_unique<DB::Harness>(std::move(frontOwned)),
                     std::make_unique<DB::Harness>(std::move(backOwned))};
   }
 };
