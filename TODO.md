@@ -54,6 +54,61 @@ Sizing guidance: I/O pool thread count should equal `mongocxx::pool` max size �
 
 ---
 
+## Separate compute and I/O thread pools
+
+**Goal**: prevent MongoDB roundtrips from blocking compute threads by dispatching all DB calls to a dedicated I/O pool and resuming on the compute pool when they return.
+
+### Design decisions
+
+- **`Harness` stays scheduler-agnostic.** The existing `RunQuery(scheduler, q)` / `BulkWrite(scheduler, table, q)` overloads already accept any scheduler — no changes there.
+- **All scheduling policy lives in `Director`.** Each coroutine method captures the ambient (compute) scheduler via `read_env(get_scheduler)`, dispatches DB work onto `m_io_scheduler`, then hops back via `continues_on`.
+- **Background threads** (`JobInsert`, `RunClaimQueries`, etc.) call the sync `RunQuery(q)` overload directly and already acquire their own `mongocxx::pool` entry per call — no changes needed.
+- **Destruction order**: `m_io_pool` must be declared in `Director` **before** `m_frontDB`/`m_backDB` so the pool outlives the DB handles (members are destroyed in reverse declaration order).
+
+### Steps
+
+1. **`OrchestratorConfig`**: add `nIOThreads` field (default: `4 × hardware_concurrency`). Co-size with `mongocxx::pool` max connections — more I/O threads than DB connections gain nothing.
+
+2. **`Director.h`**: add `exec::static_thread_pool m_io_pool` declared **before** `m_frontDB`/`m_backDB`. Expose its scheduler as `m_io_scheduler` (or call `m_io_pool.get_scheduler()` at each use site).
+
+3. **`Director` helper**: add a private `run_on_io` helper to reduce per-callsite boilerplate:
+   ```cpp
+   auto run_on_io(stdexec::scheduler auto compute_sched, stdexec::sender auto s) {
+     return stdexec::on(m_io_scheduler, std::move(s))
+            | stdexec::continues_on(compute_sched);
+   }
+   ```
+
+4. **Coroutine call sites** (8 methods: `CreateTask`, `AddNewJob`, `PilotClaimJob`, `ValidateTaskToken`, `UpdateJobStatus`, `RegisterNewPilot`, `DeleteHeartBeat`, `AddTaskDependency`): at each `co_await RunQuery` / `co_await BulkWrite` call, replace the ambient scheduler with `m_io_scheduler` and restore via `continues_on`:
+   ```cpp
+   auto compute_sched = co_await stdexec::read_env(stdexec::get_scheduler);
+   auto result = co_await run_on_io(compute_sched, m_frontDB->RunQuery(m_io_scheduler, q));
+   ```
+
+5. **`ClearTask`** (uses `stdexec::when_all` with two parallel DB calls): capture `compute_sched` before the `when_all`, then pipe `continues_on(compute_sched)` after it:
+   ```cpp
+   auto compute_sched = co_await stdexec::read_env(stdexec::get_scheduler);
+   co_await (stdexec::when_all(
+       m_frontDB->RunQuery(m_io_scheduler, q1),
+       m_backDB->RunQuery(m_io_scheduler, q2))
+     | stdexec::continues_on(compute_sched));
+   ```
+
+6. **`main.cpp`**: pass `nIOThreads` when constructing `Director` (or call a `SetIOThreads(n)` setter, consistent with the existing `SetFrontDB`/`SetBackDB` pattern).
+
+7. **Rename** `m_thread_pool` → `m_compute_pool` in `Server` for clarity now that two pools exist.
+
+### Sizing guidance
+
+| Pool | Thread count | Rationale |
+|---|---|---|
+| Compute | `hardware_concurrency` | CPU-bound work; more threads add contention |
+| I/O | `= mongocxx::pool max_size` | Each I/O thread may hold one DB connection; surplus threads just queue |
+
+Both values exposed as `OrchestratorConfig` fields with the defaults above.
+
+---
+
 ## JSON library migration: nlohmann → glaze
 
 **Goal**: replace `nlohmann::json` with [glaze](https://github.com/stephenberry/glaze), using static struct-based serialization where schemas are known and `glz::generic` only where truly dynamic.
