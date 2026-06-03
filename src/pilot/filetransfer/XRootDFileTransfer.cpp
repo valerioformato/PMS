@@ -5,6 +5,7 @@
 // external dependencies
 #include <XrdCl/XrdClConstants.hh>
 #include <XrdCl/XrdClFileSystem.hh>
+#include <algorithm>
 #include <filesystem>
 #include <magic_enum/magic_enum.hpp>
 #include <spdlog/fmt/bundled/ranges.h>
@@ -37,7 +38,7 @@ static XrdProtocol getProtocol(std::string_view fileName) {
 };
 
 static std::vector<std::string> IndexRemote(XrdCl::FileSystem *fs, std::string basePath) {
-  XrdCl::DirectoryList *dirList = 0;
+  XrdCl::DirectoryList *dirList = nullptr;
   XrdCl::XRootDStatus st =
       fs->DirList(XrdCl::URL{basePath}.GetPath(),
                   XrdCl::DirListFlags::Recursive | XrdCl::DirListFlags::Locate | XrdCl::DirListFlags::Merge, dirList);
@@ -107,13 +108,13 @@ ErrorOr<void> FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &f
 
   auto sourceProtocol = getProtocol(sourceFile);
   // xrootd strips away all trailing slashes except one
-  while (sourceFile.rfind("//") == sourceFile.length() - 2) {
+  while (sourceFile.ends_with("//")) {
     sourceFile.pop_back();
   }
 
   auto destProtocol = getProtocol(destFile);
   // xrootd strips away all trailing slashes except one
-  while (destFile.rfind("//") == destFile.length() - 2) {
+  while (destFile.ends_with("//")) {
     destFile.pop_back();
   }
 
@@ -169,18 +170,18 @@ ErrorOr<void> FileTransferQueue::AddXRootDFileTransfer(const FileTransferInfo &f
           return make_error(std::make_error_code(std::errc::io_error), "Error indexing remote directory.");
         }
       } else {
-        sourceFiles.push_back(std::string{sourceFile});
+        sourceFiles.emplace_back(sourceFile);
       }
     }
 
     delete statInfo;
   } else {
-    sourceFiles.push_back(std::string{sourceFile});
+    sourceFiles.emplace_back(sourceFile);
   }
 
   for (auto &sfile : sourceFiles) {
     // Create a job for every source
-    XrdCl::PropertyList *results = new XrdCl::PropertyList;
+    auto *results = new XrdCl::PropertyList;
     if (sourceProtocol == XrdProtocol::LOCAL) {
       // make sure it is an absolute path
       if (sfile.front() == '/')
@@ -290,7 +291,7 @@ std::vector<std::string> FileTransferQueue::IndexXRootDRemote(std::string_view d
   if (st.IsOK() && statInfo->TestFlags(XrdCl::StatInfo::IsDir)) {
     result = IndexRemote(fs.get(), source.GetURL());
   }
-  std::for_each(begin(result), end(result), [](std::string &fname) { fname = fs::path{fname}.filename().string(); });
+  std::ranges::for_each(result, [](std::string &fname) { fname = fs::path{fname}.filename().string(); });
 
   delete statInfo;
 

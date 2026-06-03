@@ -89,6 +89,40 @@ Sizing guidance: I/O pool thread count should equal `mongocxx::pool` max size �
 
 ---
 
+## Modernize XRootDTransfer code
+
+**Goal**: apply C++ modernization fixes to `src/pilot/filetransfer/XRootDFileTransfer.cpp` (and its companion header `FileTransferQueue.h`) using clang-tidy's `modernize-*` checks.
+
+### Checks to apply
+
+Run with:
+```
+clang-tidy -p build/debug/compile_commands.json \
+  -checks='-*,modernize-*,-modernize-use-trailing-return-type' \
+  --header-filter='src/pilot/.*' \
+  src/pilot/filetransfer/XRootDFileTransfer.cpp
+```
+
+`modernize-use-trailing-return-type` is excluded — it is purely stylistic and would produce noise without improving readability for this codebase.
+
+### Known findings (as of initial audit)
+
+| Line | Check | Description |
+|---|---|---|
+| L40 (`IndexRemote`) | `modernize-use-nullptr` | `XrdCl::DirectoryList *dirList = 0` → `nullptr` |
+| L110, L116 (`AddXRootDFileTransfer`) | `modernize-use-starts-ends-with` | `rfind("//") == length() - 2` → `ends_with("//")` |
+| L172, L178 (`AddXRootDFileTransfer`) | `modernize-use-emplace` | `push_back(std::string{...})` → `emplace_back(...)` |
+| L183 (`AddXRootDFileTransfer`) | `modernize-use-auto` | `XrdCl::PropertyList *results = new XrdCl::PropertyList` → `auto *results = new ...` |
+| L293 (`IndexXRootDRemote`) | `modernize-use-ranges` | `std::for_each(begin(...), end(...), ...)` → `std::ranges::for_each(...)` |
+
+### Steps
+
+1. Re-run clang-tidy with the command above to confirm the current finding list.
+2. Apply fixes with `-fix` flag (or manually), excluding `modernize-use-trailing-return-type`.
+3. Build and verify no regressions.
+
+---
+
 ## Test coverage expansion
 
 **Current state**: 124 assertions across 9 test cases. Coverage is limited to the DB query builders, `Harness`, `MongoDBBackend` helpers, and `Utils`. The orchestrator layer (`Server`, `Director`, `Task`) has zero test coverage.
