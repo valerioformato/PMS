@@ -48,42 +48,37 @@
 ### Design decisions
 
 - **`Harness` stays scheduler-agnostic.** The existing `RunQuery(scheduler, q)` / `BulkWrite(scheduler, table, q)` overloads already accept any scheduler — no changes there.
-- **All scheduling policy lives in `Director`.** Each coroutine method captures the ambient (compute) scheduler via `read_env(get_scheduler)`, dispatches DB work onto `m_io_scheduler`, then hops back via `continues_on`.
+- **All scheduling policy lives in `Director`.** Each coroutine method captures the ambient (compute) scheduler via `read_env(get_scheduler)`, dispatches DB work onto `m_io_thread_pool.get_scheduler()`, then hops back via `continues_on`.
 - **Background threads** (`JobInsert`, `RunClaimQueries`, etc.) call the sync `RunQuery(q)` overload directly and already acquire their own `mongocxx::pool` entry per call — no changes needed.
-- **Destruction order**: `m_io_pool` must be declared in `Director` **before** `m_frontDB`/`m_backDB` so the pool outlives the DB handles (members are destroyed in reverse declaration order).
+- **Destruction order**: `m_io_thread_pool` must be declared in `Director` **before** `m_frontDB`/`m_backDB` so the pool outlives the DB handles (members are destroyed in reverse declaration order).
 
 ### Steps
 
-1. **`OrchestratorConfig`**: add `nIOThreads` field (default: `4 × hardware_concurrency`). Co-size with `mongocxx::pool` max connections — more I/O threads than DB connections gain nothing.
+- [x] **1. `OrchestratorConfig`**: add `nIOThreads` field (default: `4 × hardware_concurrency`). Co-size with `mongocxx::pool` max connections — more I/O threads than DB connections gain nothing.
 
-2. **`Director.h`**: add `exec::static_thread_pool m_io_pool` declared **before** `m_frontDB`/`m_backDB`. Expose its scheduler as `m_io_scheduler` (or call `m_io_pool.get_scheduler()` at each use site).
+- [x] **2. `Director.h`**: add `exec::static_thread_pool m_io_thread_pool` declared **before** `m_frontDB`/`m_backDB`. Use `m_io_thread_pool.get_scheduler()` at each DB call site.
 
-3. **`Director` helper**: add a private `run_on_io` helper to reduce per-callsite boilerplate:
-   ```cpp
-   auto run_on_io(stdexec::scheduler auto compute_sched, stdexec::sender auto s) {
-     return stdexec::on(m_io_scheduler, std::move(s))
-            | stdexec::continues_on(compute_sched);
-   }
-   ```
+- [x] **3. `Director` helper**: resolved by decision to keep manual call-site scheduling instead of introducing a `run_on_io` helper.
 
-4. **Coroutine call sites** (8 methods: `CreateTask`, `AddNewJob`, `PilotClaimJob`, `ValidateTaskToken`, `UpdateJobStatus`, `RegisterNewPilot`, `DeleteHeartBeat`, `AddTaskDependency`): at each `co_await RunQuery` / `co_await BulkWrite` call, replace the ambient scheduler with `m_io_scheduler` and restore via `continues_on`:
+- [x] **4. Coroutine call sites** (8 methods: `CreateTask`, `AddNewJob`, `PilotClaimJob`, `ValidateTaskToken`, `UpdateJobStatus`, `RegisterNewPilot`, `DeleteHeartBeat`, `AddTaskDependency`): at each `co_await RunQuery` / `co_await BulkWrite` call, dispatch onto `m_io_thread_pool.get_scheduler()` and restore via `continues_on`:
    ```cpp
    auto compute_sched = co_await stdexec::read_env(stdexec::get_scheduler);
-   auto result = co_await run_on_io(compute_sched, m_frontDB->RunQuery(m_io_scheduler, q));
-   ```
-
-5. **`ClearTask`** (uses `stdexec::when_all` with two parallel DB calls): capture `compute_sched` before the `when_all`, then pipe `continues_on(compute_sched)` after it:
-   ```cpp
-   auto compute_sched = co_await stdexec::read_env(stdexec::get_scheduler);
-   co_await (stdexec::when_all(
-       m_frontDB->RunQuery(m_io_scheduler, q1),
-       m_backDB->RunQuery(m_io_scheduler, q2))
+   auto result = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(), q)
      | stdexec::continues_on(compute_sched));
    ```
 
-6. **`main.cpp`**: pass `nIOThreads` when constructing `Director` (or call a `SetIOThreads(n)` setter, consistent with the existing `SetFrontDB`/`SetBackDB` pattern).
+- [x] **5. `ClearTask`** (uses `stdexec::when_all` with two parallel DB calls): capture `compute_sched` before the `when_all`, then pipe `continues_on(compute_sched)` after it:
+   ```cpp
+   auto compute_sched = co_await stdexec::read_env(stdexec::get_scheduler);
+   co_await (stdexec::when_all(
+       m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(), q1),
+       m_backDB->RunQuery(m_io_thread_pool.get_scheduler(), q2))
+     | stdexec::continues_on(compute_sched));
+   ```
 
-7. **Rename** `m_thread_pool` → `m_compute_pool` in `Server` for clarity now that two pools exist.
+- [x] **6. `main.cpp`**: pass `nIOThreads` when constructing `Director` (or call a `SetIOThreads(n)` setter, consistent with the existing `SetFrontDB`/`SetBackDB` pattern).
+
+- [x] **7. Rename** `m_thread_pool` → `m_compute_pool` in `Server` for clarity now that two pools exist.
 
 ### Sizing guidance
 
@@ -159,15 +154,15 @@ clang-tidy -p build/debug/compile_commands.json \
 
 ### Steps
 
-1. Re-run clang-tidy with the command above to confirm the current finding list.
-2. Apply fixes with `-fix` flag (or manually), excluding `modernize-use-trailing-return-type`.
-3. Build and verify no regressions.
+- [x] **1.** Re-run clang-tidy with the command above to confirm the current finding list.
+- [x] **2.** Apply fixes with `-fix` flag (or manually), excluding `modernize-use-trailing-return-type`.
+- [x] **3.** Build and verify no regressions.
 
 ---
 
 ## Test coverage expansion
 
-**Current state**: 124 assertions across 9 test cases. Coverage is limited to the DB query builders, `Harness`, `MongoDBBackend` helpers, and `Utils`. The orchestrator layer (`Server`, `Director`, `Task`) has zero test coverage.
+**Historical baseline (before this work):** 124 assertions across 9 test cases. Coverage was limited to the DB query builders, `Harness`, `MongoDBBackend` helpers, and `Utils`, with no orchestrator-layer coverage.
 
 ### Prerequisite refactor: extract `IDirector` interface
 
@@ -177,7 +172,9 @@ Extract `IDirector` as an abstract base class in `Director.h` (or a dedicated `I
 
 `MockDirector` will use `trompeloeil::mock_interface<IDirector>`, mirroring the existing `MockBackend`.
 
-### Step 1 — `Task` struct (pure logic, no deps)
+**Status: [x] Complete**
+
+### [x] Step 1 — `Task` struct (pure logic, no deps)
 
 New file: `testsuite/orchestrator/testTask.cpp`
 
@@ -187,14 +184,14 @@ All four predicates tested across boundary conditions:
 - `IsExhausted()`: pending=0 and error=0 (true), pending > 0 (false)
 - `IsFailed()`: exhausted + failed > 0 (true), exhausted + failed = 0 (false)
 
-### Step 2 — `EnumArray` and `ts_queue`
+### [x] Step 2 — `EnumArray` and `ts_queue`
 
 New files: `testsuite/common/testEnumArray.cpp`, `testsuite/common/testQueue.cpp`
 
 - `EnumArray`: enum-keyed access, default construction, value assignment, out-of-bounds check
 - `ts_queue`: push/pop, empty(), size(), `consume_all()` drains queue correctly, concurrent pushes from N threads (all items recovered)
 
-### Step 3 — `toUserCommand` and `toPilotCommand`
+### [x] Step 3 — `toUserCommand` and `toPilotCommand`
 
 Extract both static methods from `Server` into free functions (or a `CommandParser` namespace) to make them independently testable without constructing a full `Server` instance. This extraction also helps with the future glaze migration.
 
@@ -210,7 +207,7 @@ Cover for both user and pilot sides:
 - Each valid command with all required fields present → correct variant
 - Each valid command with a required field missing → `InvalidCommand`
 
-### Step 4 — `Director` with mocked Harness
+### [x] Step 4 — `Director` with mocked Harness
 
 Add a constructor overload to `Director`: `Director(unique_ptr<Harness> frontDB, unique_ptr<Harness> backDB)` for test injection (alongside the existing `SetFrontDB`/`SetBackDB` approach). Use `MockBackend` → `Harness` → `Director`, mirroring the existing `testHarness.cpp` pattern.
 
@@ -227,7 +224,7 @@ New file: `testsuite/orchestrator/testDirector.cpp`
 | `AddTaskDependency` | in-memory task updated, DB Update called |
 | `ClearTask` | `deleteTask=true`: both DBs cleared + task map entry removed; `deleteTask=false`: jobs cleared only |
 
-### Step 5 — `Server::HandleCommand` with `MockDirector`
+### [x] Step 5 — `Server::HandleCommand` with `MockDirector`
 
 Depends on the `IDirector` prerequisite refactor.
 
@@ -239,7 +236,7 @@ One scenario per variant arm for both `HandleCommand(UserCommand&&)` and `Handle
 - `InvalidCommand`: returns the `errorMessage` field verbatim
 - `LivenessProbe`: returns `"OK"`, Director never called
 
-### Step 6 — `message_handler` / `pilot_handler` sender chains
+### [x] Step 6 — `message_handler` / `pilot_handler` sender chains
 
 Extract the sender pipeline construction from the websocket callback into a standalone function returning a sender, to allow testing without a live websocket. Then test:
 - Malformed JSON → `upon_error` fires → error reply returned
