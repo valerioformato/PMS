@@ -414,10 +414,12 @@ Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
 
   m_activePilots[to_string(pilotUuid)] = PilotInfo{to_string(pilotUuid), result.validTasks, tags};
 
-  auto insert_r = co_await m_frontDB->RunQuery(scheduler, DB::Queries::Insert{
-                                                              .collection = "pilots",
-                                                              .documents = {query},
-                                                          });
+  auto insert_r = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                                DB::Queries::Insert{
+                                                    .collection = "pilots",
+                                                    .documents = {query},
+                                                }) |
+                            stdexec::continues_on(scheduler));
   CO_TRY(insert_r);
 
   co_return result;
@@ -484,11 +486,13 @@ Async<ErrorOr<void>> Director::DeleteHeartBeat(std::string_view pilotUuid) {
 
   DB::Queries::Matches matches{{"uuid", pilotUuid}};
 
-  auto qr = co_await m_frontDB->RunQuery(scheduler, DB::Queries::Delete{
-                                                        .collection = "pilots",
-                                                        .options = {.limit = 1},
-                                                        .match = matches,
-                                                    });
+  auto qr = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                          DB::Queries::Delete{
+                                              .collection = "pilots",
+                                              .options = {.limit = 1},
+                                              .match = matches,
+                                          }) |
+                      stdexec::continues_on(scheduler));
 
   auto query_result = CO_TRY(qr);
 
@@ -514,12 +518,14 @@ Async<ErrorOr<void>> Director::AddTaskDependency(const std::string &task, const 
 
   DB::Queries::Matches matches{{"name", task}};
   DB::Queries::Updates update_action{{"dependencies", dependsOn, DB::Queries::UpdateOp::PUSH}};
-  auto result = co_await m_backDB->RunQuery(scheduler, DB::Queries::Update{
-                                                           .collection = "tasks",
-                                                           .options = {.limit = 1},
-                                                           .match = matches,
-                                                           .update = update_action,
-                                                       });
+  auto result = co_await (m_backDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                             DB::Queries::Update{
+                                                 .collection = "tasks",
+                                                 .options = {.limit = 1},
+                                                 .match = matches,
+                                                 .update = update_action,
+                                             }) |
+                          stdexec::continues_on(scheduler));
 
   CO_TRY(result);
 
@@ -547,10 +553,12 @@ Async<ErrorOr<std::string>> Director::CreateTask(const std::string &task) {
   insertQuery["name"] = newTask.name;
   insertQuery["token"] = newTask.token;
 
-  auto result = co_await m_backDB->RunQuery(scheduler, DB::Queries::Insert{
-                                                           .collection = "tasks",
-                                                           .documents = {insertQuery},
-                                                       });
+  auto result = co_await (m_backDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                             DB::Queries::Insert{
+                                                 .collection = "tasks",
+                                                 .documents = {insertQuery},
+                                             }) |
+                          stdexec::continues_on(scheduler));
 
   CO_TRY(result);
 
@@ -562,18 +570,23 @@ Async<ErrorOr<void>> Director::ClearTask(const std::string &task, bool deleteTas
 
   DB::Queries::Matches filter{{"task", task}};
 
-  auto [r1, r2] = co_await stdexec::when_all(
-      m_backDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = filter}),
-      m_frontDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = filter}));
+  auto [r1, r2] =
+      co_await (stdexec::when_all(m_backDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                                     DB::Queries::Delete{.collection = "jobs", .match = filter}),
+                                  m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                                      DB::Queries::Delete{.collection = "jobs", .match = filter})) |
+                stdexec::continues_on(scheduler));
   CO_TRY(r1);
   CO_TRY(r2);
 
   if (deleteTask) {
     DB::Queries::Matches task_filter{{"name", task}};
-    auto r3 = co_await m_backDB->RunQuery(scheduler, DB::Queries::Delete{
-                                                         .collection = "tasks",
-                                                         .match = task_filter,
-                                                     });
+    auto r3 = co_await (m_backDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                           DB::Queries::Delete{
+                                               .collection = "tasks",
+                                               .match = task_filter,
+                                           }) |
+                        stdexec::continues_on(scheduler));
     CO_TRY(r3);
     m_tasks.erase(task);
     m_logger->debug("Task {} deleted", task);
@@ -999,11 +1012,13 @@ Async<ErrorOr<Director::PilotInfo>> Director::GetPilotInfo(std::string_view uuid
   PilotInfo result;
   result.uuid = uuid;
 
-  auto r = co_await m_frontDB->RunQuery(scheduler, DB::Queries::Find{
-                                                       .collection = "pilots",
-                                                       .options{.limit = 1},
-                                                       .match = {{"uuid", uuid}},
-                                                   });
+  auto r = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                         DB::Queries::Find{
+                                             .collection = "pilots",
+                                             .options{.limit = 1},
+                                             .match = {{"uuid", uuid}},
+                                         }) |
+                     stdexec::continues_on(scheduler));
   auto pilot_info_json = CO_TRY(r);
   auto pilot_info_from_db = pilot_info_json[0];
 
@@ -1015,16 +1030,18 @@ Async<ErrorOr<Director::PilotInfo>> Director::GetPilotInfo(std::string_view uuid
   co_return result;
 }
 
-Async<ErrorOr<std::string>> Director::Summary(const std::string &user) const {
+Async<ErrorOr<std::string>> Director::Summary(const std::string &user) {
   json summary = json::array({});
 
   DB::Queries::Matches matches{{"user", user}};
   auto scheduler = co_await stdexec::read_env(stdexec::get_scheduler);
-  auto r = co_await m_frontDB->RunQuery(scheduler, DB::Queries::Distinct{
-                                                       .collection = "jobs",
-                                                       .field = "task",
-                                                       .match = matches,
-                                                   });
+  auto r = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                         DB::Queries::Distinct{
+                                             .collection = "jobs",
+                                             .field = "task",
+                                             .match = matches,
+                                         }) |
+                     stdexec::continues_on(scheduler));
   auto tasksQueryResult = CO_TRY(r);
 
   for (auto item : tasksQueryResult) {
@@ -1049,8 +1066,7 @@ Async<ErrorOr<std::string>> Director::Summary(const std::string &user) const {
   co_return summary.dump();
 }
 
-Async<ErrorOr<std::string>> Director::QueryBackDB(QueryOperation operation, const json &match,
-                                                  const json &option) const {
+Async<ErrorOr<std::string>> Director::QueryBackDB(QueryOperation operation, const json &match, const json &option) {
   m_logger->debug("QueryBackDB: {} {} {}", magic_enum::enum_name(operation), match.dump(), option.dump());
 
   auto scheduler = co_await stdexec::read_env(stdexec::get_scheduler);
@@ -1061,12 +1077,14 @@ Async<ErrorOr<std::string>> Director::QueryBackDB(QueryOperation operation, cons
     auto update_action = CO_TRY(PMS::DB::Queries::ToUpdates(option));
     update_action.emplace_back("lastUpdate", Utils::CurrentTimeToMillisSinceEpoch());
 
-    auto r = co_await m_frontDB->RunQuery(scheduler, DB::Queries::Update{
-                                                         .collection = "jobs",
-                                                         .options = {.limit = 1},
-                                                         .match = matches,
-                                                         .update = update_action,
-                                                     });
+    auto r = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                           DB::Queries::Update{
+                                               .collection = "jobs",
+                                               .options = {.limit = 1},
+                                               .match = matches,
+                                               .update = update_action,
+                                           }) |
+                       stdexec::continues_on(scheduler));
     CO_TRY(r);
     co_return fmt::format("Updated job {}", to_string_view(match["hash"]));
   }
@@ -1075,31 +1093,38 @@ Async<ErrorOr<std::string>> Director::QueryBackDB(QueryOperation operation, cons
     auto update_action = CO_TRY(PMS::DB::Queries::ToUpdates(option));
     update_action.emplace_back("lastUpdate", Utils::CurrentTimeToMillisSinceEpoch());
 
-    auto r = co_await m_frontDB->RunQuery(scheduler, DB::Queries::Update{
-                                                         .collection = "jobs",
-                                                         .match = matches,
-                                                         .update = update_action,
-                                                     });
+    auto r = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                           DB::Queries::Update{
+                                               .collection = "jobs",
+                                               .match = matches,
+                                               .update = update_action,
+                                           }) |
+                       stdexec::continues_on(scheduler));
     auto result = CO_TRY(r);
     co_return fmt::format("Matched {} jobs. Updated {} jobs", result["matched_count"].get<size_t>(),
                           result["modified_count"].get<size_t>());
   }
   case QueryOperation::DeleteOne: {
     auto matches = CO_TRY(PMS::DB::Queries::ToMatches(match));
-    auto [r1, r2] = co_await stdexec::when_all(
-        m_frontDB->RunQuery(scheduler,
-                            DB::Queries::Delete{.collection = "jobs", .options = {.limit = 1}, .match = matches}),
-        m_backDB->RunQuery(scheduler,
-                           DB::Queries::Delete{.collection = "jobs", .options = {.limit = 1}, .match = matches}));
+    auto [r1, r2] = co_await (
+        stdexec::when_all(
+            m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                DB::Queries::Delete{.collection = "jobs", .options = {.limit = 1}, .match = matches}),
+            m_backDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                               DB::Queries::Delete{.collection = "jobs", .options = {.limit = 1}, .match = matches})) |
+        stdexec::continues_on(scheduler));
     CO_TRY(r1);
     CO_TRY(r2);
     co_return fmt::format("Deleted job {}", to_string_view(match["hash"]));
   }
   case QueryOperation::DeleteMany: {
     auto matches = CO_TRY(PMS::DB::Queries::ToMatches(match));
-    auto [r1, r2] = co_await stdexec::when_all(
-        m_frontDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = matches}),
-        m_backDB->RunQuery(scheduler, DB::Queries::Delete{.collection = "jobs", .match = matches}));
+    auto [r1, r2] =
+        co_await (stdexec::when_all(m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                                        DB::Queries::Delete{.collection = "jobs", .match = matches}),
+                                    m_backDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                                       DB::Queries::Delete{.collection = "jobs", .match = matches})) |
+                  stdexec::continues_on(scheduler));
     CO_TRY(r1);
     auto back_result = CO_TRY(r2);
     co_return fmt::format("Deleted {} jobs", back_result["deleted_count"].get<size_t>());
@@ -1114,11 +1139,13 @@ Async<ErrorOr<std::string>> Director::QueryBackDB(QueryOperation operation, cons
     }
 
     auto matches = CO_TRY(PMS::DB::Queries::ToMatches(match));
-    auto r = co_await m_backDB->RunQuery(scheduler, DB::Queries::Find{
-                                                        .collection = "jobs",
-                                                        .match = matches,
-                                                        .filter = projectionOpt,
-                                                    });
+    auto r = co_await (m_backDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                          DB::Queries::Find{
+                                              .collection = "jobs",
+                                              .match = matches,
+                                              .filter = projectionOpt,
+                                          }) |
+                       stdexec::continues_on(scheduler));
     json resp;
     resp["result"] = CO_TRY(r);
     co_return resp.dump();
@@ -1128,8 +1155,7 @@ Async<ErrorOr<std::string>> Director::QueryBackDB(QueryOperation operation, cons
   co_return make_error(std::errc::not_supported, "Operation not supported");
 }
 
-Async<ErrorOr<std::string>> Director::QueryFrontDB(DBCollection collection, const json &match,
-                                                   const json &filter) const {
+Async<ErrorOr<std::string>> Director::QueryFrontDB(DBCollection collection, const json &match, const json &filter) {
   m_logger->debug("QueryFrontDB: {} {} {}", magic_enum::enum_name(collection), match.dump(), filter.dump());
 
   std::string_view collection_name;
@@ -1152,11 +1178,13 @@ Async<ErrorOr<std::string>> Director::QueryFrontDB(DBCollection collection, cons
 
   DB::Queries::Matches matches = CO_TRY(PMS::DB::Queries::ToMatches(match));
   auto scheduler = co_await stdexec::read_env(stdexec::get_scheduler);
-  auto r = co_await m_frontDB->RunQuery(scheduler, DB::Queries::Find{
-                                                       .collection = collection_name.data(),
-                                                       .match = matches,
-                                                       .filter = projectionOpt,
-                                                   });
+  auto r = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                         DB::Queries::Find{
+                                             .collection = collection_name.data(),
+                                             .match = matches,
+                                             .filter = projectionOpt,
+                                         }) |
+                     stdexec::continues_on(scheduler));
   auto query_result = CO_TRY(r);
 
   json resp;
@@ -1179,11 +1207,13 @@ Async<ErrorOr<void>> Director::ResetFailedJobs(std::string_view taskname) {
 
   auto scheduler = co_await stdexec::read_env(stdexec::get_scheduler);
 
-  auto [r1, r2] = co_await stdexec::when_all(
-      m_frontDB->RunQuery(scheduler,
-                          DB::Queries::Update{.collection = "jobs", .match = matches, .update = update_action}),
-      m_backDB->RunQuery(scheduler,
-                         DB::Queries::Update{.collection = "jobs", .match = matches, .update = update_action}));
+  auto [r1, r2] = co_await (
+      stdexec::when_all(
+          m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                              DB::Queries::Update{.collection = "jobs", .match = matches, .update = update_action}),
+          m_backDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                             DB::Queries::Update{.collection = "jobs", .match = matches, .update = update_action})) |
+      stdexec::continues_on(scheduler));
 
   auto front_result = CO_TRY(r1);
   m_logger->debug("ResetFailedJobs: Found {} documents in front DB to update",

@@ -2,7 +2,6 @@
 #define PMS_ORCHESTRATOR_DIRECTOR_H
 
 // c++ headers
-#include <exec/static_thread_pool.hpp>
 #include <future>
 #include <mutex>
 #include <queue>
@@ -12,6 +11,7 @@
 #include <vector>
 
 // external dependencies
+#include <exec/static_thread_pool.hpp>
 #include <nlohmann/json.hpp>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
@@ -69,12 +69,10 @@ public:
   Async<ErrorOr<std::string>> CreateTask(const std::string &task) override;
   Async<ErrorOr<void>> ClearTask(const std::string &task, bool deleteTask = true) override;
 
-  Async<ErrorOr<std::string>> Summary(const std::string &user) const override;
+  Async<ErrorOr<std::string>> Summary(const std::string &user) override;
 
-  Async<ErrorOr<std::string>> QueryBackDB(QueryOperation operation, const json &match,
-                                          const json &option) const override;
-  Async<ErrorOr<std::string>> QueryFrontDB(DBCollection collection, const json &match,
-                                           const json &filter) const override;
+  Async<ErrorOr<std::string>> QueryBackDB(QueryOperation operation, const json &match, const json &option) override;
+  Async<ErrorOr<std::string>> QueryFrontDB(DBCollection collection, const json &match, const json &filter) override;
 
   OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const override;
   Async<ErrorOr<void>> ResetFailedJobs(std::string_view taskname) override;

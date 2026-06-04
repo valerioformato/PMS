@@ -48,15 +48,13 @@ public:
   virtual Async<ErrorOr<std::string>> CreateTask(const std::string &task) = 0;
   virtual Async<ErrorOr<void>> ClearTask(const std::string &task, bool deleteTask = true) = 0;
 
-  virtual Async<ErrorOr<std::string>> Summary(const std::string &user) const = 0;
+  virtual Async<ErrorOr<std::string>> Summary(const std::string &user) = 0;
 
   enum class DBCollection { Jobs, Pilots };
   enum class QueryOperation { Find, UpdateOne, UpdateMany, DeleteOne, DeleteMany };
 
-  virtual Async<ErrorOr<std::string>> QueryBackDB(QueryOperation operation, const json &match,
-                                                  const json &option) const = 0;
-  virtual Async<ErrorOr<std::string>> QueryFrontDB(DBCollection collection, const json &match,
-                                                   const json &filter) const = 0;
+  virtual Async<ErrorOr<std::string>> QueryBackDB(QueryOperation operation, const json &match, const json &option) = 0;
+  virtual Async<ErrorOr<std::string>> QueryFrontDB(DBCollection collection, const json &match, const json &filter) = 0;
 
   virtual OperationResult ValidateTaskToken(std::string_view task, std::string_view token) const = 0;
   virtual Async<ErrorOr<void>> ResetFailedJobs(std::string_view taskname) = 0;

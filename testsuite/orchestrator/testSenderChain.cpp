@@ -52,13 +52,13 @@ public:
     co_return ErrorOr<std::string>{std::string{"mock-token"}};
   }
   Async<ErrorOr<void>> ClearTask(const std::string &, bool) override { co_return ErrorOr<void>{}; }
-  Async<ErrorOr<std::string>> Summary(const std::string &) const override {
+  Async<ErrorOr<std::string>> Summary(const std::string &) override {
     co_return ErrorOr<std::string>{std::string{"[]"}};
   }
-  Async<ErrorOr<std::string>> QueryBackDB(QueryOperation, const json &, const json &) const override {
+  Async<ErrorOr<std::string>> QueryBackDB(QueryOperation, const json &, const json &) override {
     co_return ErrorOr<std::string>{std::string{R"({"result":[]})"}};
   }
-  Async<ErrorOr<std::string>> QueryFrontDB(DBCollection, const json &, const json &) const override {
+  Async<ErrorOr<std::string>> QueryFrontDB(DBCollection, const json &, const json &) override {
     co_return ErrorOr<std::string>{std::string{R"({"result":[]})"}};
   }
   Async<ErrorOr<void>> ResetFailedJobs(std::string_view) override { co_return ErrorOr<void>{}; }

@@ -247,7 +247,7 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
   m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
 
   exec::start_detached(
-      stdexec::on(m_thread_pool.get_scheduler(),
+      stdexec::on(m_compute_pool.get_scheduler(),
                   MakeUserReplySender(std::move(payload)) | stdexec::then([this, hdl](std::string reply) {
                     websocketpp::lib::error_code ec;
                     m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
@@ -261,7 +261,7 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
   m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
 
   exec::start_detached(
-      stdexec::on(m_thread_pool.get_scheduler(),
+      stdexec::on(m_compute_pool.get_scheduler(),
                   MakePilotReplySender(std::move(payload)) | stdexec::then([this, hdl](std::string reply) {
                     websocketpp::lib::error_code ec;
                     m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);

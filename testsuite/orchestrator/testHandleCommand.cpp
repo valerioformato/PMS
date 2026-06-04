@@ -84,13 +84,13 @@ public:
 
   Async<ErrorOr<void>> ClearTask(const std::string &, bool) override { co_return clear_task_result; }
 
-  Async<ErrorOr<std::string>> Summary(const std::string &) const override { co_return summary_result; }
+  Async<ErrorOr<std::string>> Summary(const std::string &) override { co_return summary_result; }
 
-  Async<ErrorOr<std::string>> QueryBackDB(QueryOperation, const json &, const json &) const override {
+  Async<ErrorOr<std::string>> QueryBackDB(QueryOperation, const json &, const json &) override {
     co_return query_back_db_result;
   }
 
-  Async<ErrorOr<std::string>> QueryFrontDB(DBCollection, const json &, const json &) const override {
+  Async<ErrorOr<std::string>> QueryFrontDB(DBCollection, const json &, const json &) override {
     co_return query_front_db_result;
   }
 
