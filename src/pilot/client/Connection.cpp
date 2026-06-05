@@ -31,9 +31,15 @@ void Connection::Connect() {
   m_endpoint->set_close_handshake_timeout(60000l);
 
   spdlog::debug("Connecting...");
+  m_connection_result = Result::Pending;
   m_endpoint->connect(m_connection);
   std::unique_lock<std::mutex> lk(cv_m);
-  cv.wait(lk);
+  bool connected =
+      cv.wait_for(lk, std::chrono::seconds(60), [this]() { return m_connection_result != Result::Pending; });
+
+  if (!connected) {
+    throw FailedConnectionException("Connection failed");
+  }
 }
 
 void Connection::Reconnect() {
@@ -70,6 +76,7 @@ void Connection::on_open([[maybe_unused]] WSclient *c, [[maybe_unused]] websocke
   spdlog::info("Connection established");
 
   std::lock_guard<std::mutex> lk(cv_m);
+  m_connection_result = Result::Open;
   cv.notify_all();
 }
 
@@ -82,6 +89,7 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
 
   {
     std::lock_guard<std::mutex> lk(cv_m);
+    m_connection_result = Result::Failed;
     cv.notify_all();
   }
 
@@ -102,6 +110,7 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
 
   {
     std::lock_guard<std::mutex> lk(cv_m);
+    m_connection_result = Result::Close;
     cv.notify_all();
   }
 

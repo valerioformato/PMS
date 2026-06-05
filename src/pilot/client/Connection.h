@@ -17,6 +17,8 @@ using WSclient = websocketpp::client<websocketpp::config::asio_client>;
 
 class Connection {
 public:
+  enum class Result { Pending, Open, Failed, Close };
+
   Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri);
   ~Connection();
 
@@ -49,6 +51,7 @@ private:
   std::string m_error_reason;
   std::promise<std::string> m_in_flight_message;
 
+  Result m_connection_result{Result::Pending};
   std::mutex m_sendMutex;
 
   std::mutex cv_m;

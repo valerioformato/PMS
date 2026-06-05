@@ -253,3 +253,91 @@ Extract the sender pipeline construction from the websocket callback into a stan
 | 2 | Step 4 (`Director`) | Medium–Large | Injection constructor |
 | 3 | Step 5 (`HandleCommand`) | Medium | `IDirector` interface |
 | 3 | Step 6 (sender chains) | Medium | Pipeline extraction |
+
+---
+
+## Pilot networking refactor: `Connection` hardening + coroutine/sender migration
+
+**Goal**: replace the current fragile sync request/reply wrapper with a robust async transport that is safe under disconnects, shutdown, and concurrent traffic, while fitting the codebase's C++23 + `stdexec` direction.
+
+### Why this is needed (current risks)
+
+- `cv.wait(...)` without predicates/timeouts can block forever (connect/close paths).
+- callback writes to a single `std::promise` can throw or race (`set_value` / `set_exception` paths).
+- `send(..., ec)` ignores `ec`, then waits indefinitely for a reply.
+- handlers capture `this` while `Connection` is movable; lifetime and callback ownership are unsafe.
+- `Reconnect()` calls `endpoint.reset()` on a shared endpoint (can affect other connections).
+- request/reply correlation is implicit (single in-flight message); unsolicited/out-of-order frames can break semantics.
+
+### Target architecture
+
+- Introduce a stable **transport state object** (`shared_ptr`/PIMPL style) that owns websocket callbacks and outlives transient wrappers.
+- Build explicit **connection state machine** (`idle -> connecting -> open -> closing -> closed -> failed`) with guarded transitions.
+- Replace single in-flight promise with **request correlation map** (`request_id -> completion channel`) and bounded lifetimes.
+- Expose both:
+  - coroutine API: `stdexec::task<ErrorOr<std::string>> SendAsync(...)`
+  - sender API: `stdexec::sender auto SendSender(...)`
+- Keep a compatibility sync API temporarily (`Send`) implemented as a thin adapter over async + timeout.
+
+### Refactor plan (phased)
+
+#### Phase 0 — Contract and boundaries
+
+- [ ] Define transport contract (`connect`, `close`, `send`, timeout, cancellation, retry behavior).
+- [ ] Decide ownership model for Worker/HeartBeat (`shared` single connection vs dedicated connections).
+- [ ] Decide reply correlation format (explicit request id in payload/envelope).
+- [ ] Write migration ADR in code comments / design note section in TODO (this section is the seed).
+
+#### Phase 1 — Safety stabilization of existing code (no behavior expansion)
+
+- [ ] Replace all unconditional waits with predicate + timeout waits.
+- [ ] Handle `send` error_code immediately and return `ErrorOr` failure.
+- [ ] Make callback completion idempotent (never throw on already-satisfied completion paths).
+- [ ] Remove/forbid move semantics for `Connection` unless backed by stable shared state.
+- [ ] Stop using endpoint-wide `reset()` from per-connection logic.
+- [ ] Ensure destructor/shutdown is bounded and cannot deadlock joins.
+
+#### Phase 2 — New async transport core
+
+- [ ] Add `PilotTransport` (or equivalent) with explicit state machine + mutex/strand discipline.
+- [ ] Add async connect/close with timeout and stop-token cancellation.
+- [ ] Add async send with:
+  - request id injection/extraction,
+  - pending-request registry,
+  - timeout cleanup,
+  - disconnect fan-out (fail all pending sends).
+- [ ] Add server-message routing policy (reply vs unsolicited/event frames).
+
+#### Phase 3 — Sender/coroutine integration
+
+- [ ] Provide sender-first API (`SendSender`) and task wrapper (`SendAsync`), aligned with orchestrator `stdexec` usage.
+- [ ] Implement sync compatibility shim only where still needed.
+- [ ] Add scheduler handoff policy (`on(...)` / `continues_on(...)`) so websocket callbacks stay lightweight.
+
+#### Phase 4 — Call-site migration
+
+- [ ] Migrate `Worker` claim/update paths to async API.
+- [ ] Migrate `HeartBeat` loop to async send + cancellation-aware sleep loop.
+- [ ] Remove polling/sleep retry loops that duplicate transport reconnect logic.
+- [ ] Replace ad-hoc shutdown signaling with unified stop token flow.
+
+#### Phase 5 — Legacy removal and cleanup
+
+- [ ] Remove deprecated sync-only pathways once all users are migrated.
+- [ ] Remove dead fields/mutexes/condition variables from old `Connection`.
+- [ ] Tighten logging taxonomy (connect/reconnect, timeout, protocol, shutdown).
+
+### Verification plan
+
+- [ ] Unit tests: state-machine transitions, timeout behavior, disconnect fan-out, duplicate/late replies.
+- [ ] Unit tests: correlation map cleanup on success/failure/timeout/cancel.
+- [ ] Integration tests: reconnect under flaky network, concurrent in-flight sends, graceful shutdown during traffic.
+- [ ] Regression tests for Worker + HeartBeat end-to-end behavior.
+
+### Acceptance criteria
+
+- No unbounded wait in connect/send/close/shutdown paths.
+- No callback-thrown exceptions escaping websocket handlers.
+- Pending async sends are always completed (value or explicit error) on disconnect/timeout.
+- Worker and HeartBeat can run/stop repeatedly without deadlocks or leaked background activity.
+- New transport is used by pilot runtime; legacy sync wrapper is removed or isolated behind a temporary adapter.
