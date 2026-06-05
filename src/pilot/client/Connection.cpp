@@ -54,22 +54,16 @@ Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
 
 Connection::~Connection() {
   if (get_status() == State::open) {
-    m_endpoint->close(get_hdl(), websocketpp::close::status::normal, "");
+    std::error_code ec;
+    m_endpoint->close(get_hdl(), websocketpp::close::status::normal, "", ec);
+    if (ec) {
+      spdlog::error("{}", ec.message());
+      return;
+    }
     std::unique_lock<std::mutex> lk(cv_m);
-    cv.wait(lk);
+    cv.wait_for(lk, std::chrono::seconds(60),
+                [this]() { return m_connection_result == Result::Close || m_connection_result == Result::Failed; });
   }
-}
-
-Connection::Connection(Connection &&rhs) noexcept
-    : m_endpoint{std::move(rhs.m_endpoint)}, m_connection{std::move(rhs.m_connection)} {}
-
-Connection &Connection::operator=(Connection &&rhs) noexcept {
-  m_connection = rhs.m_connection;
-  m_endpoint = std::move(rhs.m_endpoint);
-
-  rhs.m_connection = nullptr;
-
-  return *this;
 }
 
 void Connection::on_open([[maybe_unused]] WSclient *c, [[maybe_unused]] websocketpp::connection_hdl hdl) {
@@ -84,8 +78,12 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
   spdlog::error("Connection failed: {}", m_error_reason);
 
   // set an exception in the message promise, in case we were waiting for a message
-  m_in_flight_message.set_exception(
-      std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
+  try {
+    m_in_flight_message.set_exception(
+        std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
+  } catch (const std::future_error &e) {
+    // connection failed while we were NOT waiting for a message. No error to be raised.
+  }
 
   {
     std::lock_guard<std::mutex> lk(cv_m);
@@ -123,7 +121,12 @@ void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr m
 #ifdef DEBUG_WEBSOCKETS
   spdlog::trace("Received message: {}", msg->get_payload());
 #endif
-  m_in_flight_message.set_value(msg->get_payload());
+  try {
+    m_in_flight_message.set_value(msg->get_payload());
+  } catch (const std::future_error &e) {
+    // we received a message we were not expecting?
+    spdlog::error("Unexpected message from server: {}", msg->get_payload());
+  }
 }
 
 ErrorOr<std::string> Connection::Send(const std::string &message) {
@@ -147,6 +150,9 @@ ErrorOr<std::string> Connection::Send(const std::string &message) {
 #endif
 
   m_endpoint->send(get_hdl(), message, websocketpp::frame::opcode::text, ec);
+  if (ec) {
+    return make_error(ec, ec.message());
+  }
 
 #ifdef DEBUG_WEBSOCKETS
   spdlog::trace("waiting for message...");

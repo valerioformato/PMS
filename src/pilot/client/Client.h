@@ -9,14 +9,11 @@
 #include <utility>
 
 // external headers
-#include <nlohmann/json.hpp>
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 
 // our headers
 #include "pilot/client/Connection.h"
-
-using json = nlohmann::json;
 
 using WSclient = websocketpp::client<websocketpp::config::asio>;
 
@@ -29,11 +26,6 @@ public:
 
   std::unique_ptr<Connection> PersistentConnection();
   std::unique_ptr<Connection> PersistentConnection(std::string_view uri);
-
-  ErrorOr<std::string> Send(const json &msg);
-  ErrorOr<std::string> Send(const json &msg, std::string_view uri);
-
-  // std::string Send(Connection &connection, const json &msg);
 
 private:
   std::string m_serverUri;

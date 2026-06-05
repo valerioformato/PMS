@@ -273,24 +273,90 @@ Extract the sender pipeline construction from the websocket callback into a stan
 
 - Introduce a stable **transport state object** (`shared_ptr`/PIMPL style) that owns websocket callbacks and outlives transient wrappers.
 - Build explicit **connection state machine** (`idle -> connecting -> open -> closing -> closed -> failed`) with guarded transitions.
-- Replace single in-flight promise with **request correlation map** (`request_id -> completion channel`) and bounded lifetimes.
+- Replace ad-hoc single in-flight promise handling with an explicit **single-flight request slot** per connection and bounded lifecycle rules.
 - Expose both:
   - coroutine API: `stdexec::task<ErrorOr<std::string>> SendAsync(...)`
   - sender API: `stdexec::sender auto SendSender(...)`
-- Keep a compatibility sync API temporarily (`Send`) implemented as a thin adapter over async + timeout.
+- Keep a compatibility sync API temporarily (`Send`) implemented as a thin adapter over async semantics.
 
 ### Refactor plan (phased)
 
 #### Phase 0 — Contract and boundaries
 
-- [ ] Define transport contract (`connect`, `close`, `send`, timeout, cancellation, retry behavior).
-- [ ] Decide ownership model for Worker/HeartBeat (`shared` single connection vs dedicated connections).
-- [ ] Decide reply correlation format (explicit request id in payload/envelope).
-- [ ] Write migration ADR in code comments / design note section in TODO (this section is the seed).
+- [x] Define transport contract (`connect`, `close`, `send`, timeout, cancellation, retry behavior).
+  - **Timeout policy**:
+    - default timeout is **60s** for bounded operations (`connect` and `close`);
+    - `send` has **no timeout** and waits for server reply, unless interrupted by disconnect/shutdown/cancellation.
+  - **Return model**:
+    - sync compatibility methods return `ErrorOr<...>` (`Send` returns reply payload, `connect`/`close` return status/error).
+    - async/coroutine and sender APIs wrap the same payload/error model (`task<ErrorOr<...>>` and sender equivalent).
+  - **Cancellation policy**: operations honor shutdown/stop requests and complete with explicit cancellation error (no silent success).
+  - **Retry policy**:
+    - pilot keeps retrying connectivity while it is still allowed to run work;
+    - concretely, retries continue while work is active and stop conditions are not met (e.g. `--maxJobs` not reached and `--maxTime` not exceeded);
+    - once shutdown/stop is requested or run limits are reached, retries stop and pending operations complete with explicit error.
+- [x] Decide ownership model for Worker/HeartBeat (`shared` single connection vs dedicated connections).
+  - Use **dedicated connections**:
+    - **control connection** for claim/update/sync request-reply traffic;
+    - **heartbeat connection** for liveness heartbeats only.
+  - **Rationale**: heartbeat traffic must not be blocked behind slow server replies on claim/update paths.
+  - Reconnect and shutdown rules from the transport contract apply independently to both connections.
+- [x] Decide reply correlation format (single-flight per connection, no request-id map).
+  - **Single-flight contract**: each connection allows exactly one outstanding request at a time.
+  - The next valid reply frame on that same connection is treated as the reply to the in-flight request.
+  - Frames received when no request is pending are treated as unsolicited/protocol-error according to routing policy.
+  - In-flight state is always cleared on disconnect, reconnect, shutdown, or cancellation.
+- [x] Write migration ADR in code comments / design note section in TODO (this section is the seed).
+
+##### Phase 0 design note (authoritative transport spec)
+
+- This spec applies independently to both pilot connections:
+  - **control connection** (claim/update/sync);
+  - **heartbeat connection** (heartbeat traffic only).
+- Default timeout for bounded operations (`connect`, `close`) is **60s** unless a callsite explicitly overrides it.
+
+**State machine**
+
+- States: `idle`, `connecting`, `open`, `closing`, `closed`, `failed`.
+- Allowed transitions:
+  - `idle -> connecting` (start connect)
+  - `connecting -> open` (open callback)
+  - `connecting -> failed` (fail callback / timeout / cancellation)
+  - `open -> closing` (start close)
+  - `open -> failed` (transport failure)
+  - `closing -> closed` (close callback)
+  - `closing -> failed` (close timeout / failure)
+  - `failed -> connecting` (retry allowed)
+  - `closed -> connecting` (reconnect allowed)
+
+**API behavior by state**
+
+- `Connect`:
+  - valid from `idle`, `closed`, `failed`;
+  - from `connecting`: no-op success (do not start a second concurrent connect);
+  - from `open`: no-op success;
+  - must complete within timeout (success or explicit error).
+- `Send`:
+  - valid only in `open`;
+  - **single-flight rule**: only one in-flight request per connection; if violated by callers, return explicit busy/protocol error (do not create multiple in-flight sends on one connection);
+  - completes with reply payload, disconnect error, shutdown error, or cancellation error;
+  - if a frame arrives while no request is in flight, classify as unsolicited/protocol-error per routing policy.
+- `Close`:
+  - from `open`/`connecting`: transition to `closing`, complete within timeout;
+  - from `idle`/`closed`/`failed`: no-op success;
+  - any in-flight `Send` is completed with explicit error during close/shutdown.
+- `Retry`:
+  - only from `failed`/`closed`;
+  - allowed while pilot is still eligible to run work (`--maxJobs` not reached, `--maxTime` not exceeded, and no stop/shutdown request);
+  - disabled once stop conditions are met.
+- `Shutdown`:
+  - stop accepting new sends/connect attempts;
+  - complete pending operations with explicit cancellation/shutdown error;
+  - drive state to `closed` in bounded time.
 
 #### Phase 1 — Safety stabilization of existing code (no behavior expansion)
 
-- [ ] Replace all unconditional waits with predicate + timeout waits.
+- [ ] Replace all unconditional waits with predicate waits; keep `connect`/`close`/shutdown waits bounded by timeout.
 - [ ] Handle `send` error_code immediately and return `ErrorOr` failure.
 - [ ] Make callback completion idempotent (never throw on already-satisfied completion paths).
 - [ ] Remove/forbid move semantics for `Connection` unless backed by stable shared state.
@@ -302,10 +368,9 @@ Extract the sender pipeline construction from the websocket callback into a stan
 - [ ] Add `PilotTransport` (or equivalent) with explicit state machine + mutex/strand discipline.
 - [ ] Add async connect/close with timeout and stop-token cancellation.
 - [ ] Add async send with:
-  - request id injection/extraction,
-  - pending-request registry,
-  - timeout cleanup,
-  - disconnect fan-out (fail all pending sends).
+  - single in-flight request slot per connection (single-flight contract),
+  - cancellation/shutdown cleanup,
+  - disconnect handling (fail the in-flight send explicitly).
 - [ ] Add server-message routing policy (reply vs unsolicited/event frames).
 
 #### Phase 3 — Sender/coroutine integration
@@ -329,15 +394,16 @@ Extract the sender pipeline construction from the websocket callback into a stan
 
 ### Verification plan
 
-- [ ] Unit tests: state-machine transitions, timeout behavior, disconnect fan-out, duplicate/late replies.
-- [ ] Unit tests: correlation map cleanup on success/failure/timeout/cancel.
-- [ ] Integration tests: reconnect under flaky network, concurrent in-flight sends, graceful shutdown during traffic.
+- [ ] Unit tests: state-machine transitions, `connect`/`close` timeout behavior, disconnect handling, duplicate/late replies.
+- [ ] Unit tests: single in-flight slot cleanup on success/failure/disconnect/cancel.
+- [ ] Integration tests: reconnect under flaky network, serialized single-flight sends per connection, graceful shutdown during traffic.
 - [ ] Regression tests for Worker + HeartBeat end-to-end behavior.
 
 ### Acceptance criteria
 
-- No unbounded wait in connect/send/close/shutdown paths.
+- No unbounded wait in connect/close/shutdown paths.
+- `Send` has no timeout by design, but always terminates with reply or explicit error on disconnect/shutdown/cancellation.
 - No callback-thrown exceptions escaping websocket handlers.
-- Pending async sends are always completed (value or explicit error) on disconnect/timeout.
+- Pending async sends are always completed (value or explicit error) on disconnect/shutdown/cancellation.
 - Worker and HeartBeat can run/stop repeatedly without deadlocks or leaked background activity.
 - New transport is used by pilot runtime; legacy sync wrapper is removed or isolated behind a temporary adapter.

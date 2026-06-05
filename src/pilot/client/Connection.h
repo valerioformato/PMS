@@ -23,9 +23,7 @@ public:
   ~Connection();
 
   Connection(const Connection &) = delete;
-  Connection(Connection &&) noexcept;
-
-  Connection &operator=(Connection &&) noexcept;
+  Connection(Connection &&) = delete;
 
   void on_open(WSclient *c, websocketpp::connection_hdl hdl);
   void on_fail(WSclient *c, websocketpp::connection_hdl hdl);
