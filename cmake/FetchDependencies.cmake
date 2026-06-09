@@ -13,14 +13,25 @@ CPMAddPackage(
   URI "gh:nlohmann/json#v3.11.3"
   OPTIONS "JSON_ImplicitConversions OFF" 
 )
-CPMAddPackage("gh:docopt/docopt.cpp#v0.6.3")
+CPMAddPackage(
+  NAME docopt.cpp
+  GITHUB_REPOSITORY docopt/docopt.cpp
+  GIT_TAG v0.6.3
+  EXCLUDE_FROM_ALL NO
+  SYSTEM YES
+)
 CPMAddPackage("gh:valerioformato/websocketpp#boost")
-CPMAddPackage("gh:mongodb/mongo-cxx-driver#r4.2.0")
+CPMAddPackage(
+  NAME mongo-cxx-driver
+  GITHUB_REPOSITORY mongodb/mongo-cxx-driver
+  GIT_TAG r4.2.0
+  EXCLUDE_FROM_ALL NO
+  SYSTEM YES
+)
 CPMAddPackage(
 	URI "gh:nvidia/stdexec#gtc-2026"
 	OPTIONS "STDEXEC_BUILD_EXAMPLES OFF"
 )
-
 # === boost ===
 set(BOOST_COMPONENTS filesystem thread regex)
 find_package(Boost COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
