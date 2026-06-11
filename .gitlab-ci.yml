@@ -2,15 +2,14 @@ stages:
   - build
   - test
   - dockerize
+  - deploy
 
 # TEMPLATES
 .build: &build
   stage: build
   script:
-      - mkdir build
-      - cd build
-      - cmake -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=ON ../
-      - ninja
+      - cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=ON
+      - cmake --build build
   needs: []
   artifacts:
     paths:
@@ -29,6 +28,17 @@ build-ubuntu24.04:
   <<: *build-docker
   image: vformato/pms-ci:ubuntu24.04
 
+.build_and_install: &build-and-install
+  stage: deploy
+  script:
+      - cmake -S . -B build -GNinja -DCMAKE_INSTALL_PREFIX=install -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=OFF ../
+      - cmake --build build
+      - cmake --install build
+  needs: []
+  artifacts:
+    paths:
+      - install
+
 .test: &test
   stage: test
   script:
@@ -45,6 +55,13 @@ test-ubuntu24.04:
   image: vformato/pms-ci:ubuntu24.04
   needs: ["build-ubuntu24.04"]
 
+build-for-cvmfs-alma9:
+  <<: *build-and-install
+  image: vformato/pms-ci:alma9
+  only:
+    - upgrade-ci
+    - /^v[0-9]*\.[0-9]*(\.[0-9]*)$/  # ex: v0.1.0
+    - /^v[0-9]*\.[0-9]*(_RC[0-9]+.*)$/ # ex: v1.0_RC1, v1.0_RC1b
 
 .dockerize-default : &dockerize-default
   stage: dockerize
