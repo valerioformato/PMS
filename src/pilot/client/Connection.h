@@ -35,7 +35,7 @@ public:
   using State = websocketpp::session::state::value;
   [[nodiscard]] State get_status() const { return m_connection->get_state(); }
 
-  ErrorOr<std::string> Send(const std::string &message);
+  ErrorOr<std::string> Send(std::string_view message);
 
   class FailedConnectionException : public websocketpp::exception {
   public:
@@ -47,7 +47,6 @@ private:
   std::shared_ptr<WSclient> m_endpoint;
   WSclient::connection_ptr m_connection;
   std::string m_error_reason;
-  std::promise<std::string> m_in_flight_message;
 
   Result m_connection_result{Result::Pending};
   std::mutex m_sendMutex;
@@ -57,6 +56,30 @@ private:
 
   void Connect();
   void Reconnect();
+
+  enum class RequestState {
+    Inactive,
+    InFlight,
+    Completed,
+    Error,
+  };
+
+  struct MessageReply {
+  public:
+    explicit MessageReply() {}
+
+    void Activate();
+    void TryCompleteSuccess(std::string_view message);
+    void TryCompleteError();
+    void Complete();
+
+    std::future<std::string> Future() { return m_promise.get_future(); }
+
+  private:
+    RequestState m_state = RequestState::Inactive;
+    std::promise<std::string> m_promise;
+    std::mutex m_promise_mutex;
+  } m_message_reply;
 };
 
 } // namespace PMS::Pilot

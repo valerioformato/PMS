@@ -77,13 +77,7 @@ void Connection::on_open([[maybe_unused]] WSclient *c, [[maybe_unused]] websocke
 void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
   spdlog::error("Connection failed: {}", m_error_reason);
 
-  // set an exception in the message promise, in case we were waiting for a message
-  try {
-    m_in_flight_message.set_exception(
-        std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
-  } catch (const std::future_error &e) {
-    // connection failed while we were NOT waiting for a message. No error to be raised.
-  }
+  m_message_reply.TryCompleteError();
 
   {
     std::lock_guard<std::mutex> lk(cv_m);
@@ -98,13 +92,7 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
 void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
   spdlog::warn("Connection closed");
 
-  // set an exception in the message promise, in case we were waiting for a message
-  try {
-    m_in_flight_message.set_exception(
-        std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
-  } catch (const std::future_error &e) {
-    // connection was closed while we were NOT waiting for a message. No error to be raised.
-  }
+  m_message_reply.TryCompleteError();
 
   {
     std::lock_guard<std::mutex> lk(cv_m);
@@ -121,22 +109,17 @@ void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr m
 #ifdef DEBUG_WEBSOCKETS
   spdlog::trace("Received message: {}", msg->get_payload());
 #endif
-  try {
-    m_in_flight_message.set_value(msg->get_payload());
-  } catch (const std::future_error &e) {
-    // we received a message we were not expecting?
-    spdlog::error("Unexpected message from server: {}", msg->get_payload());
-  }
+  m_message_reply.TryCompleteSuccess(msg->get_payload());
 }
 
-ErrorOr<std::string> Connection::Send(const std::string &message) {
+ErrorOr<std::string> Connection::Send(std::string_view message) {
   std::lock_guard<std::mutex> slk(m_sendMutex);
 #ifdef DEBUG_WEBSOCKETS
   spdlog::trace("Send - lock acquired");
 #endif
 
-  std::promise<std::string>{}.swap(m_in_flight_message);
-  auto message_future = m_in_flight_message.get_future();
+  m_message_reply.Activate();
+  auto message_future = m_message_reply.Future();
 
   if (get_status() == State::closed || get_status() == State::closing) {
     spdlog::warn("Re-connecting to server...");
@@ -149,7 +132,7 @@ ErrorOr<std::string> Connection::Send(const std::string &message) {
   spdlog::trace("Sending message: {}", message);
 #endif
 
-  m_endpoint->send(get_hdl(), message, websocketpp::frame::opcode::text, ec);
+  m_endpoint->send(get_hdl(), std::string{message}, websocketpp::frame::opcode::text, ec);
   if (ec) {
     return make_error(ec, ec.message());
   }
@@ -161,6 +144,7 @@ ErrorOr<std::string> Connection::Send(const std::string &message) {
 #endif
 
   try {
+    m_message_reply.Complete();
     return message_future.get();
   } catch (const FailedConnectionException &e) {
     return make_error(std::make_error_code(std::errc::connection_reset), e.what());
@@ -169,6 +153,46 @@ ErrorOr<std::string> Connection::Send(const std::string &message) {
   } catch (const std::exception &e) {
     return make_error(std::make_error_code(std::errc::io_error), e.what());
   }
+}
+
+void Connection::MessageReply::Activate() {
+  std::lock_guard lock(m_promise_mutex);
+
+  m_state = RequestState::InFlight;
+  std::promise<std::string>{}.swap(m_promise);
+}
+
+void Connection::MessageReply::TryCompleteSuccess(std::string_view message) {
+  std::lock_guard lock(m_promise_mutex);
+
+  if (m_state != RequestState::InFlight) {
+    return;
+  }
+
+  m_state = RequestState::Completed;
+  m_promise.set_value(std::string{message});
+}
+
+void Connection::MessageReply::TryCompleteError() {
+  std::lock_guard lock(m_promise_mutex);
+
+  if (m_state != RequestState::InFlight) {
+    return;
+  }
+
+  m_state = RequestState::Error;
+  m_promise.set_exception(
+      std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
+}
+
+void Connection::MessageReply::Complete() {
+  std::lock_guard lock(m_promise_mutex);
+
+  if (m_state != RequestState::InFlight) {
+    return;
+  }
+
+  m_state = RequestState::Completed;
 }
 
 } // namespace PMS::Pilot
