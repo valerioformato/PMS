@@ -16,7 +16,7 @@ stages:
       - build
 
 .build-docker:
-  extends: [ "build" ]
+  extends: [ ".build" ]
   tags:
     - docker
 
