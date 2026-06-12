@@ -81,4 +81,4 @@ stages:
     - cvmfs_server publish
   tags:
     - cvmfs_publisher
-  stage: deploy
+  stage: cvmfs-deploy
