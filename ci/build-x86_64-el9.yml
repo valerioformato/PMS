@@ -1,16 +1,16 @@
 build-alma9:
-  extends: [ "build-docker" ]
+  extends: [ ".build-docker" ]
   image: vformato/pms-ci:alma9
   variables:
     INSTALL_RPATH: "/cvmfs/amsitaly.infn.it/public/install/x86_64-el9-gcc12.1/PMS"
 
 test-alma9:
-  extends: [ "test" ]
+  extends: [ ".test" ]
   image: vformato/pms-ci:alma9
   needs: [ "build-alma9" ]
 
 build-for-cvmfs-alma9:
-  extends: [ "build-and-install" ]
+  extends: [ ".build-and-install" ]
   image: vformato/pms-ci:alma9
   only:
     - upgrade-ci
