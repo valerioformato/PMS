@@ -1,8 +1,6 @@
 build-alma9:
   extends: [ ".build-docker" ]
   image: vformato/pms-ci:alma9
-  variables:
-    INSTALL_RPATH: "/cvmfs/amsitaly.infn.it/public/install/x86_64-el9-gcc12.1/PMS"
 
 test-alma9:
   extends: [ ".test" ]
