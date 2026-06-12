@@ -20,7 +20,7 @@ stages:
   tags:
     - docker
 
-.build_and_install:
+.build-and-install:
   stage: cvmfs-deploy
   script:
     - export PLATFORM="$(arch)-${os}-gcc$(gcc -dumpversion | cut -d. -f1,2)"
