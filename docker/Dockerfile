@@ -5,7 +5,7 @@ COPY . /PMS/software/source/PMS
 RUN cd /PMS/software/source/PMS && \
     mkdir build && \
     cd build && \
-    cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" ../ -DCMAKE_INSTALL_PREFIX=/PMS/software/install/PMS && \
+    cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" ../ -DCMAKE_INSTALL_PREFIX=/PMS/software/install/PMS -DENABLE_PMS_TESTS=OFF && \
     ninja && \
     ninja install
 
@@ -14,4 +14,4 @@ FROM vformato/pms-ci:ubuntu24.04
 
 COPY --from=builder /PMS/software/install/ /PMS/software/install/
 
-ENTRYPOINT /PMS/software/install/PMS/bin/PMSOrchestrator
+ENTRYPOINT exec /PMS/software/install/PMS/bin/PMSOrchestrator
