@@ -24,7 +24,7 @@ stages:
   stage: cvmfs-deploy
   script:
     - export PLATFORM="$(arch)-${os}-gcc$(gcc -dumpversion | cut -d. -f1,2)"
-    - echo "Platform: $PLATFORM"
+    - echo "Platform $PLATFORM"
     - export DEST_DIR="/cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/PMS"
     - echo ${DEST_DIR} > dest_dir.txt
     - echo /cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/AMS_vdev_$(git log -1 --format='%cd' --date=format:'%y%m%d') > dest_dir.txt
