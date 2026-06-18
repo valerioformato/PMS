@@ -1,4 +1,4 @@
-#include <functional>
+#include <mutex>
 #include <utility>
 
 #include <magic_enum/magic_enum.hpp>
@@ -9,7 +9,21 @@
 
 namespace PMS::Pilot {
 
-void Connection::Connect() {
+Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri, std::stop_token token)
+    : m_uri{uri}, m_endpoint{std::move(endpoint)}, m_connection{nullptr}, m_stop_token{token} {
+  Connect();
+}
+
+Connection::~Connection() { Close(); }
+
+ErrorOr<void> Connection::Connect() {
+
+  if (state() != State::Idle && state() != State::Closed) {
+    return {};
+  }
+
+  set_state(State::Connecting);
+
   std::error_code ec;
   m_connection = m_endpoint->get_connection(std::string{m_uri}, ec);
 
@@ -34,40 +48,51 @@ void Connection::Connect() {
   m_connection_result = Result::Pending;
   m_endpoint->connect(m_connection);
   std::unique_lock<std::mutex> lk(cv_m);
-  bool connected =
-      cv.wait_for(lk, std::chrono::seconds(60), [this]() { return m_connection_result != Result::Pending; });
+  bool connected = cv.wait_for(lk, std::chrono::seconds(60), [this]() {
+    return m_connection_result != Result::Pending || m_stop_token.stop_requested();
+  });
 
+  if (m_stop_token.stop_requested()) {
+    return make_error(std::errc::operation_canceled, "connection interrupted by shutdown");
+  }
   if (!connected) {
-    throw FailedConnectionException("Connection failed");
+    set_state(State::Failed);
+    return make_error(std::errc::not_connected, "connection failed");
   }
+
+  return {};
 }
 
-void Connection::Reconnect() {
-  m_endpoint->reset();
-  Connect();
-}
-
-Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri)
-    : m_uri{uri}, m_endpoint{std::move(endpoint)}, m_connection{nullptr} {
-  Connect();
-}
-
-Connection::~Connection() {
-  if (get_status() == State::open) {
-    std::error_code ec;
-    m_endpoint->close(get_hdl(), websocketpp::close::status::normal, "", ec);
-    if (ec) {
-      spdlog::error("{}", ec.message());
-      return;
-    }
-    std::unique_lock<std::mutex> lk(cv_m);
-    cv.wait_for(lk, std::chrono::seconds(60),
-                [this]() { return m_connection_result == Result::Close || m_connection_result == Result::Failed; });
+void Connection::Close() {
+  if (state() != State::Open) {
+    return;
   }
+
+  set_state(State::Closing);
+
+  std::error_code ec;
+  m_message_reply.TryCompleteError();
+  m_endpoint->close(get_hdl(), websocketpp::close::status::normal, "", ec);
+  if (ec) {
+    spdlog::error("{}", ec.message());
+    return;
+  }
+  std::unique_lock<std::mutex> lk(cv_m);
+  bool disconnected = cv.wait_for(lk, std::chrono::seconds(60), [this]() {
+    return m_connection_result == Result::Close || m_connection_result == Result::Failed ||
+           m_stop_token.stop_requested();
+  });
+  if (!disconnected) {
+    spdlog::error("timed out waiting for connection close");
+  }
+
+  set_state(State::Closed);
 }
 
 void Connection::on_open([[maybe_unused]] WSclient *c, [[maybe_unused]] websocketpp::connection_hdl hdl) {
   spdlog::info("Connection established");
+
+  set_state(State::Open);
 
   std::lock_guard<std::mutex> lk(cv_m);
   m_connection_result = Result::Open;
@@ -87,6 +112,8 @@ void Connection::on_fail(WSclient *c, websocketpp::connection_hdl hdl) {
 
   WSclient::connection_ptr con = c->get_con_from_hdl(std::move(hdl));
   m_error_reason = con->get_ec().message();
+
+  set_state(State::Failed);
 }
 
 void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
@@ -103,6 +130,8 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
   WSclient::connection_ptr con = c->get_con_from_hdl(std::move(hdl));
   spdlog::trace("close code: {} ({}), close reason: {}", con->get_remote_close_code(),
                 websocketpp::close::status::get_string(con->get_remote_close_code()), con->get_remote_close_reason());
+
+  set_state(State::Closed);
 }
 
 void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr msg) {
@@ -121,9 +150,9 @@ ErrorOr<std::string> Connection::Send(std::string_view message) {
   m_message_reply.Activate();
   auto message_future = m_message_reply.Future();
 
-  if (get_status() == State::closed || get_status() == State::closing) {
+  if (state() == State::Closed || state() == State::Closing) {
     spdlog::warn("Re-connecting to server...");
-    Reconnect();
+    TRY(Connect());
   }
 
   std::error_code ec;
@@ -158,29 +187,29 @@ ErrorOr<std::string> Connection::Send(std::string_view message) {
 void Connection::MessageReply::Activate() {
   std::lock_guard lock(m_promise_mutex);
 
-  m_state = RequestState::InFlight;
+  m_request_state = RequestState::InFlight;
   std::promise<std::string>{}.swap(m_promise);
 }
 
 void Connection::MessageReply::TryCompleteSuccess(std::string_view message) {
   std::lock_guard lock(m_promise_mutex);
 
-  if (m_state != RequestState::InFlight) {
+  if (m_request_state != RequestState::InFlight) {
     return;
   }
 
-  m_state = RequestState::Completed;
+  m_request_state = RequestState::Completed;
   m_promise.set_value(std::string{message});
 }
 
 void Connection::MessageReply::TryCompleteError() {
   std::lock_guard lock(m_promise_mutex);
 
-  if (m_state != RequestState::InFlight) {
+  if (m_request_state != RequestState::InFlight) {
     return;
   }
 
-  m_state = RequestState::Error;
+  m_request_state = RequestState::Error;
   m_promise.set_exception(
       std::make_exception_ptr(FailedConnectionException(fmt::format("Connection close while sending a message"))));
 }
@@ -188,11 +217,20 @@ void Connection::MessageReply::TryCompleteError() {
 void Connection::MessageReply::Complete() {
   std::lock_guard lock(m_promise_mutex);
 
-  if (m_state != RequestState::InFlight) {
+  if (m_request_state != RequestState::InFlight) {
     return;
   }
 
-  m_state = RequestState::Completed;
+  m_request_state = RequestState::Completed;
 }
 
+Connection::State Connection::state() const {
+  std::lock_guard lock{m_state_mutex};
+  return m_state;
+}
+
+void Connection::set_state(State new_state) {
+  std::lock_guard lock{m_state_mutex};
+  m_state = new_state;
+}
 } // namespace PMS::Pilot

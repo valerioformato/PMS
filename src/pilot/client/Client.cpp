@@ -16,6 +16,7 @@ Client::Client(std::string serverUri) : m_serverUri{std::move(serverUri)}, m_end
 }
 
 Client::~Client() {
+  m_stop_source.request_stop();
   m_endpoint->stop_perpetual();
 
   m_thread.join();
@@ -23,18 +24,19 @@ Client::~Client() {
 
 std::unique_ptr<Connection> Client::PersistentConnection() { return PersistentConnection(m_serverUri); }
 std::unique_ptr<Connection> Client::PersistentConnection(std::string_view uri) {
-  auto conn_ptr = std::make_unique<Connection>(m_endpoint, uri);
+  auto conn_ptr = std::make_unique<Connection>(m_endpoint, uri, m_stop_source.get_token());
 
   unsigned int nTries = 0;
-  while (
-      (conn_ptr->get_status() == Connection::State::closing || conn_ptr->get_status() == Connection::State::closed) &&
-      ++nTries < nMaxTries) {
+  while ((conn_ptr->get_status() == Connection::SocketState::closing ||
+          conn_ptr->get_status() == Connection::SocketState::closed) &&
+         ++nTries < nMaxTries) {
     std::this_thread::sleep_for(std::chrono::seconds(5));
     spdlog::warn("Retrying... {}/{}", nTries, nMaxTries);
-    conn_ptr = std::make_unique<Connection>(m_endpoint, uri);
+    conn_ptr = std::make_unique<Connection>(m_endpoint, uri, m_stop_source.get_token());
   }
 
-  if ((conn_ptr->get_status() == Connection::State::closing || conn_ptr->get_status() == Connection::State::closed)) {
+  if ((conn_ptr->get_status() == Connection::SocketState::closing ||
+       conn_ptr->get_status() == Connection::SocketState::closed)) {
     spdlog::error("Could not establish a connection after {} tries. Aborting...", nMaxTries);
   }
 

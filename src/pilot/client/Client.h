@@ -33,6 +33,8 @@ private:
 
   std::thread m_thread;
 
+  std::stop_source m_stop_source;
+
   constexpr static unsigned int nMaxTries = 10;
 };
 
