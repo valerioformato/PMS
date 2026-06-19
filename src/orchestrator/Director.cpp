@@ -13,6 +13,7 @@
 #include <spdlog/fmt/bundled/ranges.h>
 
 // our headers
+#include "common/Async.h"
 #include "common/Job.h"
 #include "common/JsonUtils.h"
 #include "orchestrator/Director.h"
@@ -21,8 +22,6 @@ using json = nlohmann::json;
 using namespace PMS::JsonUtils;
 
 namespace PMS::Orchestrator {
-
-template <typename T> using Async = Director::Async<T>;
 
 void Director::Start() {
   auto tmpresult = m_backDB->Connect();

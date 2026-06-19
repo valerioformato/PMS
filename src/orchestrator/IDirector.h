@@ -6,8 +6,8 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
-#include <stdexec/execution.hpp>
 
+#include "common/Async.h"
 #include "common/Job.h"
 #include "common/Types/Error.h"
 
@@ -18,8 +18,6 @@ namespace PMS::Orchestrator {
 class IDirector {
 public:
   virtual ~IDirector() = default;
-
-  template <typename T> using Async = stdexec::task<T>;
 
   enum class OperationResult { Success, ProcessError, DatabaseError };
 

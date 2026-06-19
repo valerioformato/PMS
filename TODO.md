@@ -411,7 +411,7 @@ Extract the sender pipeline construction from the websocket callback into a stan
 - [x] Manual verification: no unbounded waits — all `cv.wait()` replaced with `cv.wait_for(predicate, timeout)` or stop-token escape.
 - [x] Manual verification: `Send()` error_code checked immediately (`Connection.cpp:164-167`).
 - [x] Manual verification: callbacks are idempotent (`TryComplete*` guard on `m_request_state`).
-- [ ] Unit tests: single in-flight slot cleanup on success/failure/disconnect/cancel.
+- [x] Unit tests: single in-flight slot cleanup on success/failure/disconnect/cancel. (`testMessageReply.cpp` + `testConnection.cpp` — 16+9=25 pilot tests covering Activate → TryComplete* paths, idempotency, idle/no-op, double-cleanup safety)
 - [ ] Integration tests: reconnect under flaky network, serialized single-flight sends per connection, graceful shutdown during traffic.
 - [ ] Regression tests for Worker + HeartBeat end-to-end behavior.
 

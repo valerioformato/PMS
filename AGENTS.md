@@ -73,4 +73,4 @@ The `src/common/` directory holds shared headers only (no library target): `Enum
 - **[ ]** JSON migration: nlohmann → glaze (not started)
 - **[x]** Modernize XRootDTransfer (clang-tidy fixes done)
 - **[x]** Test coverage expansion (Steps 1-5 done, Step 6 sender chains pending)
-- **[ ]** Pilot networking refactor: Connection hardening + async transport (Phase 1-2 done; Phase 3-5 pending; Client.cpp compilation bug fixed)
+- **[ ]** Pilot networking refactor: Connection hardening + async transport (Phase 1-2 done + 25 pilot tests covering single-flight cleanup; Phase 3-5 pending; Client.cpp compilation bug fixed; PMSPilotLib dependencies changed to PUBLIC for header propagation)

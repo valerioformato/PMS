@@ -40,11 +40,11 @@ protected:
 
   std::pair<bool, std::string> ValidateTaskToken(std::string_view task, std::string_view token) const;
 
-  IDirector::Async<std::string> HandleCommand(UserCommand &&command) const;
-  IDirector::Async<std::string> HandleCommand(PilotCommand &&command) const;
+  PMS::Async<std::string> HandleCommand(UserCommand &&command) const;
+  PMS::Async<std::string> HandleCommand(PilotCommand &&command) const;
 
-  IDirector::Async<std::string> MakeUserReplySender(std::string payload);
-  IDirector::Async<std::string> MakePilotReplySender(std::string payload);
+  PMS::Async<std::string> MakeUserReplySender(std::string payload);
+  PMS::Async<std::string> MakePilotReplySender(std::string payload);
 
 private:
   std::shared_ptr<spdlog::logger> m_logger;
