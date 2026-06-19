@@ -20,7 +20,11 @@ public:
   enum class Result { Pending, Open, Failed, Close };
   enum class State { Idle, Connecting, Open, Closing, Closed, Failed };
 
+  struct no_connect_t {};
+  static constexpr no_connect_t no_connect{};
+
   Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri, std::stop_token token);
+  Connection(no_connect_t, std::shared_ptr<WSclient> endpoint, std::string_view uri, std::stop_token token);
   ~Connection();
 
   Connection(const Connection &) = delete;
@@ -60,6 +64,8 @@ private:
   State m_state{State::Idle};
   mutable std::mutex m_state_mutex;
   void set_state(State new_state);
+
+  friend class ConnectionTestHelper;
 
   enum class RequestState {
     Inactive,

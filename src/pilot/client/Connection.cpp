@@ -11,9 +11,10 @@
 namespace PMS::Pilot {
 
 Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri, std::stop_token token)
-    : m_uri{uri}, m_endpoint{std::move(endpoint)}, m_connection{nullptr}, m_stop_token{token} {
-  Connect();
-}
+    : Connection{no_connect, std::move(endpoint), uri, token} {}
+
+Connection::Connection(no_connect_t, std::shared_ptr<WSclient> endpoint, std::string_view uri, std::stop_token token)
+    : m_uri{uri}, m_endpoint{std::move(endpoint)}, m_connection{nullptr}, m_stop_token{token} {}
 
 Connection::~Connection() { Close(); }
 
