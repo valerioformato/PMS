@@ -32,6 +32,7 @@ public:
   void on_message(websocketpp::connection_hdl, WSclient::message_ptr msg);
 
   [[nodiscard]] websocketpp::connection_hdl get_hdl() const { return m_connection->get_handle(); }
+  [[nodiscard]] State state() const;
 
   ErrorOr<std::string> Send(std::string_view message);
 
@@ -58,7 +59,6 @@ private:
 
   State m_state{State::Idle};
   mutable std::mutex m_state_mutex;
-  State state() const;
   void set_state(State new_state);
 
   enum class RequestState {
@@ -76,6 +76,8 @@ private:
     void TryCompleteSuccess(std::string_view message);
     void TryCompleteError();
     void Complete();
+
+    RequestState State();
 
     std::future<std::string> Future() { return m_promise.get_future(); }
 

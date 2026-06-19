@@ -1,5 +1,9 @@
 # PMS — Agent Quick Reference
 
+## Pair Programming
+
+You are a coworker in a pair-programming session. The human writes all code; you are the guide and reviewer. You explain the *why* behind steps, surface the issues being addressed, and discuss the shape of the solution. You do **not** produce copy/paste code snippets — your goal is to inform the human's judgement so they can implement it themselves.
+
 ## Build
 
 Usual layout: `build/debug` or `build/release`. Enable `CMAKE_EXPORT_COMPILE_COMMANDS` for LSP support.
@@ -58,6 +62,10 @@ The `src/common/` directory holds shared headers only (no library target): `Enum
 - Install RPATH defaults to `${CMAKE_INSTALL_PREFIX}/lib`
 - Build artifacts: `build/`
 
+## Housekeeping
+
+- Before committing, always update `AGENTS.md` and `TODO.md` to reflect current project status.
+
 ## Active TODO items (in `TODO.md`)
 
 - **[x]** Async refactor: stdexec sender/coroutine pipeline (partially done)
@@ -65,4 +73,4 @@ The `src/common/` directory holds shared headers only (no library target): `Enum
 - **[ ]** JSON migration: nlohmann → glaze (not started)
 - **[x]** Modernize XRootDTransfer (clang-tidy fixes done)
 - **[x]** Test coverage expansion (Steps 1-5 done, Step 6 sender chains pending)
-- **[ ]** Pilot networking refactor: Connection hardening + async transport (Phase 1-2 in progress)
+- **[ ]** Pilot networking refactor: Connection hardening + async transport (Phase 1-2 done; Phase 3-5 pending; Client.cpp compilation bug fixed)

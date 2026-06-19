@@ -1,3 +1,4 @@
+#include <chrono>
 #include <mutex>
 #include <utility>
 
@@ -138,6 +139,12 @@ void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr m
 #ifdef DEBUG_WEBSOCKETS
   spdlog::trace("Received message: {}", msg->get_payload());
 #endif
+
+  if (m_message_reply.State() != RequestState::InFlight) {
+    spdlog::trace("Received unsolicited message: {}", msg->get_payload());
+    return;
+  }
+
   m_message_reply.TryCompleteSuccess(msg->get_payload());
 }
 
@@ -172,9 +179,18 @@ ErrorOr<std::string> Connection::Send(std::string_view message) {
   spdlog::trace("Send - releasing lock...");
 #endif
 
+  if (m_stop_token.stop_requested()) {
+    spdlog::warn("Stop requested while sending a message, we bail out");
+    return make_error(std::errc::operation_canceled, "shutdown while sending message");
+  }
+
   try {
-    m_message_reply.Complete();
-    return message_future.get();
+    switch (auto result = message_future.wait_for(std::chrono::minutes(10)); result) {
+    case std::future_status::ready:
+      return message_future.get();
+    default:
+      return make_error(std::errc::interrupted, "Timeout expired waiting for reply");
+    }
   } catch (const FailedConnectionException &e) {
     return make_error(std::make_error_code(std::errc::connection_reset), e.what());
   } catch (const std::future_error &e) {
@@ -222,6 +238,12 @@ void Connection::MessageReply::Complete() {
   }
 
   m_request_state = RequestState::Completed;
+}
+
+Connection::RequestState Connection::MessageReply::State() {
+  std::lock_guard lock(m_promise_mutex);
+
+  return m_request_state;
 }
 
 Connection::State Connection::state() const {

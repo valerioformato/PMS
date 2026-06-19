@@ -27,16 +27,14 @@ std::unique_ptr<Connection> Client::PersistentConnection(std::string_view uri) {
   auto conn_ptr = std::make_unique<Connection>(m_endpoint, uri, m_stop_source.get_token());
 
   unsigned int nTries = 0;
-  while ((conn_ptr->get_status() == Connection::SocketState::closing ||
-          conn_ptr->get_status() == Connection::SocketState::closed) &&
+  while ((conn_ptr->state() == Connection::State::Closing || conn_ptr->state() == Connection::State::Closed) &&
          ++nTries < nMaxTries) {
     std::this_thread::sleep_for(std::chrono::seconds(5));
     spdlog::warn("Retrying... {}/{}", nTries, nMaxTries);
     conn_ptr = std::make_unique<Connection>(m_endpoint, uri, m_stop_source.get_token());
   }
 
-  if ((conn_ptr->get_status() == Connection::SocketState::closing ||
-       conn_ptr->get_status() == Connection::SocketState::closed)) {
+  if ((conn_ptr->state() == Connection::State::Closing || conn_ptr->state() == Connection::State::Closed)) {
     spdlog::error("Could not establish a connection after {} tries. Aborting...", nMaxTries);
   }
 

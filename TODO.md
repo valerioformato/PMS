@@ -356,48 +356,66 @@ Extract the sender pipeline construction from the websocket callback into a stan
 
 #### Phase 1 — Safety stabilization of existing code (no behavior expansion)
 
-- [ ] Replace all unconditional waits with predicate waits; keep `connect`/`close`/shutdown waits bounded by timeout.
-- [ ] Handle `send` error_code immediately and return `ErrorOr` failure.
-- [ ] Make callback completion idempotent (never throw on already-satisfied completion paths).
-- [ ] Remove/forbid move semantics for `Connection` unless backed by stable shared state.
-- [ ] Stop using endpoint-wide `reset()` from per-connection logic.
-- [ ] Ensure destructor/shutdown is bounded and cannot deadlock joins.
+- [x] Replace all unconditional waits with predicate waits; keep `connect`/`close`/shutdown waits bounded by timeout. (`Connection.cpp:51,81` — both use `cv.wait_for` with predicates and 60s timeouts)
+- [x] Handle `send` error_code immediately and return `ErrorOr` failure. (`Connection.cpp:164-167`)
+- [x] Make callback completion idempotent (never throw on already-satisfied completion paths). (`MessageReply::TryComplete*` guards on `m_request_state` at `Connection.cpp:197,208,220`)
+- [x] Remove/forbid move semantics for `Connection` unless backed by stable shared state. (`Connection.h:27` — move ctor/dtor deleted)
+- [x] Stop using endpoint-wide `reset()` from per-connection logic. (No `reset()` calls anywhere in pilot code)
+- [x] Ensure destructor/shutdown is bounded and cannot deadlock joins. (`Close()` has 60s timeout + stop-token; `~Client()` uses `stop_perpetual()` before `join()`)
+
+> **Fixed**: `Client.cpp` — `get_status()` / `SocketState` replaced with `state()` / `State::Closing` / `State::Closed`.
 
 #### Phase 2 — New async transport core
 
-- [ ] Add `PilotTransport` (or equivalent) with explicit state machine + mutex/strand discipline.
-- [ ] Add async connect/close with timeout and stop-token cancellation.
-- [ ] Add async send with:
-  - single in-flight request slot per connection (single-flight contract),
-  - cancellation/shutdown cleanup,
-  - disconnect handling (fail the in-flight send explicitly).
-- [ ] Add server-message routing policy (reply vs unsolicited/event frames).
+- [x] Add transport with explicit state machine + mutex discipline. (Embedded in `Connection` — no separate `PilotTransport` class. State machine + `m_state_mutex` guards transitions. `Connection.h:21,59-62`)
+- [x] Add async connect/close with timeout and stop-token cancellation. (`Connect()`: `cv.wait_for` with 60s timeout + `m_stop_token.stop_requested()` predicate at `Connection.cpp:51-53`; `Close()`: same pattern at `Connection.cpp:81-84`)
+- [x] Add async send with:
+  - [x] single in-flight request slot per connection (single-flight contract)
+  - [x] disconnect handling (fail the in-flight send explicitly via `TryCompleteError()` in `on_fail`/`on_close`)
+  - [x] cancellation/shutdown cleanup — `Send()` checks `m_stop_token.stop_requested()` before blocking; returns cancellation error. Also uses `wait_for(10min)` instead of unbounded `get()`. (`Connection.cpp:182-192`)
+- [x] Add server-message routing policy (reply vs unsolicited/event frames) — `on_message` logs unsolicited messages at trace level instead of silently dropping them. (`Connection.cpp:143-146`)
 
 #### Phase 3 — Sender/coroutine integration
 
+> **Design decision**: No separate `PilotTransport` class. The state machine is embedded directly in `Connection` (see Phase 2 above). This keeps the transport tight with the connection lifecycle and avoids an extra indirection layer.
+
 - [ ] Provide sender-first API (`SendSender`) and task wrapper (`SendAsync`), aligned with orchestrator `stdexec` usage.
-- [ ] Implement sync compatibility shim only where still needed.
-- [ ] Add scheduler handoff policy (`on(...)` / `continues_on(...)`) so websocket callbacks stay lightweight.
+- [ ] Implement sync compatibility shim only where still needed. (`Connection::Send()` is currently the primary API; no shim needed yet since nothing calls it through an adapter)
+- [ ] Add scheduler handoff policy (`on(...)` / `continues_on(...)`) so websocket callbacks stay lightweight. (`on_message` currently calls `TryCompleteSuccess` directly on the websocketpp thread — no scheduler dispatch)
 
 #### Phase 4 — Call-site migration
+
+> **Current state**: `Worker` and `HeartBeat` both use the synchronous `Connection::Send()` API. No async API exists yet (Phase 3).
+>
+> - `Worker::MainLoop()` calls `m_wsConnection->Send()` for `p_claimJob` (line 179) and `m_wsClient->PersistentConnection()` to create a separate connection for `HeartBeat` (line 139).
+> - `HeartBeat::updateHB()` calls `m_wsConnection->Send()` in a 15s polling loop (line 44), with `std::future<void>` as the exit signal instead of `std::stop_token`.
+> - `Worker::SendJobUpdates()` calls `m_wsConnection->Send()` for status updates (line 116).
+> - `Client::PersistentConnection()` has a retry loop with `sleep_for(5s)` that duplicates reconnect logic (lines 29-36).
 
 - [ ] Migrate `Worker` claim/update paths to async API.
 - [ ] Migrate `HeartBeat` loop to async send + cancellation-aware sleep loop.
 - [ ] Remove polling/sleep retry loops that duplicate transport reconnect logic.
-- [ ] Replace ad-hoc shutdown signaling with unified stop token flow.
+- [ ] Replace ad-hoc shutdown signaling (`std::promise<void>` in `HeartBeat`) with unified `std::stop_token` flow.
 
 #### Phase 5 — Legacy removal and cleanup
 
+> **Current legacy in `Connection`**: `m_sendMutex` (protects `Send` single-flight, replaceable by sender discipline), `m_connection_result` + `cv`/`cv_m` (used by connect/close/send sync waits), `m_promise_mutex` (MessageReply internals). These would be removed/consolidated once async API is the only path.
+
 - [ ] Remove deprecated sync-only pathways once all users are migrated.
-- [ ] Remove dead fields/mutexes/condition variables from old `Connection`.
+- [ ] Remove dead fields/mutexes/condition variables from `Connection` (`m_sendMutex`, `cv`/`cv_m`, `m_connection_result` — only used by sync `Send()`).
 - [ ] Tighten logging taxonomy (connect/reconnect, timeout, protocol, shutdown).
 
 ### Verification plan
 
 - [ ] Unit tests: state-machine transitions, `connect`/`close` timeout behavior, disconnect handling, duplicate/late replies.
+- [x] Manual verification: no unbounded waits — all `cv.wait()` replaced with `cv.wait_for(predicate, timeout)` or stop-token escape.
+- [x] Manual verification: `Send()` error_code checked immediately (`Connection.cpp:164-167`).
+- [x] Manual verification: callbacks are idempotent (`TryComplete*` guard on `m_request_state`).
 - [ ] Unit tests: single in-flight slot cleanup on success/failure/disconnect/cancel.
 - [ ] Integration tests: reconnect under flaky network, serialized single-flight sends per connection, graceful shutdown during traffic.
 - [ ] Regression tests for Worker + HeartBeat end-to-end behavior.
+
+> **Fixed**: `Client.cpp` — `get_status()` / `SocketState` replaced with `state()` / `State::Closing` / `State::Closed`.
 
 ### Acceptance criteria
 
