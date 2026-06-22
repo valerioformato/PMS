@@ -5,6 +5,7 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <stop_token>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -58,29 +59,28 @@ public:
   }
 
 private:
-  enum class State { JOB_ACQUIRED, RUN, SLEEP, WAIT, EXIT };
+  enum class State { JOB_ACQUIRED, RUN, SLEEP, WAIT };
 
   Config m_config;
   std::unique_ptr<Client> m_wsClient;
   std::unique_ptr<Connection> m_wsConnection;
 
   State m_workerState = State::WAIT;
+  std::stop_source m_stop_source;
+  std::stop_token m_stop_token{m_stop_source.get_token()};
   std::thread m_workerThread;
 
   ts_queue<json> m_queuedJobUpdates;
   std::thread m_jobUpdateThread;
-  void SendJobUpdates();
+  void SendJobUpdates(std::stop_token stoken);
 
   unsigned long int m_maxJobs = std::numeric_limits<unsigned long int>::max();
   std::chrono::seconds m_maxTime = std::chrono::seconds::max();
 
-  std::promise<void> m_exitSignal;
-  std::shared_future<void> m_exitSignalFuture{m_exitSignal.get_future()};
-
   bp::child m_jobProcess;
   boost::uuids::uuid m_uuid{};
 
-  void MainLoop();
+  void MainLoop(std::stop_token stoken);
 
   enum class EnvInfoType { NONE, Script, List };
   std::map<EnvInfoType, std::string_view> m_envInfoNames = {{EnvInfoType::Script, "script"sv},

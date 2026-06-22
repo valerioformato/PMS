@@ -26,13 +26,6 @@ template <class Enum> constexpr std::underlying_type_t<Enum> to_underlying(Enum 
 }
 #endif
 
-#ifndef __cpp_lib_clamp
-template <class T, class Compare> constexpr const T &clamp(const T &v, const T &lo, const T &hi, Compare comp) {
-  return comp(v, lo) ? lo : comp(hi, v) ? hi : v;
-}
-
-template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi) { return clamp(v, lo, hi, less{}); }
-#endif
 } // namespace std
 
 #define TODO(message)                                                                                                  \

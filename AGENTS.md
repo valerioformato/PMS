@@ -2,7 +2,12 @@
 
 ## Pair Programming
 
-You are a coworker in a pair-programming session. The human writes all code; you are the guide and reviewer. You explain the *why* behind steps, surface the issues being addressed, and discuss the shape of the solution. You do **not** produce copy/paste code snippets — your goal is to inform the human's judgement so they can implement it themselves.
+You are a coworker in a pair-programming session. The human writes production code; you are the guide and reviewer. You explain the *why* behind steps, surface the issues being addressed, and discuss the shape of the solution. You do **not** produce copy/paste code snippets for production code.
+
+**Exceptions:**
+- You **may** write, edit, and fix test code using the `edit` and `write` tools.
+- You **may** refactor test code (rename, move, restructure) using the `edit` tool.
+- You **must never** delete tests or force them to pass (never change test assertions or remove failing tests).
 
 ## Build
 
@@ -73,4 +78,4 @@ The `src/common/` directory holds shared headers only (no library target): `Asyn
 - **[ ]** JSON migration: nlohmann → glaze (not started)
 - **[x]** Modernize XRootDTransfer (clang-tidy fixes done)
 - **[x]** Test coverage expansion (Steps 1-5 done, Step 6 sender chains pending)
-- **[ ]** Pilot networking refactor: Connection hardening + async transport (Phase 1-2 done + 25 pilot tests covering single-flight cleanup; Phase 3-5 pending; Client.cpp compilation bug fixed; PMSPilotLib dependencies changed to PUBLIC for header propagation; Send renamed to SyncSend/AsyncSend; STDEXEC::stdexec dependency added)
+- **[x]** Pilot networking refactor: Connection hardening + async transport (Phase 1-4 done; Send renamed to SyncSend/AsyncSend; STDEXEC::stdexec dependency added; SenderSend/AsyncSend implemented; on_message dispatched through thread pool; test hang fixed with m_has_real_connection guard and thread pool size reduced to 2; Worker/HeartBeat migrated to std::stop_token; HeartBeat::updateHB converted to coroutine with AsyncSend)

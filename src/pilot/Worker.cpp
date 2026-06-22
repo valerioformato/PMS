@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ranges>
+#include <stop_token>
 #include <thread>
 
 // external headers
@@ -64,18 +65,20 @@ ErrorOr<void> Worker::Register(const Info &info) {
 }
 
 void Worker::Start() {
-  m_workerThread = std::thread{&Worker::MainLoop, this};
-  m_jobUpdateThread = std::thread{&Worker::SendJobUpdates, this};
+  m_workerThread = std::thread{&Worker::MainLoop, this, m_stop_token};
+  m_jobUpdateThread = std::thread{&Worker::SendJobUpdates, this, m_stop_token};
 }
 
 void Worker::Stop() {
+  m_stop_source.request_stop();
   m_jobUpdateThread.join();
   m_workerThread.join();
 }
 
 void Worker::Kill() {
-  m_workerState = State::EXIT;
-  m_exitSignal.set_value();
+  m_stop_source.request_stop();
+  m_jobUpdateThread.join();
+  m_workerThread.join();
   m_jobProcess.terminate();
 }
 
@@ -96,39 +99,53 @@ void Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
   m_queuedJobUpdates.push(request);
 }
 
-void Worker::SendJobUpdates() {
+void Worker::SendJobUpdates(std::stop_token stoken) {
   while (true) {
     if (m_queuedJobUpdates.empty()) {
-      if (m_workerState == State::EXIT) {
-        return;
-      } else {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        continue;
+      if (stoken.stop_requested()) {
+        break;
       }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      continue;
     }
 
     json request = m_queuedJobUpdates.pop();
 
     spdlog::trace("SendJobUpdates: {}", request.dump(2));
-
     spdlog::debug("Sending status update for job {}: {}", to_string(request["hash"]), to_string(request["status"]));
 
     auto maybe_reply = m_wsConnection->SyncSend(request.dump());
     if (!maybe_reply) {
       spdlog::error("{}", maybe_reply.error().Message());
     } else if (maybe_reply.value() == "Ok"sv) {
-      // m_queuedJobUpdates.pop();
       spdlog::trace("Job update received by server");
     } else if (auto &reply = maybe_reply.value(); reply.find_first_of("not allowed") != std::string::npos) {
       spdlog::error("Server replied: {}", reply);
-      m_workerState = State::EXIT;
+      m_stop_source.request_stop();
+    } else {
+      spdlog::error("Unexpected server reply: {}", maybe_reply.value());
+    }
+  }
+
+  // drain remaining items
+  while (!m_queuedJobUpdates.empty()) {
+    json request = m_queuedJobUpdates.pop();
+
+    spdlog::trace("SendJobUpdates (drain): {}", request.dump(2));
+    spdlog::debug("Sending status update for job {}: {}", to_string(request["hash"]), to_string(request["status"]));
+
+    auto maybe_reply = m_wsConnection->SyncSend(request.dump());
+    if (!maybe_reply) {
+      spdlog::error("{}", maybe_reply.error().Message());
+    } else if (maybe_reply.value() == "Ok"sv) {
+      spdlog::trace("Job update received by server");
     } else {
       spdlog::error("Unexpected server reply: {}", maybe_reply.value());
     }
   }
 }
 
-void Worker::MainLoop() {
+void Worker::MainLoop(std::stop_token stoken) {
   if (m_maxJobs < std::numeric_limits<decltype(m_maxJobs)>::max()) {
     spdlog::debug("Starting worker for {} jobs...", m_maxJobs);
   }
@@ -143,7 +160,7 @@ void Worker::MainLoop() {
   auto lastJobFinished = std::chrono::system_clock::now();
 
   // main loop
-  while (true) {
+  while (!stoken.stop_requested()) {
 
     // count how many failures we had in the last 30 seconds
     auto now = std::chrono::system_clock::now();
@@ -159,16 +176,7 @@ void Worker::MainLoop() {
         spdlog::error("Job {} failed at {}", hash, time);
       }
 
-      m_workerState = State::EXIT;
-    }
-
-    if (m_workerState == State::EXIT) {
-      while (!m_queuedJobUpdates.empty()) {
-        spdlog::warn("Waiting for job updates to be sent...");
-        std::this_thread::sleep_for(std::chrono::minutes(1));
-      }
-
-      break;
+      m_stop_source.request_stop();
     }
 
     json request;
@@ -181,13 +189,14 @@ void Worker::MainLoop() {
       spdlog::error("{}", response.error().Message());
       if (!hb.IsAlive()) {
         spdlog::warn("No connection to server and heartbeat is not alive. Exiting...");
-        m_workerState = State::EXIT;
+        m_stop_source.request_stop();
+        continue;
       } else {
         spdlog::warn("No connection to server. Waiting...");
         m_workerState = State::WAIT;
         std::this_thread::sleep_for(std::chrono::seconds(10));
+        continue;
       }
-      continue;
     }
 
     json job;
@@ -201,7 +210,7 @@ void Worker::MainLoop() {
 
     if (job.contains("finished")) {
       spdlog::info("Worker: no jobs available. Exiting...");
-      m_workerState = State::EXIT;
+      m_stop_source.request_stop();
     } else if (job.contains("sleep")) {
       sleepTime = std::chrono::minutes(1);
       spdlog::info("Worker: sleeping for {} seconds", sleepTime);
@@ -346,7 +355,7 @@ void Worker::MainLoop() {
         spdlog::error("Worker: Job exited with an error. Dumping stderr:");
         dump_file(jobIO.stderr);
         nextJobStatus = JobStatus::Error;
-      } else if (m_workerState == State::EXIT) {
+      } else if (stoken.stop_requested()) {
         spdlog::warn("Worker: Requested termination. Marking job as failed...");
         nextJobStatus = JobStatus::Error;
       } else {
@@ -384,24 +393,22 @@ void Worker::MainLoop() {
 
       if (++doneJobs == m_maxJobs || std::chrono::duration_cast<decltype(m_maxTime)>(delta) > m_maxTime) {
         spdlog::info("Worker: done with {} jobs or {} elapsed time. Exiting...", doneJobs, m_maxTime);
-        m_workerState = State::EXIT;
+        m_stop_source.request_stop();
       }
 
-    } else if (m_workerState != State::EXIT) {
-      m_exitSignalFuture.wait_for(sleepTime);
+    } else if (!stoken.stop_requested()) {
+      std::this_thread::sleep_for(sleepTime);
 
       auto delta = std::chrono::system_clock::now() - lastJobFinished;
-      if (delta > maxWaitTime && m_workerState == State::WAIT) {
+      if (delta > maxWaitTime) {
         spdlog::trace("Worker: no jobs for {:%M:%S}... Exiting now.",
                       std::chrono::duration_cast<std::chrono::seconds>(maxWaitTime));
-        m_workerState = State::EXIT;
+        m_stop_source.request_stop();
       } else {
         spdlog::trace("Worker: no jobs, been waiting for {:%M:%S}...",
                       std::chrono::duration_cast<std::chrono::seconds>(delta));
         continue;
       }
-    } else {
-      m_exitSignal.set_value();
     }
   }
 }

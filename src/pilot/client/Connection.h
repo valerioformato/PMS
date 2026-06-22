@@ -4,6 +4,7 @@
 #include "common/Async.h"
 
 // external dependencies
+#include <exec/static_thread_pool.hpp>
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls_client.hpp>
 #include <websocketpp/connection.hpp>
@@ -42,6 +43,7 @@ public:
 
   ErrorOr<std::string> SyncSend(std::string_view message);
   Async<ErrorOr<std::string>> AsyncSend(std::string_view message);
+  stdexec::sender auto SenderSend(std::string_view message);
 
   class FailedConnectionException : public websocketpp::exception {
   public:
@@ -67,6 +69,10 @@ private:
   State m_state{State::Idle};
   mutable std::mutex m_state_mutex;
   void set_state(State new_state);
+
+  bool m_has_real_connection{false};
+
+  exec::static_thread_pool m_thread_pool{2};
 
   friend class ConnectionTestHelper;
 
