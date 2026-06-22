@@ -45,7 +45,7 @@ Three binaries in `src/`:
 
 Key orchestrator types: `Server` (websocket), `Director` (business logic / DB coordination), `IDirector` (interface for mocking).
 
-The `src/common/` directory holds shared headers only (no library target): `EnumArray.h`, `queue.h`, `ThreadPool.h`, `Utils.h`, `Job.h`.
+The `src/common/` directory holds shared headers only (no library target): `Async.h` (PMS::Async = `stdexec::task<T>`), `EnumArray.h`, `queue.h`, `ThreadPool.h`, `Utils.h`, `Job.h`.
 
 ## Testing
 

@@ -379,6 +379,7 @@ Extract the sender pipeline construction from the websocket callback into a stan
 
 > **Design decision**: No separate `PilotTransport` class. The state machine is embedded directly in `Connection` (see Phase 2 above). This keeps the transport tight with the connection lifecycle and avoids an extra indirection layer.
 
+- [x] Shared `PMS::Async<T>` (stdexec::task<T>) extracted to `common/Async.h` for use by both orchestrator and pilot.
 - [ ] Provide sender-first API (`SendSender`) and task wrapper (`SendAsync`), aligned with orchestrator `stdexec` usage.
 - [ ] Implement sync compatibility shim only where still needed. (`Connection::Send()` is currently the primary API; no shim needed yet since nothing calls it through an adapter)
 - [ ] Add scheduler handoff policy (`on(...)` / `continues_on(...)`) so websocket callbacks stay lightweight. (`on_message` currently calls `TryCompleteSuccess` directly on the websocketpp thread — no scheduler dispatch)
