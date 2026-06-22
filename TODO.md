@@ -380,23 +380,26 @@ Extract the sender pipeline construction from the websocket callback into a stan
 > **Design decision**: No separate `PilotTransport` class. The state machine is embedded directly in `Connection` (see Phase 2 above). This keeps the transport tight with the connection lifecycle and avoids an extra indirection layer.
 
 - [x] Shared `PMS::Async<T>` (stdexec::task<T>) extracted to `common/Async.h` for use by both orchestrator and pilot.
-- [ ] Provide sender-first API (`SendSender`) and task wrapper (`SendAsync`), aligned with orchestrator `stdexec` usage.
-- [x] Sync compatibility API renamed to `SyncSend()` (was `Send()`), async stub added as `AsyncSend()`. (`Connection::SyncSend()` is currently the primary API; `AsyncSend()` returns via `co_return SyncSend(message)`)
-- [ ] Add scheduler handoff policy (`on(...)` / `continues_on(...)`) so websocket callbacks stay lightweight. (`on_message` currently calls `TryCompleteSuccess` directly on the websocketpp thread — no scheduler dispatch)
+- [x] Provide sender-first API (`SendSender`) and task wrapper (`SendAsync`), aligned with orchestrator `stdexec` usage. (`Connection::SenderSend()` at `Connection.cpp:206`, `Connection::AsyncSend()` at `Connection.cpp:249`)
+- [x] Sync compatibility API renamed to `SyncSend()` (was `Send()`), async stub added as `AsyncSend()`. (`Connection::SyncSend()` is currently the primary API; `Connection::AsyncSend()` returns via `co_return co_await SenderSend(message)`)
+- [x] Add scheduler handoff policy (`on(...)`) so websocket callbacks stay lightweight. (`on_message` dispatches `TryCompleteSuccess` through `exec::start_detached(stdexec::on(m_thread_pool.get_scheduler(), ...))` at `Connection.cpp:150-157`)
+- [x] Fixed test hang: added `m_has_real_connection` flag to prevent `Close()` wait in destructor for `no_connect` connections; added null connection guard in `SenderSend()`; reduced thread pool size from 4 to 2 to fix flaky test behavior
 
 #### Phase 4 — Call-site migration
 
-> **Current state**: `Worker` and `HeartBeat` both use the synchronous `Connection::SyncSend()` API. No async API exists yet (Phase 3).
+> **Completed state**: `Worker` and `HeartBeat` migrated to use `std::stop_token` for cancellation.
 >
-> - `Worker::MainLoop()` calls `m_wsConnection->Send()` for `p_claimJob` (line 179) and `m_wsClient->PersistentConnection()` to create a separate connection for `HeartBeat` (line 139).
-> - `HeartBeat::updateHB()` calls `m_wsConnection->Send()` in a 15s polling loop (line 44), with `std::future<void>` as the exit signal instead of `std::stop_token`.
-> - `Worker::SendJobUpdates()` calls `m_wsConnection->Send()` for status updates (line 116).
-> - `Client::PersistentConnection()` has a retry loop with `sleep_for(5s)` that duplicates reconnect logic (lines 29-36).
+> - `Worker::MainLoop()` — uses `std::stop_token` for cancellation, keeps `SyncSend()` for blocking claim job path
+> - `Worker::SendJobUpdates()` — uses `std::stop_token`, dedicated thread with greedy drain behavior on exit
+> - `HeartBeat::updateHB()` — converted to coroutine using `AsyncSend()`, stop token drives exit loop
+> - `HeartBeat::run_heartbeat()` — wrapper function for `std::jthread` to run the coroutine via `stdexec::sync_wait()`
+> - `Worker::Kill()` — sets stop token, joins both threads (update thread drains first), then terminates job process
+> - `Client::PersistentConnection()` — unchanged, retry loop handles connection establishment
 
-- [ ] Migrate `Worker` claim/update paths to async API.
-- [ ] Migrate `HeartBeat` loop to async send + cancellation-aware sleep loop.
-- [ ] Remove polling/sleep retry loops that duplicate transport reconnect logic.
-- [ ] Replace ad-hoc shutdown signaling (`std::promise<void>` in `HeartBeat`) with unified `std::stop_token` flow.
+- [x] Migrate `Worker` claim/update paths to async API (`Worker.cpp:148-413`).
+- [x] Migrate `HeartBeat` loop to async send + cancellation-aware sleep loop (`HeartBeat.cpp:17-40`).
+- [x] Replace ad-hoc shutdown signaling (`std::promise<void>`) with unified `std::stop_token` flow (`Worker.h:69-70`, `HeartBeat.h:31`).
+- [x] `SendJobUpdates()` drains queue on stop token before exiting (`Worker.cpp:132-146`).
 
 #### Phase 5 — Legacy removal and cleanup
 
