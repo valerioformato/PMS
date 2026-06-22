@@ -50,7 +50,7 @@ ErrorOr<void> Worker::Register(const Info &info) {
   if (!m_config.tags.empty())
     req["tags"] = m_config.tags;
 
-  std::string response = TRY(m_wsConnection->Send(req.dump()));
+  std::string response = TRY(m_wsConnection->SyncSend(req.dump()));
 
   json reply;
   try {
@@ -113,7 +113,7 @@ void Worker::SendJobUpdates() {
 
     spdlog::debug("Sending status update for job {}: {}", to_string(request["hash"]), to_string(request["status"]));
 
-    auto maybe_reply = m_wsConnection->Send(request.dump());
+    auto maybe_reply = m_wsConnection->SyncSend(request.dump());
     if (!maybe_reply) {
       spdlog::error("{}", maybe_reply.error().Message());
     } else if (maybe_reply.value() == "Ok"sv) {
@@ -176,7 +176,7 @@ void Worker::MainLoop() {
     request["pilotUuid"] = boost::uuids::to_string(m_uuid);
     spdlog::trace("{}", request.dump(2));
 
-    auto response = m_wsConnection->Send(request.dump());
+    auto response = m_wsConnection->SyncSend(request.dump());
     if (!response) {
       spdlog::error("{}", response.error().Message());
       if (!hb.IsAlive()) {

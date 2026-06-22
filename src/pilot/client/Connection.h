@@ -1,13 +1,15 @@
 #ifndef PMS_PILOT_CONNECTION_H
 #define PMS_PILOT_CONNECTION_H
 
-// c++ headers
-#include <string_view>
+#include "common/Async.h"
 
 // external dependencies
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls_client.hpp>
 #include <websocketpp/connection.hpp>
+
+// c++ headers
+#include <string_view>
 
 #include "common/Utils.h"
 
@@ -38,7 +40,8 @@ public:
   [[nodiscard]] websocketpp::connection_hdl get_hdl() const { return m_connection->get_handle(); }
   [[nodiscard]] State state() const;
 
-  ErrorOr<std::string> Send(std::string_view message);
+  ErrorOr<std::string> SyncSend(std::string_view message);
+  Async<ErrorOr<std::string>> AsyncSend(std::string_view message);
 
   class FailedConnectionException : public websocketpp::exception {
   public:

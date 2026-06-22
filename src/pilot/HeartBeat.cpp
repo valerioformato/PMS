@@ -41,7 +41,7 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
 
   do {
     // spdlog::trace("Updating HeartBeat");
-    auto update_result = m_wsConnection->Send(updateMsg.dump());
+    auto update_result = m_wsConnection->SyncSend(updateMsg.dump());
     if (update_result) {
       failedToConnect = false;
     } else {
@@ -79,7 +79,7 @@ void HeartBeat::updateHB(std::future<void> exitSignal) {
   deleteMsg["uuid"] = boost::uuids::to_string(m_uuid);
   spdlog::trace("Removing pilot from DB");
 
-  auto update_result = m_wsConnection->Send(deleteMsg.dump());
+  auto update_result = m_wsConnection->SyncSend(deleteMsg.dump());
 }
 
 } // namespace PMS::Pilot

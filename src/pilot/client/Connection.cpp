@@ -149,7 +149,7 @@ void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr m
   m_message_reply.TryCompleteSuccess(msg->get_payload());
 }
 
-ErrorOr<std::string> Connection::Send(std::string_view message) {
+ErrorOr<std::string> Connection::SyncSend(std::string_view message) {
   std::lock_guard<std::mutex> slk(m_sendMutex);
 #ifdef DEBUG_WEBSOCKETS
   spdlog::trace("Send - lock acquired");
