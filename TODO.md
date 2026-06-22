@@ -381,12 +381,12 @@ Extract the sender pipeline construction from the websocket callback into a stan
 
 - [x] Shared `PMS::Async<T>` (stdexec::task<T>) extracted to `common/Async.h` for use by both orchestrator and pilot.
 - [ ] Provide sender-first API (`SendSender`) and task wrapper (`SendAsync`), aligned with orchestrator `stdexec` usage.
-- [ ] Implement sync compatibility shim only where still needed. (`Connection::Send()` is currently the primary API; no shim needed yet since nothing calls it through an adapter)
+- [x] Sync compatibility API renamed to `SyncSend()` (was `Send()`), async stub added as `AsyncSend()`. (`Connection::SyncSend()` is currently the primary API; `AsyncSend()` returns via `co_return SyncSend(message)`)
 - [ ] Add scheduler handoff policy (`on(...)` / `continues_on(...)`) so websocket callbacks stay lightweight. (`on_message` currently calls `TryCompleteSuccess` directly on the websocketpp thread — no scheduler dispatch)
 
 #### Phase 4 — Call-site migration
 
-> **Current state**: `Worker` and `HeartBeat` both use the synchronous `Connection::Send()` API. No async API exists yet (Phase 3).
+> **Current state**: `Worker` and `HeartBeat` both use the synchronous `Connection::SyncSend()` API. No async API exists yet (Phase 3).
 >
 > - `Worker::MainLoop()` calls `m_wsConnection->Send()` for `p_claimJob` (line 179) and `m_wsClient->PersistentConnection()` to create a separate connection for `HeartBeat` (line 139).
 > - `HeartBeat::updateHB()` calls `m_wsConnection->Send()` in a 15s polling loop (line 44), with `std::future<void>` as the exit signal instead of `std::stop_token`.
