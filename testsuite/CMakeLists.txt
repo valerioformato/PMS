@@ -15,6 +15,7 @@ orchestrator/testSenderChain.cpp
 orchestrator/testOrchestratorConfig.cpp
 pilot/testMessageReply.cpp
 pilot/testConnection.cpp
+pilot/testHeartBeat.cpp
 )
 target_include_directories(run_tests PRIVATE ${CMAKE_SOURCE_DIR}/testsuite)
 target_link_libraries(run_tests Catch2::Catch2WithMain DBUtils PMSOrchestratorLib PMSPilotLib trompeloeil)

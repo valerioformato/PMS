@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "pilot/client/Connection.h"
+#include <websocketpp/message_buffer/alloc.hpp>
 
 namespace PMS::Pilot {
 
@@ -33,6 +34,10 @@ public:
   using RequestState = Connection::RequestState;
 
   static bool IsStopRequested(const Connection &conn) { return conn.m_stop_token.stop_requested(); }
+
+  static ErrorOr<void> Connect(Connection &conn) { return conn.Connect(); }
+
+  static void Close(Connection &conn) { conn.Close(); }
 };
 
 } // namespace PMS::Pilot
@@ -227,6 +232,177 @@ SCENARIO("Connection: MessageReply in-flight cleanup path", "[pilot][Connection]
       THEN("future.get() returns the message") {
         auto fut = reply.Future();
         REQUIRE(fut.get() == "reply");
+      }
+    }
+  }
+}
+
+SCENARIO("Connection: SyncSend returns not_connected when idle with no connection", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection in Idle state with no active connection") {
+    THEN("SyncSend returns not_connected error") {
+      auto reply = conn.SyncSend("test message");
+      REQUIRE(!reply);
+      REQUIRE(reply.error().Message() == "Connection is not established");
+      REQUIRE(reply.error().Code() == std::make_error_code(std::errc::not_connected));
+    }
+  }
+}
+
+SCENARIO("Connection: SyncSend cancelled when stop token requested", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection with stop token requested") {
+    stop_source.request_stop();
+    THEN("SyncSend returns operation_canceled immediately") {
+      auto reply = conn.SyncSend("test message");
+      REQUIRE(!reply);
+      REQUIRE(reply.error().Code() == std::make_error_code(std::errc::operation_canceled));
+    }
+  }
+}
+
+SCENARIO("Connection: Connect no-op from Connecting state", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection in Connecting state") {
+    ConnectionTestHelper::SetState(conn, Connection::State::Connecting);
+    THEN("Connect returns success immediately") {
+      auto result = ConnectionTestHelper::Connect(conn);
+      REQUIRE(result);
+    }
+  }
+}
+
+SCENARIO("Connection: Connect no-op from Open state", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection in Open state") {
+    ConnectionTestHelper::SetState(conn, Connection::State::Open);
+    THEN("Connect returns success immediately") {
+      auto result = ConnectionTestHelper::Connect(conn);
+      REQUIRE(result);
+    }
+  }
+}
+
+SCENARIO("Connection: Connect no-op from Failed state", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection in Failed state") {
+    ConnectionTestHelper::SetState(conn, Connection::State::Failed);
+    THEN("Connect returns success immediately") {
+      auto result = ConnectionTestHelper::Connect(conn);
+      REQUIRE(result);
+    }
+  }
+}
+
+SCENARIO("Connection: Close no-op from Closed state", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection in Closed state") {
+    ConnectionTestHelper::SetState(conn, Connection::State::Closed);
+    THEN("Close returns immediately (no-op)") {
+      REQUIRE_NOTHROW(ConnectionTestHelper::Close(conn));
+      REQUIRE(ConnectionTestHelper::GetState(conn) == Connection::State::Closed);
+    }
+  }
+}
+
+SCENARIO("Connection: Close no-op from Failed state", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection in Failed state") {
+    ConnectionTestHelper::SetState(conn, Connection::State::Failed);
+    THEN("Close returns immediately (no-op)") {
+      REQUIRE_NOTHROW(ConnectionTestHelper::Close(conn));
+      REQUIRE(ConnectionTestHelper::GetState(conn) == Connection::State::Failed);
+    }
+  }
+}
+
+SCENARIO("Connection: Close no-op from Idle state", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection in Idle state") {
+    THEN("Close returns immediately (no-op)") {
+      REQUIRE_NOTHROW(ConnectionTestHelper::Close(conn));
+      REQUIRE(ConnectionTestHelper::GetState(conn) == Connection::State::Idle);
+    }
+  }
+}
+
+SCENARIO("Connection: on_message routes unsolicited message", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection in Open state with no in-flight request") {
+    ConnectionTestHelper::SetState(conn, Connection::State::Open);
+    auto &reply = ConnectionTestHelper::GetMessageReply(conn);
+    THEN("on_message with unsolicited message leaves state unchanged") {
+      using ws_msg_manager = websocketpp::message_buffer::alloc::con_msg_manager<
+          websocketpp::message_buffer::message<websocketpp::message_buffer::alloc::con_msg_manager>>;
+      auto msg_manager = std::make_shared<ws_msg_manager>();
+      auto msg = msg_manager->get_message();
+      msg->set_payload("unsolicited message");
+
+      websocketpp::connection_hdl hdl;
+      conn.on_message(hdl, msg);
+
+      THEN("MessageReply state stays Inactive") {
+        REQUIRE(reply.State() == ConnectionTestHelper::RequestState::Inactive);
+      }
+    }
+  }
+}
+
+SCENARIO("Connection: on_message dispatches in-flight reply through thread pool", "[pilot][Connection]") {
+  auto endpoint = CreateMockEndpoint();
+  std::stop_source stop_source;
+  Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
+
+  GIVEN("a Connection in Open state with an in-flight request") {
+    ConnectionTestHelper::SetState(conn, Connection::State::Open);
+    auto &reply = ConnectionTestHelper::GetMessageReply(conn);
+    reply.Activate();
+    auto fut = reply.Future();
+
+    THEN("on_message dispatches payload to complete the future") {
+      using ws_msg_manager = websocketpp::message_buffer::alloc::con_msg_manager<
+          websocketpp::message_buffer::message<websocketpp::message_buffer::alloc::con_msg_manager>>;
+      auto msg_manager = std::make_shared<ws_msg_manager>();
+      auto msg = msg_manager->get_message();
+      msg->set_payload("reply payload");
+
+      websocketpp::connection_hdl hdl;
+      conn.on_message(hdl, msg);
+
+      // Wait for thread pool to process the dispatch
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+      THEN("future is ready") { REQUIRE(fut.wait_for(std::chrono::milliseconds(100)) == std::future_status::ready); }
+      THEN("future.get() returns the payload") { REQUIRE(fut.get() == "reply payload"); }
+      THEN("MessageReply state is Completed") {
+        REQUIRE(reply.State() == ConnectionTestHelper::RequestState::Completed);
       }
     }
   }

@@ -78,4 +78,4 @@ The `src/common/` directory holds shared headers only (no library target): `Asyn
 - **[ ]** JSON migration: nlohmann → glaze (not started)
 - **[x]** Modernize XRootDTransfer (clang-tidy fixes done)
 - **[x]** Test coverage expansion (Steps 1-5 done, Step 6 sender chains pending)
-- **[x]** Pilot networking refactor: Connection hardening + async transport (Phase 1-4 done; Send renamed to SyncSend/AsyncSend; STDEXEC::stdexec dependency added; SenderSend/AsyncSend implemented; on_message dispatched through thread pool; test hang fixed with m_has_real_connection guard and thread pool size reduced to 2; Worker/HeartBeat migrated to std::stop_token; HeartBeat::updateHB converted to coroutine with AsyncSend)
+- **[x]** Pilot networking refactor: Connection hardening + async transport (Phase 1-5 done; SyncSend refactored to delegate to SenderSend via stdexec::sync_wait — SenderSend is now the single canonical implementation; on_message dispatched through thread pool; test hang fixed with m_has_real_connection guard and thread pool size reduced to 2; Worker/HeartBeat migrated to std::stop_token; HeartBeat::updateHB converted to coroutine with AsyncSend)
