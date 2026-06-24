@@ -1,0 +1,42 @@
+build-ubuntu24.04:
+  extends: [ ".build-docker" ]
+  image: vformato/pms-ci:ubuntu24.04
+
+test-ubuntu24.04:
+  extends: [ ".test" ]
+  image: vformato/pms-ci:ubuntu24.04
+  needs: [ "build-ubuntu24.04" ]
+
+dockerize-ubuntu24.04-latest:
+  extends: [ ".dockerize-default" ]
+  variables:
+    dockertag: latest
+    DOCKERFILE: Dockerfile
+  only:
+    - master
+
+dockerize-ubuntu24.04-tagged-version:
+  extends: [ ".dockerize-default" ]
+  variables:
+    dockertag: $CI_COMMIT_REF_NAME
+    DOCKERFILE: Dockerfile
+  only:
+    - /^v[0-9]*\.[0-9]*(\.[0-9]*)$/  # ex: v0.1.0
+    - /^v[0-9]*\.[0-9]*(_RC[0-9]+.*)$/ # ex: v1.0_RC1, v1.0_RC1b
+
+dockerize-ubuntu24.04-latest-deb:
+  extends: [ ".dockerize-default" ]
+  variables:
+    dockertag: latest-debug
+    DOCKERFILE: Dockerfile_debug
+  only:
+    - master
+
+dockerize-ubuntu24.04-tagged-version-deb:
+  extends: [ ".dockerize-default" ]
+  variables:
+    dockertag: ${CI_COMMIT_REF_NAME}-debug
+    DOCKERFILE: Dockerfile_debug
+  only:
+    - /^v[0-9]*\.[0-9]*(\.[0-9]*)$/  # ex: v0.1.0
+    - /^v[0-9]*\.[0-9]*(_RC[0-9]+.*)$/ # ex: v1.0_RC1, v1.0_RC1b
