@@ -23,7 +23,14 @@ stages:
 .build-and-install:
   stage: cvmfs-deploy
   script:
-    - export PLATFORM="$(arch)-${os}-gcc$(gcc -dumpversion | cut -d. -f1,2)"
+    - |
+        source /etc/os-release
+        case "$ID" in
+          rhel|almalinux|rocky|centos) export os="el${VERSION_ID%%.*}" ;;
+          ubuntu) export os="ubuntu$(echo "$VERSION_ID" | tr -d .)" ;;
+          *) export os="${ID}${VERSION_ID%%.*}" ;;
+        esac
+    - export PLATFORM="$(arch)-${os}-gcc$(gcc -dumpfullversion | cut -d. -f1,2)"
     - echo "Platform $PLATFORM"
     - export DEST_DIR="/cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/PMS"
     - echo ${DEST_DIR} > dest_dir.txt
