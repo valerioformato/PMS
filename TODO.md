@@ -407,11 +407,13 @@ Extract the sender pipeline construction from the websocket callback into a stan
 #### Phase 5 — Legacy removal and cleanup
 
 > **Current legacy in `Connection`**: `m_sendMutex` (still protects SyncSend single-flight via sender discipline), `m_connection_result` + `cv`/`cv_m` (used by SenderSend's future-based reply wait), `m_promise_mutex` (MessageReply internals). These can be removed once sync callers are migrated to async/sender APIs.
+>
+> **Design decision: SyncSend callers are valid blocking paths.** The three call sites that use `SyncSend` (Worker::Register, Worker::MainLoop claim, Worker::SendJobUpdates) are inherently sequential — each waits for a server reply before proceeding to the next step. Converting these to async/sender APIs would add complexity (coroutine machinery, callback chains, state tracking) without improving throughput or responsiveness. The worker's execution model is a blocking request → process → request loop, so keeping these paths as blocking adapters over `SenderSend` via `stdexec::sync_wait` is the right tradeoff. `SyncSend` stays as the canonical blocking adapter, not a deprecated pathway.
 
 > **Completed**: `SyncSend` refactored to delegate to `SenderSend` via `stdexec::sync_wait` (`Connection.cpp:209-222`). `SenderSend` is now the single canonical send pipeline implementation. `AsyncSend` delegates to `SenderSend` via `co_await`. All call sites (Worker::Register, Worker::MainLoop claim, Worker::SendJobUpdates) work through `SyncSend` as the blocking adapter. `FMT_HEADER_ONLY` added to PMSPilotLib to fix spdlog v1.16.0 linker error.
 
-- [ ] Remove deprecated sync-only pathways once all users are migrated.
-- [ ] Remove dead fields/mutexes/condition variables from `Connection` (`m_sendMutex`, `cv`/`cv_m`, `m_connection_result` — only used by sync `Send()`).
+- [ ] Keep `SyncSend` as canonical blocking adapter (see Phase 5 design decision above).
+- [ ] Remove dead fields/mutexes/condition variables from `Connection` (`cv`/`cv_m`, `m_connection_result` — only used by legacy sync `Send()` pre-refactor).
 - [ ] Tighten logging taxonomy (connect/reconnect, timeout, protocol, shutdown).
 
 ### Verification plan
@@ -433,4 +435,4 @@ Extract the sender pipeline construction from the websocket callback into a stan
 - No callback-thrown exceptions escaping websocket handlers.
 - Pending async sends are always completed (value or explicit error) on disconnect/shutdown/cancellation.
 - Worker and HeartBeat can run/stop repeatedly without deadlocks or leaked background activity.
-- New transport is used by pilot runtime; legacy sync wrapper is removed or isolated behind a temporary adapter.
+- New transport is used by pilot runtime; legacy sync wrapper is removed, but `SyncSend` is retained as the canonical blocking adapter for inherently sequential call sites.
