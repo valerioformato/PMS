@@ -158,58 +158,6 @@ void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr m
                                                                       })));
 }
 
-ErrorOr<std::string> Connection::SyncSend(std::string_view message) {
-  std::lock_guard slk(m_sendMutex);
-#ifdef DEBUG_WEBSOCKETS
-  spdlog::trace("Send - lock acquired");
-#endif
-
-  m_message_reply.Activate();
-  auto message_future = m_message_reply.Future();
-
-  if (state() == State::Closed || state() == State::Closing) {
-    spdlog::warn("Re-connecting to server...");
-    TRY(Connect());
-  }
-
-  std::error_code ec;
-
-#ifdef DEBUG_WEBSOCKETS
-  spdlog::trace("Sending message: {}", message);
-#endif
-
-  m_endpoint->send(get_hdl(), std::string{message}, websocketpp::frame::opcode::text, ec);
-  if (ec) {
-    return make_error(ec, ec.message());
-  }
-
-#ifdef DEBUG_WEBSOCKETS
-  spdlog::trace("waiting for message...");
-
-  spdlog::trace("Send - releasing lock...");
-#endif
-
-  if (m_stop_token.stop_requested()) {
-    spdlog::warn("Stop requested while sending a message, we bail out");
-    return make_error(std::errc::operation_canceled, "shutdown while sending message");
-  }
-
-  try {
-    switch (auto result = message_future.wait_for(std::chrono::minutes(10)); result) {
-    case std::future_status::ready:
-      return message_future.get();
-    default:
-      return make_error(std::errc::interrupted, "Timeout expired waiting for reply");
-    }
-  } catch (const FailedConnectionException &e) {
-    return make_error(std::make_error_code(std::errc::connection_reset), e.what());
-  } catch (const std::future_error &e) {
-    return make_error(std::make_error_code(std::errc::device_or_resource_busy), e.what());
-  } catch (const std::exception &e) {
-    return make_error(std::make_error_code(std::errc::io_error), e.what());
-  }
-}
-
 stdexec::sender auto Connection::SenderSend(std::string_view message) {
   return stdexec::on(m_thread_pool.get_scheduler(),
                      stdexec::just(message) | stdexec::then([this](std::string_view msg) -> ErrorOr<std::string> {
@@ -253,6 +201,19 @@ stdexec::sender auto Connection::SenderSend(std::string_view message) {
                          return make_error(std::make_error_code(std::errc::io_error), e.what());
                        }
                      }));
+}
+
+ErrorOr<std::string> Connection::SyncSend(std::string_view message) {
+  if (m_stop_token.stop_requested()) {
+    spdlog::warn("Stop requested while sending a message, we bail out");
+    return make_error(std::errc::operation_canceled, "shutdown while sending message");
+  }
+
+  auto result = stdexec::sync_wait(SenderSend(message));
+  if (!result || !std::get<0>(*result).has_value()) {
+    return std::unexpected(std::get<0>(*result).error());
+  }
+  return std::get<0>(*result).value();
 }
 
 Async<ErrorOr<std::string>> Connection::AsyncSend(std::string_view message) { co_return co_await SenderSend(message); }

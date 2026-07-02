@@ -1,0 +1,91 @@
+stages:
+  - build
+  - test
+  - dockerize
+  - cvmfs-deploy
+
+# TEMPLATES
+.build:
+  stage: build
+  script:
+    - cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=ON
+    - cmake --build build
+  needs: [ ]
+  artifacts:
+    paths:
+      - build
+
+.build-docker:
+  extends: [ ".build" ]
+  tags:
+    - docker
+
+.build-and-install:
+  stage: cvmfs-deploy
+  script:
+    - |
+        source /etc/os-release
+        case "$ID" in
+          rhel|almalinux|rocky|centos) export os="el${VERSION_ID%%.*}" ;;
+          ubuntu) export os="ubuntu$(echo "$VERSION_ID" | tr -d .)" ;;
+          *) export os="${ID}${VERSION_ID%%.*}" ;;
+        esac
+    - export PLATFORM="$(arch)-${os}-gcc$(gcc -dumpfullversion | cut -d. -f1,2)"
+    - echo "Platform $PLATFORM"
+    - export DEST_DIR="/cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/PMS"
+    - echo ${DEST_DIR} > dest_dir.txt
+    - echo /cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/AMS_vdev_$(git log -1 --format='%cd' --date=format:'%y%m%d') > dest_dir.txt
+    - >
+      cmake -S . -B build -GNinja
+      -DCMAKE_INSTALL_PREFIX=install
+      -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd"
+      -DCMAKE_INSTALL_RPATH=${DEST_DIR}
+      -DENABLE_PMS_TESTS=OFF
+    - cmake --build build
+    - cmake --install build
+  needs: [ ]
+  artifacts:
+    paths:
+      - install
+      - dest_dir.txt
+
+.test:
+  stage: test
+  script:
+    - cd build
+    - ./testsuite/run_tests
+
+.dockerize-default:
+  stage: dockerize
+  image: docker:19.03.12
+  services:
+    - docker:19.03.12-dind
+  needs: [ "test-ubuntu24.04" ]
+  tags:
+    - docker
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+
+  script:
+    - cp docker/${DOCKERFILE} Dockerfile
+    - docker login --username vformato --password $dockerhubtoken
+    - docker build -t vformato/pms:$dockertag .
+    - docker push vformato/pms:$dockertag
+
+.cvmfs-deploy:
+  before_script:
+    - nChecks=0 && while [ $nChecks -lt 5 ]; do sleep 5; if [[ "`cvmfs_server list $CVMFS_REPO | grep \(stratum0\ /\ gw\)`" != "" ]]; then echo CVMFS publisher is healthy; break; else nChecks=$((nChecks+1)); fi; done && if [ $nChecks -eq 5 ]; then echo Healthcheck failed; exit 1; fi
+  script:
+    - export DEST_DIR=$(cat dest_dir.txt)
+    - env | grep CVMFS
+    - cvmfs_server list
+    - systemctl status setup-cvmfs
+    - cvmfs_server transaction
+    - mkdir -p ${DEST_DIR}
+    - cp -rv install/bin ${DEST_DIR}
+    - cp -rv install/lib* ${DEST_DIR}
+    - cvmfs_server publish
+  tags:
+    - cvmfs_publisher
+  stage: cvmfs-deploy

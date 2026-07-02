@@ -381,20 +381,23 @@ Extract the sender pipeline construction from the websocket callback into a stan
 
 - [x] Shared `PMS::Async<T>` (stdexec::task<T>) extracted to `common/Async.h` for use by both orchestrator and pilot.
 - [x] Provide sender-first API (`SendSender`) and task wrapper (`SendAsync`), aligned with orchestrator `stdexec` usage. (`Connection::SenderSend()` at `Connection.cpp:206`, `Connection::AsyncSend()` at `Connection.cpp:249`)
-- [x] Sync compatibility API renamed to `SyncSend()` (was `Send()`), async stub added as `AsyncSend()`. (`Connection::SyncSend()` is currently the primary API; `Connection::AsyncSend()` returns via `co_return co_await SenderSend(message)`)
+- [x] Sync compatibility API renamed to `SyncSend()` (was `Send()`), async stub added as `AsyncSend()`. (`Connection::SyncSend()` delegates to `SenderSend` via `stdexec::sync_wait`; `Connection::AsyncSend()` returns via `co_return co_await SenderSend(message)`; `SenderSend` is the single canonical implementation)
 - [x] Add scheduler handoff policy (`on(...)`) so websocket callbacks stay lightweight. (`on_message` dispatches `TryCompleteSuccess` through `exec::start_detached(stdexec::on(m_thread_pool.get_scheduler(), ...))` at `Connection.cpp:150-157`)
 - [x] Fixed test hang: added `m_has_real_connection` flag to prevent `Close()` wait in destructor for `no_connect` connections; added null connection guard in `SenderSend()`; reduced thread pool size from 4 to 2 to fix flaky test behavior
 
 #### Phase 4 — Call-site migration
 
-> **Completed state**: `Worker` and `HeartBeat` migrated to use `std::stop_token` for cancellation.
->
-> - `Worker::MainLoop()` — uses `std::stop_token` for cancellation, keeps `SyncSend()` for blocking claim job path
+> **Completed state**: `Worker` and `HeartBeat` migrated to use `std::stop_token` for cancellation. `SyncSend` delegates to `SenderSend`.
+
+> - `Worker::MainLoop()` — uses `std::stop_token` for cancellation, calls `SyncSend()` for blocking claim job path
 > - `Worker::SendJobUpdates()` — uses `std::stop_token`, dedicated thread with greedy drain behavior on exit
 > - `HeartBeat::updateHB()` — converted to coroutine using `AsyncSend()`, stop token drives exit loop
 > - `HeartBeat::run_heartbeat()` — wrapper function for `std::jthread` to run the coroutine via `stdexec::sync_wait()`
 > - `Worker::Kill()` — sets stop token, joins both threads (update thread drains first), then terminates job process
 > - `Client::PersistentConnection()` — unchanged, retry loop handles connection establishment
+> - `Connection::SenderSend()` — single canonical send pipeline (auto return type, defined before SyncSend/AsyncSend)
+> - `Connection::SyncSend()` — delegates to `stdexec::sync_wait(SenderSend(message))`
+> - `Connection::AsyncSend()` — delegates to `co_await SenderSend(message)`
 
 - [x] Migrate `Worker` claim/update paths to async API (`Worker.cpp:148-413`).
 - [x] Migrate `HeartBeat` loop to async send + cancellation-aware sleep loop (`HeartBeat.cpp:17-40`).
@@ -403,10 +406,14 @@ Extract the sender pipeline construction from the websocket callback into a stan
 
 #### Phase 5 — Legacy removal and cleanup
 
-> **Current legacy in `Connection`**: `m_sendMutex` (protects `Send` single-flight, replaceable by sender discipline), `m_connection_result` + `cv`/`cv_m` (used by connect/close/send sync waits), `m_promise_mutex` (MessageReply internals). These would be removed/consolidated once async API is the only path.
+> **Current legacy in `Connection`**: `m_sendMutex` (still protects SyncSend single-flight via sender discipline), `m_connection_result` + `cv`/`cv_m` (used by SenderSend's future-based reply wait), `m_promise_mutex` (MessageReply internals). These can be removed once sync callers are migrated to async/sender APIs.
+>
+> **Design decision: SyncSend callers are valid blocking paths.** The three call sites that use `SyncSend` (Worker::Register, Worker::MainLoop claim, Worker::SendJobUpdates) are inherently sequential — each waits for a server reply before proceeding to the next step. Converting these to async/sender APIs would add complexity (coroutine machinery, callback chains, state tracking) without improving throughput or responsiveness. The worker's execution model is a blocking request → process → request loop, so keeping these paths as blocking adapters over `SenderSend` via `stdexec::sync_wait` is the right tradeoff. `SyncSend` stays as the canonical blocking adapter, not a deprecated pathway.
 
-- [ ] Remove deprecated sync-only pathways once all users are migrated.
-- [ ] Remove dead fields/mutexes/condition variables from `Connection` (`m_sendMutex`, `cv`/`cv_m`, `m_connection_result` — only used by sync `Send()`).
+> **Completed**: `SyncSend` refactored to delegate to `SenderSend` via `stdexec::sync_wait` (`Connection.cpp:209-222`). `SenderSend` is now the single canonical send pipeline implementation. `AsyncSend` delegates to `SenderSend` via `co_await`. All call sites (Worker::Register, Worker::MainLoop claim, Worker::SendJobUpdates) work through `SyncSend` as the blocking adapter. `FMT_HEADER_ONLY` added to PMSPilotLib to fix spdlog v1.16.0 linker error.
+
+- [ ] Keep `SyncSend` as canonical blocking adapter (see Phase 5 design decision above).
+- [ ] Remove dead fields/mutexes/condition variables from `Connection` (`cv`/`cv_m`, `m_connection_result` — only used by legacy sync `Send()` pre-refactor).
 - [ ] Tighten logging taxonomy (connect/reconnect, timeout, protocol, shutdown).
 
 ### Verification plan
@@ -428,4 +435,4 @@ Extract the sender pipeline construction from the websocket callback into a stan
 - No callback-thrown exceptions escaping websocket handlers.
 - Pending async sends are always completed (value or explicit error) on disconnect/shutdown/cancellation.
 - Worker and HeartBeat can run/stop repeatedly without deadlocks or leaked background activity.
-- New transport is used by pilot runtime; legacy sync wrapper is removed or isolated behind a temporary adapter.
+- New transport is used by pilot runtime; legacy sync wrapper is removed, but `SyncSend` is retained as the canonical blocking adapter for inherently sequential call sites.
