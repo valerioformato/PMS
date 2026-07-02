@@ -34,7 +34,7 @@ stages:
     - echo "Platform $PLATFORM"
     - export DEST_DIR="/cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/PMS"
     - echo ${DEST_DIR} > dest_dir.txt
-    - echo /cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/AMS_vdev_$(git log -1 --format='%cd' --date=format:'%y%m%d') > dest_dir.txt
+    - echo /cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/PMS > dest_dir.txt
     - >
       cmake -S . -B build -GNinja
       -DCMAKE_INSTALL_PREFIX=install
@@ -43,7 +43,7 @@ stages:
       -DENABLE_PMS_TESTS=OFF
     - cmake --build build
     - cmake --install build
-  needs: [ ]
+  needs: []
   artifacts:
     paths:
       - install
