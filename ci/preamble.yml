@@ -10,13 +10,13 @@ stages:
   script:
     - cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=ON
     - cmake --build build
-  needs: [ ]
+  needs: []
   artifacts:
     paths:
       - build
 
 .build-docker:
-  extends: [ ".build" ]
+  extends: [".build"]
   tags:
     - docker
 
@@ -63,7 +63,7 @@ stages:
   image: docker:19.03.12
   services:
     - docker:19.03.12-dind
-  needs: [ "test-ubuntu24.04" ]
+  needs: ["test-ubuntu24.04"]
   tags:
     - docker
   variables:
@@ -88,6 +88,9 @@ stages:
     - mkdir -p ${DEST_DIR}
     - cp -rv install/bin ${DEST_DIR}
     - cp -rv install/lib* ${DEST_DIR}
+    - cp -rv /lib64/libboost_thread.so.1.75.0 ${DEST_DIR}/lib64
+    - cp -rv /lib64/libboost_regex.so.1.75.0 ${DEST_DIR}/lib64
+    - cp -rv /lib64/libboost_filesystem.so.1.75.0 ${DEST_DIR}/lib64
     - cvmfs_server publish
   tags:
     - cvmfs_publisher
