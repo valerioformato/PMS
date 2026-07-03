@@ -375,7 +375,7 @@ SCENARIO("Connection: on_message routes unsolicited message", "[pilot][Connectio
   }
 }
 
-SCENARIO("Connection: on_message dispatches in-flight reply through thread pool", "[pilot][Connection]") {
+SCENARIO("Connection: on_message completes in-flight reply directly", "[pilot][Connection]") {
   auto endpoint = CreateMockEndpoint();
   std::stop_source stop_source;
   Connection conn(Connection::no_connect, endpoint, "ws://localhost:9999", stop_source.get_token());
@@ -386,7 +386,7 @@ SCENARIO("Connection: on_message dispatches in-flight reply through thread pool"
     reply.Activate();
     auto fut = reply.Future();
 
-    THEN("on_message dispatches payload to complete the future") {
+    THEN("on_message completes the future directly") {
       using ws_msg_manager = websocketpp::message_buffer::alloc::con_msg_manager<
           websocketpp::message_buffer::message<websocketpp::message_buffer::alloc::con_msg_manager>>;
       auto msg_manager = std::make_shared<ws_msg_manager>();
@@ -396,10 +396,9 @@ SCENARIO("Connection: on_message dispatches in-flight reply through thread pool"
       websocketpp::connection_hdl hdl;
       conn.on_message(hdl, msg);
 
-      // Wait for thread pool to process the dispatch
-      std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-      THEN("future is ready") { REQUIRE(fut.wait_for(std::chrono::milliseconds(100)) == std::future_status::ready); }
+      THEN("future is ready immediately") {
+        REQUIRE(fut.wait_for(std::chrono::milliseconds(10)) == std::future_status::ready);
+      }
       THEN("future.get() returns the payload") { REQUIRE(fut.get() == "reply payload"); }
       THEN("MessageReply state is Completed") {
         REQUIRE(reply.State() == ConnectionTestHelper::RequestState::Completed);

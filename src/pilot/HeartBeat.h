@@ -18,11 +18,15 @@ namespace PMS::Pilot {
 class HeartBeat {
 public:
   HeartBeat(boost::uuids::uuid uuid, std::unique_ptr<Connection> wsConnection)
-      : m_uuid{uuid}, m_wsConnection{std::move(wsConnection)}, m_thread{&HeartBeat::run_heartbeat, this,
-                                                                        m_stop_source.get_token()} {}
+      : m_uuid{uuid}, m_wsConnection{std::move(wsConnection)}, m_thread{&HeartBeat::run_heartbeat, this} {}
 
-  void run_heartbeat(std::stop_token stoken);
-  ~HeartBeat() { m_stop_source.request_stop(); }
+  void run_heartbeat();
+  ~HeartBeat() {
+    m_stop_source.request_stop();
+    if (m_thread.joinable()) {
+      m_thread.join();
+    }
+  }
 
   [[nodiscard]] bool IsAlive() const { return m_alive; }
 
@@ -30,7 +34,7 @@ private:
   boost::uuids::uuid m_uuid;
   std::unique_ptr<Connection> m_wsConnection;
   std::stop_source m_stop_source;
-  std::jthread m_thread;
+  std::thread m_thread;
   bool m_alive = false;
 
   Async<void> updateHB(std::stop_token stop_token);

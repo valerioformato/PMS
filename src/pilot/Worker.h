@@ -3,6 +3,7 @@
 
 // c++ headers
 #include <chrono>
+#include <latch>
 #include <map>
 #include <memory>
 #include <stop_token>
@@ -49,7 +50,6 @@ public:
   ErrorOr<void> Register(const Info &);
 
   void Start();
-  void Stop();
   void Kill();
 
   void SetMaxJobs(unsigned int maxJobs) { m_maxJobs = maxJobs; }
@@ -69,6 +69,7 @@ private:
   std::stop_source m_stop_source;
   std::stop_token m_stop_token{m_stop_source.get_token()};
   std::thread m_workerThread;
+  std::latch m_threadsReady{2};
 
   ts_queue<json> m_queuedJobUpdates;
   std::thread m_jobUpdateThread;

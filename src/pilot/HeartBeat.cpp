@@ -10,12 +10,13 @@
 using json = nlohmann::json;
 
 namespace PMS::Pilot {
-void HeartBeat::run_heartbeat(std::stop_token stop_token) { stdexec::sync_wait(updateHB(stop_token)); }
+void HeartBeat::run_heartbeat() {
+  std::stop_token stop_token = m_stop_source.get_token();
+  stdexec::sync_wait(updateHB(stop_token));
+}
 
 Async<void> HeartBeat::updateHB(std::stop_token stop_token) {
   constexpr static auto coolDown = std::chrono::seconds(15);
-
-  spdlog::debug("Starting HeartBeat");
 
   json updateMsg;
   updateMsg["command"] = "p_updateHeartBeat";

@@ -436,3 +436,15 @@ Extract the sender pipeline construction from the websocket callback into a stan
 - Pending async sends are always completed (value or explicit error) on disconnect/shutdown/cancellation.
 - Worker and HeartBeat can run/stop repeatedly without deadlocks or leaked background activity.
 - New transport is used by pilot runtime; legacy sync wrapper is removed, but `SyncSend` is retained as the canonical blocking adapter for inherently sequential call sites.
+
+### [Resolved] HeartBeat destructor called before `p_updateHeartBeat` could be sent
+
+**Symptom**: Orchestrator received `p_registerNewPilot` and `p_deleteHeartBeat` but never `p_updateHeartBeat`.
+
+**Root causes identified and fixed**:
+1. **Thread pool starvation deadlock** — both `MainLoop` and `SendJobUpdates` workers blocked in `SenderSend::wait_for`, unable to dispatch `TryCompleteSuccess` callbacks. Fixed: `on_message` now calls `TryCompleteSuccess` directly on the asio callback thread (Phase 5 change to `Connection.cpp`).
+2. **10-minute unbounded `SenderSend` timeout** — blocking `sync_wait` on a 10-minute timeout meant stop_token changes were never observed. Fixed: `SenderSend` timeout is now stop_token-aware with 5-second polling (10-minute total).
+3. **`HeartBeat` using `std::jthread`** — stop_token passed through constructor created contention. Fixed: `HeartBeat` now uses `std::thread` and gets stop_token internally from member `m_stop_source`.
+4. **Race between thread startup and stop signal** — added `std::latch` synchronization in `Worker::Start()` to ensure both threads are ready before `Start()` returns.
+
+**Verification**: `p_updateHeartBeat` now successfully sent by pilot and received by orchestrator. Backtrace confirmed destructor called at `Worker.cpp:424` (end of `MainLoop`), after the first heartbeat was already transmitted.

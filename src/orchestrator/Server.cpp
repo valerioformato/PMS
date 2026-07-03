@@ -229,9 +229,11 @@ PMS::Async<std::string> Server::MakeUserReplySender(std::string payload) {
 
 PMS::Async<std::string> Server::MakePilotReplySender(std::string payload) {
   try {
+    spdlog::debug("MakePilotReplySender: parsing payload");
     auto parsed = json::parse(payload, nullptr, false);
     if (parsed.is_discarded())
       throw std::runtime_error("JSON parse error");
+    spdlog::debug("MakePilotReplySender: parsing done, calling HandleCommand");
     co_return co_await HandleCommand(CommandParser::toPilotCommand(parsed));
   } catch (const std::exception &e) {
     m_logger->error("Error handling pilot message: {}", e.what());
@@ -249,6 +251,7 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
   exec::start_detached(
       stdexec::on(m_compute_pool.get_scheduler(),
                   MakeUserReplySender(std::move(payload)) | stdexec::then([this, hdl](std::string reply) {
+                    m_logger->trace("Sending reply: {}", reply);
                     websocketpp::lib::error_code ec;
                     m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
                     if (ec)
@@ -263,6 +266,7 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
   exec::start_detached(
       stdexec::on(m_compute_pool.get_scheduler(),
                   MakePilotReplySender(std::move(payload)) | stdexec::then([this, hdl](std::string reply) {
+                    m_logger->trace("Sending reply: {}", reply);
                     websocketpp::lib::error_code ec;
                     m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
                     if (ec)
