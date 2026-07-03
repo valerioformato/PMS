@@ -15,7 +15,7 @@ if(XROOTD_FOUND)
   )
 endif()
 
-add_library(PMSPilotLib ${PMSPilot_lib_src})
+add_library(PMSPilotLib STATIC ${PMSPilot_lib_src})
 target_include_directories(PMSPilotLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(PMSPilotLib PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(PMSPilotLib PUBLIC Boost::filesystem magic_enum::magic_enum spdlog::spdlog_header_only nlohmann_json::nlohmann_json PMSVersion PMSWebsockets STDEXEC::stdexec)

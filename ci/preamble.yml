@@ -35,11 +35,14 @@ stages:
     - export DEST_DIR="/cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/PMS"
     - echo ${DEST_DIR} > dest_dir.txt
     - echo /cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/PMS > dest_dir.txt
+    - cmake -B /tmp/_check -S . -GNinja >/dev/null 2>&1
+    - export CMAKE_LIBDIR=$(grep '^CMAKE_INSTALL_LIBDIR:' /tmp/_check/CMakeCache.txt | awk -F= '{print $2}' | tr -d '\r')
+    - rm -rf /tmp/_check
     - >
       cmake -S . -B build -GNinja
       -DCMAKE_INSTALL_PREFIX=install
       -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd"
-      -DCMAKE_INSTALL_RPATH=${DEST_DIR}
+      -DCMAKE_INSTALL_RPATH="${DEST_DIR}/${CMAKE_LIBDIR}"
       -DENABLE_PMS_TESTS=OFF
     - cmake --build build
     - cmake --install build
