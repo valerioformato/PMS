@@ -67,18 +67,15 @@ ErrorOr<void> Worker::Register(const Info &info) {
 void Worker::Start() {
   m_workerThread = std::thread{&Worker::MainLoop, this, m_stop_token};
   m_jobUpdateThread = std::thread{&Worker::SendJobUpdates, this, m_stop_token};
-}
-
-void Worker::Stop() {
-  m_stop_source.request_stop();
-  m_jobUpdateThread.join();
+  m_threadsReady.wait();
   m_workerThread.join();
+  m_jobUpdateThread.join();
 }
 
 void Worker::Kill() {
   m_stop_source.request_stop();
-  m_jobUpdateThread.join();
   m_workerThread.join();
+  m_jobUpdateThread.join();
   m_jobProcess.terminate();
 }
 
@@ -100,6 +97,7 @@ void Worker::UpdateJobStatus(const std::string &hash, const std::string &task, J
 }
 
 void Worker::SendJobUpdates(std::stop_token stoken) {
+  m_threadsReady.count_down();
   while (true) {
     if (m_queuedJobUpdates.empty()) {
       if (stoken.stop_requested()) {
@@ -146,6 +144,7 @@ void Worker::SendJobUpdates(std::stop_token stoken) {
 }
 
 void Worker::MainLoop(std::stop_token stoken) {
+  m_threadsReady.count_down();
   if (m_maxJobs < std::numeric_limits<decltype(m_maxJobs)>::max()) {
     spdlog::debug("Starting worker for {} jobs...", m_maxJobs);
   }
@@ -153,7 +152,7 @@ void Worker::MainLoop(std::stop_token stoken) {
   constexpr auto maxWaitTime = std::chrono::minutes(10);
   auto sleepTime = std::chrono::seconds(1);
 
-  HeartBeat hb{m_uuid, m_wsClient->PersistentConnection()};
+  std::unique_ptr<HeartBeat> hb{new HeartBeat{m_uuid, m_wsClient->PersistentConnection()}};
   unsigned long int doneJobs = 0;
 
   auto startTime = std::chrono::system_clock::now();
@@ -187,7 +186,7 @@ void Worker::MainLoop(std::stop_token stoken) {
     auto response = m_wsConnection->SyncSend(request.dump());
     if (!response) {
       spdlog::error("{}", response.error().Message());
-      if (!hb.IsAlive()) {
+      if (!hb->IsAlive()) {
         spdlog::warn("No connection to server and heartbeat is not alive. Exiting...");
         m_stop_source.request_stop();
         continue;

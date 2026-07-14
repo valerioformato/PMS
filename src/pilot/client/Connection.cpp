@@ -1,9 +1,7 @@
 #include <chrono>
-#include <exec/start_detached.hpp>
 #include <mutex>
 #include <utility>
 
-#include <magic_enum/magic_enum.hpp>
 #include <spdlog/fmt/bundled/format.h>
 #include <spdlog/spdlog.h>
 
@@ -12,7 +10,9 @@
 namespace PMS::Pilot {
 
 Connection::Connection(std::shared_ptr<WSclient> endpoint, std::string_view uri, std::stop_token token)
-    : Connection{no_connect, std::move(endpoint), uri, token} {}
+    : Connection{no_connect, std::move(endpoint), uri, token} {
+  Connect();
+}
 
 Connection::Connection(no_connect_t, std::shared_ptr<WSclient> endpoint, std::string_view uri, std::stop_token token)
     : m_uri{uri}, m_endpoint{std::move(endpoint)}, m_connection{nullptr}, m_stop_token{token} {}
@@ -143,19 +143,12 @@ void Connection::on_close(WSclient *c, websocketpp::connection_hdl hdl) {
 }
 
 void Connection::on_message(websocketpp::connection_hdl, WSclient::message_ptr msg) {
-#ifdef DEBUG_WEBSOCKETS
-  spdlog::trace("Received message: {}", msg->get_payload());
-#endif
-
   if (m_message_reply.State() != RequestState::InFlight) {
     spdlog::trace("Received unsolicited message: {}", msg->get_payload());
     return;
   }
 
-  exec::start_detached(stdexec::on(m_thread_pool.get_scheduler(), stdexec::just(std::string{msg->get_payload()}) |
-                                                                      stdexec::then([this](std::string payload) {
-                                                                        m_message_reply.TryCompleteSuccess(payload);
-                                                                      })));
+  m_message_reply.TryCompleteSuccess(std::string{msg->get_payload()});
 }
 
 stdexec::sender auto Connection::SenderSend(std::string_view message) {
@@ -167,7 +160,6 @@ stdexec::sender auto Connection::SenderSend(std::string_view message) {
                        auto message_future = m_message_reply.Future();
 
                        if (state() == State::Closed || state() == State::Closing) {
-                         spdlog::warn("Re-connecting to server...");
                          TRY(Connect());
                        }
 
@@ -187,12 +179,17 @@ stdexec::sender auto Connection::SenderSend(std::string_view message) {
                        }
 
                        try {
-                         switch (auto result = message_future.wait_for(std::chrono::minutes(10)); result) {
-                         case std::future_status::ready:
-                           return message_future.get();
-                         default:
-                           return make_error(std::errc::interrupted, "Timeout expired waiting for reply");
+                         while (!m_stop_token.stop_requested()) {
+                           std::future_status status = message_future.wait_for(std::chrono::seconds(5));
+                           if (status == std::future_status::ready) {
+                             return message_future.get();
+                           }
+                           if (status == std::future_status::timeout) {
+                             continue;
+                           }
                          }
+                         spdlog::warn("Stop requested while waiting for reply, bailing out");
+                         return make_error(std::errc::operation_canceled, "shutdown while waiting for reply");
                        } catch (const FailedConnectionException &e) {
                          return make_error(std::make_error_code(std::errc::connection_reset), e.what());
                        } catch (const std::future_error &e) {

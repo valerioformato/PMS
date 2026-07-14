@@ -150,9 +150,6 @@ int main(int argc, const char **argv) {
   std::thread watchThread{signal_watcher, std::ref(worker)};
   worker.Start();
 
-  // this blocks until the main loop thread has exited
-  worker.Stop();
-
   // terrible hack to stop signal handler thread
   gSignalStatus = -1;
   watchThread.join();

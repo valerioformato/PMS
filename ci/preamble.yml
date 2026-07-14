@@ -10,13 +10,13 @@ stages:
   script:
     - cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=ON
     - cmake --build build
-  needs: [ ]
+  needs: []
   artifacts:
     paths:
       - build
 
 .build-docker:
-  extends: [ ".build" ]
+  extends: [".build"]
   tags:
     - docker
 
@@ -34,16 +34,19 @@ stages:
     - echo "Platform $PLATFORM"
     - export DEST_DIR="/cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/PMS"
     - echo ${DEST_DIR} > dest_dir.txt
-    - echo /cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/AMS_vdev_$(git log -1 --format='%cd' --date=format:'%y%m%d') > dest_dir.txt
+    - echo /cvmfs/amsitaly.infn.it/public/install/${PLATFORM}/PMS > dest_dir.txt
+    - cmake -B /tmp/_check -S . -GNinja >/dev/null 2>&1
+    - export CMAKE_LIBDIR=$(grep '^CMAKE_INSTALL_LIBDIR:' /tmp/_check/CMakeCache.txt | awk -F= '{print $2}' | tr -d '\r')
+    - rm -rf /tmp/_check
     - >
       cmake -S . -B build -GNinja
       -DCMAKE_INSTALL_PREFIX=install
       -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd"
-      -DCMAKE_INSTALL_RPATH=${DEST_DIR}
+      -DCMAKE_INSTALL_RPATH="${DEST_DIR}/${CMAKE_LIBDIR}"
       -DENABLE_PMS_TESTS=OFF
     - cmake --build build
     - cmake --install build
-  needs: [ ]
+  needs: []
   artifacts:
     paths:
       - install
@@ -60,7 +63,7 @@ stages:
   image: docker:19.03.12
   services:
     - docker:19.03.12-dind
-  needs: [ "test-ubuntu24.04" ]
+  needs: ["test-ubuntu24.04"]
   tags:
     - docker
   variables:
@@ -85,6 +88,9 @@ stages:
     - mkdir -p ${DEST_DIR}
     - cp -rv install/bin ${DEST_DIR}
     - cp -rv install/lib* ${DEST_DIR}
+    - cp -rv /lib64/libboost_thread.so.1.75.0 ${DEST_DIR}/lib64
+    - cp -rv /lib64/libboost_regex.so.1.75.0 ${DEST_DIR}/lib64
+    - cp -rv /lib64/libboost_filesystem.so.1.75.0 ${DEST_DIR}/lib64
     - cvmfs_server publish
   tags:
     - cvmfs_publisher
