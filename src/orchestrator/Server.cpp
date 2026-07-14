@@ -213,6 +213,7 @@ PMS::Async<std::string> Server::HandleCommand(PilotCommand &&command) const {
 }
 
 PMS::Async<std::string> Server::MakeUserReplySender(std::string payload) {
+  m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
   try {
     auto parsed = json::parse(payload, nullptr, false);
     if (parsed.is_discarded())
@@ -228,6 +229,7 @@ PMS::Async<std::string> Server::MakeUserReplySender(std::string payload) {
 }
 
 PMS::Async<std::string> Server::MakePilotReplySender(std::string payload) {
+  m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
   try {
     auto parsed = json::parse(payload, nullptr, false);
     if (parsed.is_discarded())
@@ -244,7 +246,6 @@ PMS::Async<std::string> Server::MakePilotReplySender(std::string payload) {
 
 void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
   auto payload = std::string{msg->get_payload()};
-  m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
 
   exec::start_detached(
       stdexec::on(m_compute_pool.get_scheduler(),
@@ -258,7 +259,6 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
 
 void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg) {
   auto payload = std::string{msg->get_payload()};
-  m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
 
   exec::start_detached(
       stdexec::on(m_compute_pool.get_scheduler(),

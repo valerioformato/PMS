@@ -24,7 +24,7 @@ CPMAddPackage("gh:valerioformato/websocketpp#boost")
 CPMAddPackage(
   NAME mongo-cxx-driver
   GITHUB_REPOSITORY mongodb/mongo-cxx-driver
-  GIT_TAG r4.2.0
+  GIT_TAG r4.3.0
   EXCLUDE_FROM_ALL NO
   SYSTEM YES
 )
