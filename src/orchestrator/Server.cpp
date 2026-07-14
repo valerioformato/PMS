@@ -250,7 +250,6 @@ void Server::message_handler(websocketpp::connection_hdl hdl, WSserver::message_
   exec::start_detached(
       stdexec::on(m_compute_pool.get_scheduler(),
                   MakeUserReplySender(std::move(payload)) | stdexec::then([this, hdl](std::string reply) {
-                    m_logger->trace("Sending reply: {}", reply);
                     websocketpp::lib::error_code ec;
                     m_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
                     if (ec)
@@ -264,7 +263,6 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
   exec::start_detached(
       stdexec::on(m_compute_pool.get_scheduler(),
                   MakePilotReplySender(std::move(payload)) | stdexec::then([this, hdl](std::string reply) {
-                    m_logger->trace("Sending reply: {}", reply);
                     websocketpp::lib::error_code ec;
                     m_pilot_endpoint.send(hdl, reply, websocketpp::frame::opcode::text, ec);
                     if (ec)
