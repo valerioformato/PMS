@@ -231,11 +231,9 @@ PMS::Async<std::string> Server::MakeUserReplySender(std::string payload) {
 PMS::Async<std::string> Server::MakePilotReplySender(std::string payload) {
   m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
   try {
-    spdlog::debug("MakePilotReplySender: parsing payload");
     auto parsed = json::parse(payload, nullptr, false);
     if (parsed.is_discarded())
       throw std::runtime_error("JSON parse error");
-    spdlog::debug("MakePilotReplySender: parsing done, calling HandleCommand");
     co_return co_await HandleCommand(CommandParser::toPilotCommand(parsed));
   } catch (const std::exception &e) {
     m_logger->error("Error handling pilot message: {}", e.what());
