@@ -2,6 +2,7 @@
 #define PMS_PILOT_HEARTBEAT_H
 
 // c++ headers
+#include <atomic>
 #include <memory>
 #include <stop_token>
 #include <thread>
@@ -28,14 +29,16 @@ public:
     }
   }
 
-  [[nodiscard]] bool IsAlive() const { return m_alive; }
+  [[nodiscard]] bool IsAlive() const { return m_alive.load(); }
 
 private:
   boost::uuids::uuid m_uuid;
   std::unique_ptr<Connection> m_wsConnection;
   std::stop_source m_stop_source;
   std::thread m_thread;
-  bool m_alive = false;
+  std::atomic_bool m_alive{true};
+  std::atomic_uint m_consecutive_failures{0};
+  static constexpr unsigned int m_max_consecutive_failures = 3;
 
   Async<void> updateHB(std::stop_token stop_token);
 };

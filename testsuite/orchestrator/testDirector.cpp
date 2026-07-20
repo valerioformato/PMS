@@ -307,7 +307,9 @@ SCENARIO("Director: RegisterNewPilot", "[Director]") {
   GIVEN("all provided tasks are valid") {
     WHEN("the front-DB insert succeeds") {
       REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
-          .WITH(std::holds_alternative<PMS::DB::Queries::Insert>(_1))
+          .WITH(std::holds_alternative<PMS::DB::Queries::Insert>(_1) &&
+                std::get<PMS::DB::Queries::Insert>(_1).documents.size() == 1 &&
+                std::get<PMS::DB::Queries::Insert>(_1).documents[0].contains("lastHeartBeat"))
           .RETURN(json{});
 
       std::vector<std::pair<std::string, std::string>> tasks = {{"validTask", task_token}};

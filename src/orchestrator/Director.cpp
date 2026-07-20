@@ -410,6 +410,7 @@ Director::RegisterNewPilot(std::string_view pilotUuid, std::string_view user,
   }
   query["tags"] = tags;
   query["host"] = host_info;
+  query["lastHeartBeat"] = Utils::CurrentTimeToMillisSinceEpoch();
 
   m_activePilots[to_string(pilotUuid)] = PilotInfo{to_string(pilotUuid), result.validTasks, tags};
 

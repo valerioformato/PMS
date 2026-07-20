@@ -448,3 +448,17 @@ Extract the sender pipeline construction from the websocket callback into a stan
 4. **Race between thread startup and stop signal** — added `std::latch` synchronization in `Worker::Start()` to ensure both threads are ready before `Start()` returns.
 
 **Verification**: `p_updateHeartBeat` now successfully sent by pilot and received by orchestrator. Backtrace confirmed destructor called at `Worker.cpp:424` (end of `MainLoop`), after the first heartbeat was already transmitted.
+
+### [Resolved] `HeartBeat::IsAlive()` was always false, causing premature pilot exits on transient disconnects
+
+**Symptom**: pilots exited after temporary send failures because `Worker::MainLoop` treats `!hb->IsAlive()` as a terminal condition.
+
+**Root causes identified and fixed**:
+1. **`m_alive` was never updated** — `HeartBeat` initialized `m_alive` to false and never set it true.
+2. **No bounded liveness hysteresis** — a single failed heartbeat attempt could immediately be interpreted as dead transport.
+3. **Stale pilot entries after reconnect churn** — `RegisterNewPilot` inserted pilots without `lastHeartBeat`, so `UpdateDeadPilots` (which matches `lastHeartBeat < threshold`) could not collect those rows.
+
+**Fixes applied**:
+1. `HeartBeat` now tracks liveness with atomics: successful heartbeat replies reset failure count and set `m_alive=true`.
+2. Consecutive heartbeat failures are counted and only mark `m_alive=false` after a small threshold (3), reducing flapping on transient network issues.
+3. `Director::RegisterNewPilot` initializes `lastHeartBeat` at insert time so dead-pilot cleanup can remove stale registrations even when a pilot dies before its first heartbeat update.
