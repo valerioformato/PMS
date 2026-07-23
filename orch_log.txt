@@ -1,0 +1,281 @@
+[07/03/26 18:46:55]              [info] Starting orchestrator
+[07/03/26 18:46:55]              [info] Using frontend DB: localhost/PMSFrontend
+[07/03/26 18:46:55]              [info] Using backend DB: localhost:27027/PMSBackend
+[07/03/26 18:46:55] Server       [info] Starting Websocket server
+[07/03/26 18:46:55] Server       [debug] Port 9002 acquired.
+[07/03/26 18:46:55] Server       [debug] Port 9003 acquired.
+[07/03/26 18:46:55] Director     [debug] Updating tasks
+[07/03/26 18:46:55] Harness      [trace] Running query Find: {}, {}
+[07/03/26 18:46:55] Director     [info] Job transfer thread started with 1000 jobs per query
+[07/03/26 18:46:55] Director     [debug] Syncing DBs... (lastUpdate > 1783097205879)
+[07/03/26 18:46:55] Harness      [trace] Running query Find: [{"lastUpdate" GT 1783097205879}, ], {}
+[07/03/26 18:46:55] Director     [warning] Task sometask2 is in DB but was not found in memory
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Pending"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Claimed"}, ]
+[07/03/26 18:46:55] Director     [debug] ...query done.
+[07/03/26 18:46:55] Director     [debug] DBs synced: 0 jobs updated in backend DB
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Running"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Done"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Error"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Failed"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "InboundTransfer"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "OutboundTransfer"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "InboundTransferError"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "OutboundTransferError"}, ]
+[07/03/26 18:46:55] Director     [debug] Task sometask2 updated - 100 jobs (17 Pending, 0 Claimed, 7 Running, 68 Done, 8 Error, 0 Failed, 0 InboundTransfer, 0 OutboundTransfer, 0 InboundTransferError, 0 OutboundTransferError) - status: A
+[07/03/26 18:46:55] Director     [warning] Task sometask is in DB but was not found in memory
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Pending"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Claimed"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Running"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Done"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Error"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Failed"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "InboundTransfer"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "OutboundTransfer"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "InboundTransferError"}, ]
+[07/03/26 18:46:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "OutboundTransferError"}, ]
+[07/03/26 18:46:55] Director     [debug] Task sometask updated - 21 jobs (12 Pending, 5 Claimed, 2 Running, 1 Done, 0 Error, 1 Failed, 0 InboundTransfer, 0 OutboundTransfer, 0 InboundTransferError, 0 OutboundTransferError) - status: A
+[07/03/26 18:46:56] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:46:56] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:46:57] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:46:57] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:46:58] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:46:58] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:46:59] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:46:59] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:00] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:00] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:01] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:01] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:02] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:02] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:03] Server       [trace] [5334580341175262655] Received pilot message {"command":"p_registerNewPilot","host":{"hostname":"Zaphod","ip":"127.0.1.1","os_version":"Linux version 6.6.87.1-microsoft-standard-WSL2 (root@af282157c79e) (gcc (GCC) 11.2.0, GNU ld (GNU Binutils) 2.37) #1 SMP PREEMPT_DYNAMIC Mon Apr 21 17:08:54 UTC 2025"},"pilotUuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b","tags":["cern"],"tasks":[{"name":"sometask","token":"9da29595-d9da-4259-a798-839e688268d4"}],"user":"vformato"}
+[07/03/26 18:47:03]              [debug] MakePilotReplySender: parsing payload
+[07/03/26 18:47:03]              [debug] MakePilotReplySender: parsing done, calling HandleCommand
+[07/03/26 18:47:03] Server       [trace] Registering new pilot: cb33fa08-9dbd-455b-85b7-f0af86cffe3b
+[07/03/26 18:47:03] Director     [trace] Registering new pilot: cb33fa08-9dbd-455b-85b7-f0af86cffe3b
+[07/03/26 18:47:03] Harness      [trace] Running query Insert: [{"host":{"hostname":"Zaphod","ip":"127.0.1.1","os_version":"Linux version 6.6.87.1-microsoft-standard-WSL2 (root@af282157c79e) (gcc (GCC) 11.2.0, GNU ld (GNU Binutils) 2.37) #1 SMP PREEMPT_DYNAMIC Mon Apr 21 17:08:54 UTC 2025"},"tags":["cern"],"tasks":["sometask"],"user":"vformato","uuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b"}]
+[07/03/26 18:47:03] Harness      [trace] Running query Insert: [{"host":{"hostname":"Zaphod","ip":"127.0.1.1","os_version":"Linux version 6.6.87.1-microsoft-standard-WSL2 (root@af282157c79e) (gcc (GCC) 11.2.0, GNU ld (GNU Binutils) 2.37) #1 SMP PREEMPT_DYNAMIC Mon Apr 21 17:08:54 UTC 2025"},"tags":["cern"],"tasks":["sometask"],"user":"vformato","uuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b"}]
+[07/03/26 18:47:03] Server       [trace] Sending reply: {"validTasks":["sometask"]}
+[07/03/26 18:47:03] Server       [trace] [5334580341175262655] Received pilot message {"command":"p_claimJob","pilotUuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b"}
+[07/03/26 18:47:03] Server       [trace] [5334580341175262655] Received pilot message {"command":"p_updateHeartBeat","uuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b"}
+[07/03/26 18:47:03]              [debug] MakePilotReplySender: parsing done, calling HandleCommand
+[07/03/26 18:47:03]              [debug] MakePilotReplySender: parsing payload
+[07/03/26 18:47:03]              [debug] MakePilotReplySender: parsing done, calling HandleCommand
+[07/03/26 18:47:03] Server       [trace] Sending reply: Ok
+[07/03/26 18:47:03] Director     [trace] RunClaimQueries:  Pilot cb33fa08-9dbd-455b-85b7-f0af86cffe3b has no jobs available in cache. Querying DB...
+[07/03/26 18:47:03] Harness      [trace] Running query Find: [{"status" IN ["Pending","Error","OutboundTransferError","InboundTransferError"]}, {"task" IN ["sometask"]}, {"tags" ALL ["cern"]}, ], {"_id":0,"dataset":0,"jobName":0,"status":0,"tags":0,"user":0}
+[07/03/26 18:47:03] Director     [trace] RunClaimQueries:  Pilot cb33fa08-9dbd-455b-85b7-f0af86cffe3b has jobs available in active task sometask: selected job b978f2a63d035e9debe05398f27b8bc33217d5464156eb48f8d7cf077f0fec27
+[07/03/26 18:47:03] Director     [trace] Updating 1 jobs to Claimed status
+[07/03/26 18:47:03] Harness      [trace] Running bulk write on collection jobs (1 ops)
+[07/03/26 18:47:03] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:03] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:03] Server       [trace] Sending reply: {"exe_args":["10"],"executable":"/home/vformato/Workdir/PMS/testbed/scripts/workload.sh","hash":"b978f2a63d035e9debe05398f27b8bc33217d5464156eb48f8d7cf077f0fec27","retries":0,"stderr":"test.err","stdin":"","stdout":"test.out","task":"sometask"}
+[07/03/26 18:47:04] Server       [trace] [5334580341175262655] Received pilot message {"command":"p_updateJobStatus","hash":"b978f2a63d035e9debe05398f27b8bc33217d5464156eb48f8d7cf077f0fec27","pilotUuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b","status":"Running","task":"sometask"}
+[07/03/26 18:47:04]              [debug] MakePilotReplySender: parsing payload
+[07/03/26 18:47:04]              [debug] MakePilotReplySender: parsing done, calling HandleCommand
+[07/03/26 18:47:04] Server       [trace] Sending reply: Ok
+[07/03/26 18:47:04] Harness      [trace] Running bulk write on collection jobs (1 ops)
+[07/03/26 18:47:04] Harness      [trace] Running query Update: [{"status" IN ["Error","InboundTransferError","OutboundTransferError"]}, {"retries" GTE 3}, ], [{"status" SET "Failed"}, ]
+[07/03/26 18:47:04] Director     [trace] RunClaimQueries:  Erased 1 jobs already sent. 0 remaining
+[07/03/26 18:47:04] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:04] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:05] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:05] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:06] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:06] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:07] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:07] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:08] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:08] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:09] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:09] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:10] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:10] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:11] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:11] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:12] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:12] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:13] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:13] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:14] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:14] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:15] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:15] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:16] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:16] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:17] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:17] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:18] Server       [trace] [5334580341175262655] Received pilot message {"command":"p_updateHeartBeat","uuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b"}
+[07/03/26 18:47:18]              [debug] MakePilotReplySender: parsing payload
+[07/03/26 18:47:18]              [debug] MakePilotReplySender: parsing done, calling HandleCommand
+[07/03/26 18:47:18] Server       [trace] Sending reply: Ok
+[07/03/26 18:47:18] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:18] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:19] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:19] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:19] Server       [trace] [5334580341175262655] Received pilot message {"command":"p_claimJob","pilotUuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b"}
+[07/03/26 18:47:19]              [debug] MakePilotReplySender: parsing payload
+[07/03/26 18:47:19]              [debug] MakePilotReplySender: parsing done, calling HandleCommand
+[07/03/26 18:47:20] Director     [trace] RunClaimQueries:  Pilot cb33fa08-9dbd-455b-85b7-f0af86cffe3b has no jobs available in cache. Querying DB...
+[07/03/26 18:47:20] Harness      [trace] Running query Find: [{"status" IN ["Pending","Error","OutboundTransferError","InboundTransferError"]}, {"task" IN ["sometask"]}, {"tags" ALL ["cern"]}, ], {"_id":0,"dataset":0,"jobName":0,"status":0,"tags":0,"user":0}
+[07/03/26 18:47:20] Director     [trace] RunClaimQueries:  Pilot cb33fa08-9dbd-455b-85b7-f0af86cffe3b has jobs available in active task sometask: selected job 93f636ba783338b55f0aaf8c5e0bb09fdb88095ffe99ea2323b89e0dac38e139
+[07/03/26 18:47:20] Director     [trace] Updating 1 jobs to Claimed status
+[07/03/26 18:47:20] Harness      [trace] Running bulk write on collection jobs (1 ops)
+[07/03/26 18:47:20] Server       [trace] Sending reply: {"exe_args":["11"],"executable":"/home/vformato/Workdir/PMS/testbed/scripts/workload.sh","hash":"93f636ba783338b55f0aaf8c5e0bb09fdb88095ffe99ea2323b89e0dac38e139","retries":0,"stderr":"test.err","stdin":"","stdout":"test.out","task":"sometask"}
+[07/03/26 18:47:20] Server       [trace] [5334580341175262655] Received pilot message {"command":"p_updateJobStatus","hash":"b978f2a63d035e9debe05398f27b8bc33217d5464156eb48f8d7cf077f0fec27","pilotUuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b","status":"Done","task":"sometask"}
+[07/03/26 18:47:20]              [debug] MakePilotReplySender: parsing payload
+[07/03/26 18:47:20]              [debug] MakePilotReplySender: parsing done, calling HandleCommand
+[07/03/26 18:47:20] Server       [trace] Sending reply: Ok
+[07/03/26 18:47:20] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:20] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:20] Server       [trace] [5334580341175262655] Received pilot message {"command":"p_updateJobStatus","hash":"93f636ba783338b55f0aaf8c5e0bb09fdb88095ffe99ea2323b89e0dac38e139","pilotUuid":"cb33fa08-9dbd-455b-85b7-f0af86cffe3b","status":"Running","task":"sometask"}
+[07/03/26 18:47:20]              [debug] MakePilotReplySender: parsing payload
+[07/03/26 18:47:20]              [debug] MakePilotReplySender: parsing done, calling HandleCommand
+[07/03/26 18:47:20] Server       [trace] Sending reply: Ok
+[07/03/26 18:47:21] Director     [trace] RunClaimQueries:  Erased 1 jobs already sent. 0 remaining
+[07/03/26 18:47:21] Harness      [trace] Running bulk write on collection jobs (2 ops)
+[07/03/26 18:47:21] Harness      [trace] Running query Update: [{"status" IN ["Error","InboundTransferError","OutboundTransferError"]}, {"retries" GTE 3}, ], [{"status" SET "Failed"}, ]
+[07/03/26 18:47:21] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:21] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:22] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:22] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:23] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:23] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:24] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:24] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:25] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:25] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:26] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:26] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:27] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:27] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:28] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:28] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:29] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:29] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:30] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:30] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:31] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:31] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:32] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:32] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:33] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:33] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:34] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:34] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:35] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:35] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[2026-07-03 18:47:36] [error] handle_read_frame error: websocketpp.transport:7 (End of File)
+[2026-07-03 18:47:36] [error] handle_read_frame error: websocketpp.transport:7 (End of File)
+[07/03/26 18:47:36] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:36] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:37] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:37] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:38] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:38] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:39] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:39] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:40] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:40] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:41] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:41] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:42] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:42] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:43] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:43] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:44] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:44] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:45] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:45] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:46] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:46] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:47] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:47] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:48] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:48] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:49] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:49] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:50] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:50] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:51] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:51] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:52] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:52] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:53] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:53] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:54] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:54] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:55] Director     [debug] Updating 1 heartbeats
+[07/03/26 18:47:55] Harness      [trace] Running bulk write on collection pilots (1 ops)
+[07/03/26 18:47:55] Director     [debug] Syncing DBs... (lastUpdate > 1783097205879)
+[07/03/26 18:47:55] Harness      [trace] Running query Find: [{"lastUpdate" GT 1783097205879}, ], {}
+[07/03/26 18:47:55] Director     [debug] ...query done.
+[07/03/26 18:47:55] Harness      [trace] Running bulk write on collection jobs (2 ops)
+[07/03/26 18:47:55] Director     [debug] DBs synced: 2 jobs updated in backend DB
+[07/03/26 18:47:55] Director     [debug] Updating tasks
+[07/03/26 18:47:55] Harness      [trace] Running query Find: {}, {}
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Pending"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Claimed"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Running"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Done"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Error"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "Failed"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "InboundTransfer"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "OutboundTransfer"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "InboundTransferError"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask2"}, {"status" EQ "OutboundTransferError"}, ]
+[07/03/26 18:47:55] Director     [debug] Task sometask2 updated - 100 jobs (17 Pending, 0 Claimed, 7 Running, 68 Done, 8 Error, 0 Failed, 0 InboundTransfer, 0 OutboundTransfer, 0 InboundTransferError, 0 OutboundTransferError) - status: A
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Pending"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Claimed"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Running"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Done"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Error"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "Failed"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "InboundTransfer"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "OutboundTransfer"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "InboundTransferError"}, ]
+[07/03/26 18:47:55] Harness      [trace] Running query Count: [{"task" EQ "sometask"}, {"status" EQ "OutboundTransferError"}, ]
+[07/03/26 18:47:55] Director     [debug] Task sometask updated - 21 jobs (10 Pending, 5 Claimed, 3 Running, 2 Done, 0 Error, 1 Failed, 0 InboundTransfer, 0 OutboundTransfer, 0 InboundTransferError, 0 OutboundTransferError) - status: A
+[07/03/26 18:47:55] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:55] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:56] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:56] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:57] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:57] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:58] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:58] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:59] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:47:59] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:00] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:00] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:01] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:01] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:02] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:02] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:03] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:03] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:04] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:04] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:05] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:05] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:06] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:06] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:07] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:07] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:08] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:08] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:09] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:09] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:10] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:10] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:11] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:11] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:12] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:12] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:13] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:13] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:14] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:14] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:15] Harness      [trace] Running query Find: [{"task" EQ "sometask"}, {"inFrontDB" EXISTS false}, ], {}
+[07/03/26 18:48:15] Harness      [trace] Running query Find: [{"task" EQ "sometask2"}, {"inFrontDB" EXISTS false}, ], {}

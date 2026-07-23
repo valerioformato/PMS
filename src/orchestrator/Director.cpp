@@ -85,6 +85,52 @@ Async<ErrorOr<json>> Director::PilotClaimJob(std::string_view pilotUuid) {
   if (done)
     co_return R"({"sleep": true})"_json;
 
+  // NOTE(vformato): check if there are any pending jobs for this pilot's tasks before entering the blocking poll loop.
+  // If no jobs exist, return sleep immediately without consuming a compute pool thread.
+  auto compute_scheduler = co_await stdexec::read_env(stdexec::get_scheduler);
+
+  std::vector<std::string_view> activeTasks;
+  std::copy_if(begin(pilot_info.tasks), end(pilot_info.tasks), std::back_inserter(activeTasks),
+               [this](const auto &taskName) { return m_tasks[taskName].IsActive(); });
+
+  if (!activeTasks.empty()) {
+    DB::Queries::Matches matches{
+        {"status",
+         std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Pending),
+                                       magic_enum::enum_name(JobStatus::Error),
+                                       magic_enum::enum_name(JobStatus::OutboundTransferError),
+                                       magic_enum::enum_name(JobStatus::InboundTransferError)},
+         DB::Queries::ComparisonOp::IN},
+        {"task", activeTasks, DB::Queries::ComparisonOp::IN},
+    };
+    if (pilot_info.tags.empty()) {
+      matches.emplace_back("tags", "array", DB::Queries::ComparisonOp::TYPE);
+      matches.emplace_back("tags", std::vector<std::string>(), DB::Queries::ComparisonOp::EQ);
+    } else {
+      matches.emplace_back("tags", pilot_info.tags, DB::Queries::ComparisonOp::ALL);
+    }
+
+    auto has_pending_result = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                                            DB::Queries::Find{
+                                                                .collection = "jobs",
+                                                                .options = {.limit = 1},
+                                                                .match = matches,
+                                                            }) |
+                                        stdexec::continues_on(compute_scheduler));
+
+    if (!has_pending_result) {
+      m_logger->trace("Pilot {} DB query failed: {}. Returning sleep.", pilotUuid,
+                      has_pending_result.error().Message());
+      co_return R"({"sleep": true})"_json;
+    }
+
+    if (has_pending_result->empty()) {
+      co_return R"({"sleep": true})"_json;
+    }
+  } else {
+    co_return R"({"sleep": true})"_json;
+  }
+
   m_claimRequests.push(pilot_info);
 
   // NOTE(vformato): wait until we find a job for this pilot

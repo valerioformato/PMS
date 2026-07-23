@@ -462,3 +462,219 @@ Extract the sender pipeline construction from the websocket callback into a stan
 1. `HeartBeat` now tracks liveness with atomics: successful heartbeat replies reset failure count and set `m_alive=true`.
 2. Consecutive heartbeat failures are counted and only mark `m_alive=false` after a small threshold (3), reducing flapping on transient network issues.
 3. `Director::RegisterNewPilot` initializes `lastHeartBeat` at insert time so dead-pilot cleanup can remove stale registrations even when a pilot dies before its first heartbeat update.
+
+# PilotClaimJob compute thread starvation when no pending jobs
+
+**Symptom**: Under zero-pending-jobs conditions, `PilotClaimJob` blocks compute pool threads in `sleep_for(50ms)` polling loops. This creates a self-reinforcing thread starvation cascade: pilots get `{"sleep":true}` → immediately call `p_claimJob` again → new blocking loop → compute pool fills → remaining threads can't handle reconnects → EOF disconnects → more pilots → more blocked threads → pool exhaustion.
+
+**Root cause**: `PilotClaimJob` (`Director.cpp:92-99`) unconditionally pushes the pilot to `m_claimRequests` and then enters two blocking `while` loops with `sleep_for(50ms)`, waiting for `RunClaimQueries` to process the queue. When pending jobs exist, `RunClaimQueries` finds them quickly and the loops exit within ~50-500ms. When **no** pending jobs exist, the loops still block compute threads for ~100ms each (the time until `RunClaimQueries` queries the DB, finds nothing, and sets `claimed=true, job={"sleep":true}`). With a hardcoded pool of 32 threads, even a few dozen pilots all simultaneously blocked creates thread starvation.
+
+**Evidence**: During the reconnect herd at 11:55, 3,962 EOF disconnects occurred in 2 hours. Each disconnect causes pilot re-registration + immediate `p_claimJob` call → blocking loop. The main thread was observed in `futex_wait_queue` wchan, consistent with compute pool being saturated with blocked pilots.
+
+**Fix plan**: Before entering the blocking polling loop, query the DB to check if there are pending jobs for the pilot's **specific tasks only**. If no pending jobs exist for any of the pilot's tasks, return `{"sleep":true}` immediately without pushing to `m_claimRequests` and without entering the polling loops. This frees the compute thread instantly. Only proceed with the blocking loop if pending jobs actually exist for this pilot.
+
+### Steps
+
+1. **`Director.cpp::PilotClaimJob`**: After the task exhaustion check (line 86), add a DB query to check for pending jobs for this pilot's tasks:
+    - Build the same `matches` filter used by `RunClaimQueries` (status IN {Pending, Error, OutboundTransferError, InboundTransferError} + task IN {pilot's active tasks} + tags matching)
+    - Use `m_frontDB->RunQuery()` with `limit=1` (we only need to know if at least one job exists)
+    - Wrap DB dispatch with `continues_on(compute_sched)` to resume on the compute pool
+
+2. **Decision logic**:
+    - If query returns empty → `co_return R"({"sleep": true})"_json` immediately (no blocking loop, no thread consumption)
+    - If query returns results → proceed with existing `m_claimRequests.push()` + polling loop (jobs exist, will be found quickly by `RunClaimQueries`)
+
+3. **Key detail — per-pilot task filtering**: The DB query must use the pilot's specific active tasks (`m_tasks` filtered by `IsActive()`) as the `task IN (...)` clause. This ensures we only return sleep if there are genuinely no jobs for **this pilot's** tasks. A pilot with task A should not be put to sleep if task B (not assigned to this pilot) has pending jobs.
+
+4. **Consideration — duplicate query with `RunClaimQueries`**: This adds one extra DB query per claim attempt. Tradeoff analysis:
+    - **Before fix**: 0 extra DB queries, but each claim attempt blocks a compute thread for ~100ms (wasted during zero-jobs periods)
+    - **After fix**: 1 extra DB query per claim attempt, but compute thread is freed instantly during zero-jobs periods
+    - During normal operation (jobs available), the pilot gets a job quickly and the query is a one-time cost per claim cycle
+    - During zero-jobs operation (the problematic case), the query prevents thread starvation entirely
+    - `RunClaimQueries` can also be optimized: skip DB queries for pilots that already have cached job pools (existing behavior at line 158), reducing total query count
+
+5. **Optional enhancement for `RunClaimQueries`**: When `RunClaimQueries` sets a pilot to sleep (line 215-218), mark the pilot with a timestamp (`m_lastSleepTime[pilotUuid]`) and skip re-querying the DB for this pilot until a minimum interval has elapsed (e.g., 5-10 seconds). This reduces redundant DB queries for pilots that have been sleeping.
+
+### Verification
+
+- Build and run `run_tests` (update `testDirector.cpp` expectations for the new query path)
+- Load test: simulate zero-pending-jobs + high pilot claim rate (50+ concurrent pilots), verify:
+    - Compute pool threads are not blocked in `sleep_for` loops
+    - No thread starvation — main thread not stuck in futex
+    - CPU stays well below saturation during zero-jobs periods
+- Load test: simulate normal operation with pending jobs, verify:
+    - Pilots still get jobs promptly
+    - No regression in claim latency
+
+---
+
+# Investigation on orchestrator slowdown
+
+Checkpoint #1
+----------------------------------------
+<overview>
+The user asked for ongoing production debugging of PMSOrchestrator in Kubernetes: identify why CPU/memory spiked, why pilots disconnected, and validate fixes over time. I investigated by correlating orchestrator logs, ingress logs, live pod/process/socket state, and MongoDB frontend/backend data, then implemented and deployed code fixes (via commit/push) for confirmed pilot liveness and stale-pilot cleanup issues. The approach was evidence-first: reproduce patterns, map to code paths, patch root causes we could verify, then repeatedly monitor real cluster behavior.
+</overview>
+
+<history>
+1. User asked to read `AGENTS.md` and `TODO.md` and report familiarity
+   - Read both files (chunked for large TODO).
+   - Reported project architecture, build/test conventions, and active TODO status.
+
+2. User reported production incident (CPU 100%, memory growth, pilot disconnects) and asked to understand cause
+   - Collected pod/deployment/top/events, exported orchestrator logs (72h), analyzed frequency patterns.
+   - Found heavy `EOF` websocket errors and high reconnect/re-register churn.
+   - Identified ingress timeout annotations at 3600s and correlation with `/pilot` close durations.
+   - Inspected runtime process/thread/socket stats and DB contents.
+
+3. User asked for simpler explanation
+   - Explained likely chain: periodic connection cuts -> reconnection herd -> CPU spikes; stale pilot records driving memory growth.
+
+4. User challenged assumption (“pilots should resume if already in DB”)
+   - Traced pilot code path and found `HeartBeat::m_alive` initialized false and never set true.
+   - Showed worker exits on send failures when `IsAlive()` is false, causing process restart and re-registration with new UUID.
+
+5. User requested confirmation and fix proposal
+   - Confirmed via code references.
+   - Proposed fix: real heartbeat liveness tracking + stale row cleanup hardening.
+
+6. User gave permission to fix
+   - Implemented code changes in pilot heartbeat + orchestrator register path + test updates.
+   - Built tests and ran targeted suites successfully.
+   - Updated `AGENTS.md` and `TODO.md` housekeeping.
+   - Committed and pushed to `upgrades` branch.
+
+7. User requested ongoing monitoring at multiple checkpoints (after restart, +90m, overnight, later checks)
+   - Repeatedly sampled pod health, CPU/RAM, log error rates, ingress close patterns, and DB pilot health.
+   - Observed mixed periods:
+     - At times stable (no reconnect storm, clean heartbeat state).
+     - At times bursts reappeared (mass EOF + registrations), later not strictly 3600s.
+   - Verified in RC6 that `lastHeartBeat` is present for all pilot docs (no missing heartbeat field accumulation).
+
+8. User asked why no heartbeat messages appeared server-side in one run
+   - Found backend tasks collection empty after restart; pilot registration returned zero valid tasks (`tasks: []`), pilots exited before heartbeat phase.
+
+9. User asked about memory proportionality to active pilots
+   - Measured process RSS, socket count, FD breakdown, and active pilot/connection counts.
+   - Concluded memory scales with connections and runtime socket state more than just the in-memory pilot map.
+
+10. User asked about max active connection limit
+   - Checked app code and runtime limits.
+   - Found no explicit app-level max; practical limits are ingress/kernel/resources.
+
+11. User asked to identify hostnames for Done and Failed jobs
+   - Queried DBs and joined jobs to pilots by UUID.
+   - Reported Done and Failed distributions and noted expected `<missing>` hostnames for some old UUIDs (live-pilot table semantics).
+
+12. User asked whether latest spike was new pilots vs re-registrations
+   - Quantified last-hour registration composition:
+     - Mostly registrations on previously seen hostnames (re-spawn/re-register events), plus some truly new hosts.
+     - No repeated UUIDs in log slice (new UUID each registration).
+</history>
+
+<work_done>
+Files updated and committed:
+- `src/pilot/HeartBeat.h`
+  - Added atomic liveness/failure state (`m_alive`, consecutive failure counter, threshold).
+- `src/pilot/HeartBeat.cpp`
+  - Heartbeat liveness now set true on successful `"Ok"` reply.
+  - Consecutive failures tracked; mark not alive after threshold.
+  - Added handling for unexpected heartbeat replies.
+- `src/orchestrator/Director.cpp`
+  - `RegisterNewPilot` now initializes `lastHeartBeat` at insert time.
+- `testsuite/orchestrator/testDirector.cpp`
+  - Updated test expectation to require `lastHeartBeat` in register insert doc.
+- `AGENTS.md`
+  - Updated status note for pilot networking refactor to include liveness/cleanup improvement.
+- `TODO.md`
+  - Added resolved note for `IsAlive()` always-false issue and applied fixes.
+
+Git actions:
+- Commit: `09d122c` (`Fix heartbeat liveness and pilot cleanup`)
+- Pushed to: `origin/upgrades`
+
+Validation performed:
+- Built `run_tests` target successfully.
+- Ran targeted tests:
+  - `[pilot][HeartBeat]` passed.
+  - `[Director]` passed.
+
+Current state:
+- RC6 deployment often stable, with clean pilot heartbeat metadata (`withoutHeartbeat=0`, `staleOver1h=0`).
+- Intermittent reconnect herd events still occur at times, causing transient CPU spikes and re-registration bursts.
+- Original stale-pilot-field problem is fixed in RC6 behavior.
+</work_done>
+
+<technical_details>
+- Root-cause findings (confirmed):
+  - Pilot bug: `HeartBeat::m_alive` was never set true; worker interpreted transient failures as dead heartbeat and exited, causing churn.
+  - Frontend pilot cleanup gap: rows inserted without `lastHeartBeat` were not removable by dead-pilot query (`lastHeartBeat < threshold`), causing accumulation.
+- Post-fix behavior:
+  - Heartbeat liveness now reflects real send outcomes.
+  - Pilot rows now always carry `lastHeartBeat` from registration.
+- Still-observed production behavior:
+  - Reconnect herds can still happen (sometimes no longer strict 3600s), likely triggered by external/network/client-wave events.
+  - During herd windows, orchestrator CPU spikes due to connection churn, message parsing/logging, register/claim/update flow.
+- Architectural pressure points:
+  - `pilot_handler` dispatches every pilot message via detached work on compute pool.
+  - `PilotClaimJob` coroutine contains blocking polling loops (`sleep_for(50ms)` while waiting on shared map state), which can tie up compute workers under surge.
+  - Shared state (`m_claimedJobs`, `m_activePilots`, parts of `m_tasks`) is accessed from multiple threads/coroutines with limited synchronization, representing concurrency risk under load.
+- Runtime environment observations:
+  - Ingress annotations include websocket proxy timeouts at 3600s.
+  - At various times ingress request durations clustered near 3600s; in later events some closes were much longer-lived.
+  - Process memory snapshots showed large socket/FD footprint; memory scaling aligns with active connections + runtime buffers, not only pilot metadata map.
+- Open/uncertain:
+  - Exact trigger for large synchronized long-lived disconnect waves remains unproven (likely external/network/ingress/client wave).
+  - Need deeper concurrency/load profiling to isolate primary in-process bottleneck during herds.
+</technical_details>
+
+<important_files>
+- `src/pilot/HeartBeat.h`
+  - Central to liveness semantics used by worker shutdown logic.
+  - Changed to atomic liveness and failure-threshold fields.
+  - Key area: class fields and `IsAlive()`.
+
+- `src/pilot/HeartBeat.cpp`
+  - Core heartbeat loop behavior.
+  - Changed to set/reset liveness based on actual heartbeat replies and failure streak.
+  - Key area: `updateHB()` loop.
+
+- `src/pilot/Worker.cpp`
+  - Contains branch that exits worker when send fails and heartbeat is not alive.
+  - Important for understanding re-register churn and pilot restarts.
+  - Key area: `MainLoop()` error path around `hb->IsAlive()`.
+
+- `src/orchestrator/Director.cpp`
+  - Register path and claim/update flow under high load.
+  - Changed `RegisterNewPilot` to set `lastHeartBeat`.
+  - Important hotspots:
+    - `RegisterNewPilot()`
+    - `PilotClaimJob()` polling loops
+    - `RunClaimQueries()` claim batching/shared state logic.
+
+- `src/orchestrator/Server.cpp`
+  - Pilot message handling dispatch model (`start_detached` on compute pool).
+  - Important for surge behavior under many concurrent pilot messages.
+  - Key area: `pilot_handler()` and `MakePilotReplySender()`.
+
+- `testsuite/orchestrator/testDirector.cpp`
+  - Updated to enforce new `lastHeartBeat` registration behavior.
+  - Confirms change contract.
+
+- `AGENTS.md`, `TODO.md`
+  - Housekeeping and project state tracking; updated per repository convention.
+</important_files>
+
+<next_steps>
+Completed root-cause analysis. Dominant bottleneck identified: `PilotClaimJob` blocking loops consume compute threads when no pending jobs exist, causing thread starvation cascade during reconnect herds.
+
+1. **[In TODO above]** Implement the `PilotClaimJob` preemptive check: query DB for pending jobs per pilot's tasks before entering the blocking loop; return `{"sleep":true}` immediately if none exist.
+2. Reduce trace log volume (heartbeat logging → debug level, throttle per-pilot, conditional DB query logging in `RunClaimQueries`).
+3. Add `std::mutex` guards to `m_activePilots`, `m_claimedJobs`, `m_tasks` to eliminate undefined behavior from concurrent unsynchronized access.
+4. Fix compute pool size (respect config or set explicit value — currently hardcoded to 32 ignoring constructor parameter).
+5. Run load tests: zero-jobs + high pilot count (verify no thread starvation), normal operation with pending jobs (verify no regression).
+
+Most recent in-progress activity:
+- Completed root-cause analysis correlating live cluster data with code paths.
+- Drafted fix plan for `PilotClaimJob` blocking starvation (added to TODO above).
+</next_steps>

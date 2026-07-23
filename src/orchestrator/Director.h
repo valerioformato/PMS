@@ -129,6 +129,15 @@ private:
 
   std::unordered_map<std::string, Task> m_tasks;
 
+public:
+  // Test helper: set task totJobs so IsActive() returns true.
+  void SetTaskTotJobs(std::string_view taskName, unsigned int totJobs) {
+    std::string name{taskName};
+    if (auto it = m_tasks.find(name); it != end(m_tasks)) {
+      it->second.totJobs = totJobs;
+    }
+  }
+
   std::promise<void> m_exitSignal;
   std::shared_future<void> m_exitSignalFuture{m_exitSignal.get_future()};
   std::vector<std::thread> m_threads;
