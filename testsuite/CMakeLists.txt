@@ -11,6 +11,7 @@ orchestrator/testCommandParsing.cpp
 orchestrator/testTask.cpp
 orchestrator/testDirector.cpp
 orchestrator/testHandleCommand.cpp
+orchestrator/testHttpHealth.cpp
 orchestrator/testSenderChain.cpp
 orchestrator/testOrchestratorConfig.cpp
 pilot/testMessageReply.cpp

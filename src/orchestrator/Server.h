@@ -62,6 +62,7 @@ private:
   exec::static_thread_pool m_compute_pool{32};
 
   void SetupEndpoint(WSserver &endpoint, unsigned int port);
+  void http_handler(WSserver &endpoint, websocketpp::connection_hdl hdl);
 
   void message_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);
   void pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_ptr msg);

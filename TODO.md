@@ -508,6 +508,17 @@ Extract the sender pipeline construction from the websocket callback into a stan
 
 ---
 
+# Native HTTP health endpoint
+
+**Goal**: let Kubernetes probe the orchestrator cleanly without adding a separate HTTP server.
+
+- [x] Register websocketpp's native HTTP handler on the existing endpoints.
+- [x] Return HTTP 200 with body `OK` for `/healthz` and HTTP 404 for unrelated paths.
+- [x] Add black-box integration tests using plain HTTP requests against a live `Server`.
+- [x] Replace Kubernetes TCP probes with HTTP liveness/readiness probes on the user port.
+
+---
+
 # Investigation on orchestrator slowdown
 
 Checkpoint #1
