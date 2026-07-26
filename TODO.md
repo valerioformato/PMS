@@ -462,3 +462,60 @@ Extract the sender pipeline construction from the websocket callback into a stan
 1. `HeartBeat` now tracks liveness with atomics: successful heartbeat replies reset failure count and set `m_alive=true`.
 2. Consecutive heartbeat failures are counted and only mark `m_alive=false` after a small threshold (3), reducing flapping on transient network issues.
 3. `Director::RegisterNewPilot` initializes `lastHeartBeat` at insert time so dead-pilot cleanup can remove stale registrations even when a pilot dies before its first heartbeat update.
+
+---
+
+## Non-blocking batched claims and heartbeat recovery
+
+**Goal**: preserve claim prefetching so simultaneous pilots generate bounded, grouped database traffic, while
+removing polling and blocked compute workers. Ensure heartbeat requests also time out and reconnect instead of
+hanging permanently.
+
+### Claim coordinator
+
+- [ ] Replace `m_claimedJobs` and its 50 ms polling loops with an asynchronous request/completion queue.
+  `PilotClaimJob` must enqueue a request and suspend without occupying a compute thread.
+- [ ] Run a single coordinator that owns all prefetched jobs and assignments. Wake it with a condition variable and
+  use an approximately 10 ms coalescing window to batch simultaneous claims.
+- [ ] Group requests by canonicalized active-task and tag sets. Serve prefetched jobs first, then issue at most one
+  database query per compatible group, limited to the number of unsatisfied pilots.
+- [ ] Preserve the existing eligible statuses and tag semantics. Remove the RC7 per-pilot pre-query because it
+  defeats batching.
+- [ ] Deduplicate jobs, claim all assignments in one bulk write, and complete requests only after that write
+  succeeds.
+- [ ] Return the existing sleep response when no jobs match or a recoverable database operation fails. Complete
+  every request exactly once.
+- [ ] During shutdown, reject new claims and complete all queued or in-flight requests so no coroutine or server
+  worker remains stranded.
+
+### Heartbeat recovery
+
+- [ ] Add an optional send-operation timeout to the connection sender API. Retain unlimited waiting as the default
+  for existing control paths.
+- [ ] Configure heartbeat sends with a 30-second timeout, while allowing tests to inject shorter durations.
+- [ ] On timeout or transport failure, clear the outstanding reply slot, close or normalize the failed connection,
+  and reconnect before the next attempt. A late reply must not complete a newer request.
+- [ ] Reset the failure counter after a successful heartbeat. Preserve the existing three-consecutive-failure
+  threshold, and make stop requests interrupt waits promptly.
+
+### Tests and acceptance
+
+- [ ] Exercise a claim herd larger than the compute-pool size and verify all claims complete while liveness requests
+  remain responsive.
+- [ ] Verify one query per compatible claim group, not per pilot, and separate queries/caches for different task or
+  tag sets.
+- [ ] Verify unique assignment, bulk-write-before-reply ordering, no-match sleep responses, database-failure
+  recovery, repeated batches, and clean shutdown with pending requests.
+- [ ] Cover heartbeat timeout, reply-slot cleanup, ignored late replies, reconnect from a failed state, successful
+  recovery, and prompt cancellation.
+- [ ] Run the complete test executable.
+- [ ] Load-test empty and retryable job queues with 50 and 500 concurrent claims. Confirm no compute worker is
+  blocked and query volume remains bounded by eligibility groups.
+
+### Design constraints and follow-ups
+
+- Keep the wire protocol and pilot-facing claim responses unchanged.
+- Accept up to approximately 10 ms of additional claim latency for batching.
+- Track the independent stdexec idle-spin CPU cost as a separate TODO.
+- Track explicit unknown-pilot/re-registration handling as a separate TODO.
+- Update `AGENTS.md` and this section with the final implementation status before committing.
