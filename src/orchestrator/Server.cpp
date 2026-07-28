@@ -213,7 +213,7 @@ PMS::Async<std::string> Server::HandleCommand(PilotCommand &&command) const {
 }
 
 PMS::Async<std::string> Server::MakeUserReplySender(std::string payload) {
-  m_logger->trace("[{}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
+  m_logger->trace("[{:X}] Received message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
   try {
     auto parsed = json::parse(payload, nullptr, false);
     if (parsed.is_discarded())
@@ -229,7 +229,8 @@ PMS::Async<std::string> Server::MakeUserReplySender(std::string payload) {
 }
 
 PMS::Async<std::string> Server::MakePilotReplySender(std::string payload) {
-  m_logger->trace("[{}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()), payload);
+  m_logger->trace("[{:X}] Received pilot message {}", std::hash<std::thread::id>{}(std::this_thread::get_id()),
+                  payload);
   try {
     auto parsed = json::parse(payload, nullptr, false);
     if (parsed.is_discarded())
