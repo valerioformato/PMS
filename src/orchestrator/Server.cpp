@@ -271,6 +271,21 @@ void Server::pilot_handler(websocketpp::connection_hdl hdl, WSserver::message_pt
                   })));
 }
 
+void Server::http_handler(WSserver &endpoint, websocketpp::connection_hdl hdl) {
+  try {
+    auto connection = endpoint.get_con_from_hdl(hdl);
+    if (connection->get_resource() == "/healthz") {
+      connection->set_status(websocketpp::http::status_code::ok);
+      connection->set_body("OK");
+      return;
+    }
+
+    connection->set_status(websocketpp::http::status_code::not_found);
+  } catch (const std::exception &error) {
+    m_logger->error("Error handling HTTP request: {}", error.what());
+  }
+}
+
 void Server::SetupEndpoint(WSserver &endpoint, unsigned int port) {
 
 #ifdef DEBUG_WEBSOCKETS
@@ -281,6 +296,10 @@ void Server::SetupEndpoint(WSserver &endpoint, unsigned int port) {
   endpoint.set_error_channels(websocketpp::log::alevel::all);
   endpoint.set_access_channels(websocketpp::log::alevel::none);
 #endif
+
+  auto *endpoint_ptr = &endpoint;
+  endpoint.set_http_handler(
+      [this, endpoint_ptr](websocketpp::connection_hdl hdl) { http_handler(*endpoint_ptr, hdl); });
 
   // Initialize Asio
   endpoint.init_asio();

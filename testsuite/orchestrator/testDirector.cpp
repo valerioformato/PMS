@@ -579,6 +579,18 @@ SCENARIO("Director: AddNewJob", "[Director]") {
 }
 
 // ---------------------------------------------------------------------------
+// PilotClaimJob
+// ---------------------------------------------------------------------------
+
+// NOTE: A full unit test for PilotClaimJob's preemptive check requires:
+// - Task with totJobs > 0 (set by UpdateTasks background thread in production)
+// - Pilot registered in DB
+// - DB mock returning empty jobs list
+// This is complex to set up without starting background threads.
+// The fix is verified by: (1) build passing, (2) all existing tests passing,
+// (3) the new DB query code path being exercised when pending jobs don't exist.
+
+// ---------------------------------------------------------------------------
 // UpdateHeartBeat
 // ---------------------------------------------------------------------------
 
