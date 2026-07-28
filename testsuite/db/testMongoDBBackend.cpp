@@ -1,4 +1,10 @@
+#include <array>
+#include <chrono>
+#include <cstdlib>
+#include <future>
 #include <memory>
+#include <ranges>
+#include <string>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/trompeloeil.hpp>
@@ -310,5 +316,86 @@ SCENARIO("MongoDBBackend::QueryToWriteOp", "[MongoDBBackend]") {
       }
     }
   }
+}
+
+SCENARIO("MongoDBBackend::FindOneAndUpdate atomically claims one document",
+         "[MongoDBBackend][FindOneAndUpdate][integration]") {
+  const auto *host = std::getenv("PMS_TEST_MONGODB_HOST");
+  if (host == nullptr) {
+    SKIP("Set PMS_TEST_MONGODB_HOST to run MongoDB integration tests");
+  }
+
+  const auto *configured_db = std::getenv("PMS_TEST_MONGODB_DB");
+  const std::string_view database = configured_db == nullptr ? "pms_tests" : configured_db;
+  PMS::DB::MongoDBBackend backend{host, database};
+  REQUIRE(backend.Connect().has_value());
+
+  const auto suffix = std::chrono::steady_clock::now().time_since_epoch().count();
+  const auto hash = fmt::format("find-one-and-update-{}", suffix);
+
+  struct JobCleanup {
+    PMS::DB::MongoDBBackend &backend;
+    std::string hash;
+
+    ~JobCleanup() {
+      static_cast<void>(backend.RunQuery(Queries::Delete{
+          .collection = "jobs",
+          .options = {.limit = 1},
+          .match = {{"hash", hash}},
+      }));
+    }
+  } cleanup{backend, hash};
+
+  const json job = {
+      {"hash", hash}, {"task", "task-1"}, {"status", "Pending"}, {"retries", 0}, {"tags", json::array()},
+  };
+  auto insert_result = backend.RunQuery(Queries::Insert{
+      .collection = "jobs",
+      .documents = {job},
+  });
+  REQUIRE(insert_result.has_value());
+
+  const Queries::FindOneAndUpdate claim_query{
+      .collection = "jobs",
+      .match =
+          {
+              {"hash", hash},
+              {"status", "Pending"},
+          },
+      .update =
+          {
+              {"status", "Claimed"},
+              {"retries", 1, Queries::UpdateOp::INC},
+          },
+      .filter = R"({"_id": 0})"_json,
+  };
+
+  auto first = std::async(std::launch::async, [&backend, claim_query] { return backend.RunQuery(claim_query); });
+  auto second = std::async(std::launch::async, [&backend, claim_query] { return backend.RunQuery(claim_query); });
+  const auto results = std::array{first.get(), second.get()};
+
+  REQUIRE(results[0].has_value());
+  REQUIRE(results[1].has_value());
+
+  const auto successful_claims =
+      std::ranges::count_if(results, [](const auto &result) { return !result.value().empty(); });
+  REQUIRE(successful_claims == 1);
+
+  const auto winner = std::ranges::find_if(results, [](const auto &result) { return !result.value().empty(); });
+  REQUIRE(winner != results.end());
+  REQUIRE(winner->value()["hash"] == hash);
+  REQUIRE(winner->value()["status"] == "Pending");
+  REQUIRE(winner->value()["retries"] == 0);
+
+  const auto stored_job = backend.RunQuery(Queries::Find{
+      .collection = "jobs",
+      .options = {.limit = 1},
+      .match = {{"hash", hash}},
+      .filter = R"({"_id": 0})"_json,
+  });
+  REQUIRE(stored_job.has_value());
+  REQUIRE(stored_job->size() == 1);
+  REQUIRE((*stored_job)[0]["status"] == "Claimed");
+  REQUIRE((*stored_job)[0]["retries"] == 1);
 }
 } // namespace PMS::Tests::MongoDBBackend

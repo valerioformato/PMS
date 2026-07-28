@@ -37,7 +37,6 @@ void Director::Start() {
   m_threads.emplace_back(&Director::DBSync, this);
   m_threads.emplace_back(&Director::WriteJobUpdates, this);
   m_threads.emplace_back(&Director::WriteHeartBeatUpdates, this);
-  m_threads.emplace_back(&Director::RunClaimQueries, this);
 }
 
 void Director::Stop() {
@@ -58,6 +57,8 @@ Director::OperationResult Director::AddNewJob(json &&job) {
 }
 
 Async<ErrorOr<json>> Director::PilotClaimJob(std::string_view pilotUuid) {
+  static constexpr std::string_view logPrefix = "PilotClaimJob: ";
+  auto scheduler = co_await stdexec::read_env(stdexec::get_scheduler);
 
   auto maybe_pilot_info = co_await GetPilotInfo(pilotUuid);
   if (!maybe_pilot_info) {
@@ -85,204 +86,55 @@ Async<ErrorOr<json>> Director::PilotClaimJob(std::string_view pilotUuid) {
   if (done)
     co_return R"({"sleep": true})"_json;
 
-  m_claimRequests.push(pilot_info);
+  // NOTE(vformato): check which tasks are currently active for this pilot
+  std::vector<std::string_view> active_tasks;
+  std::ranges::copy_if(pilot_info.tasks, std::back_inserter(active_tasks),
+                       [this](const auto &taskName) { return m_tasks[taskName].IsActive(); });
 
-  // NOTE(vformato): wait until we find a job for this pilot
-  std::string pilotUuidStr{pilotUuid};
-  while (m_claimedJobs.find(pilotUuidStr) == end(m_claimedJobs)) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  DB::Queries::Matches matches{
+      {"status",
+       std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Pending), magic_enum::enum_name(JobStatus::Error),
+                                     magic_enum::enum_name(JobStatus::OutboundTransferError),
+                                     magic_enum::enum_name(JobStatus::InboundTransferError)},
+       DB::Queries::ComparisonOp::IN},
+      {"task", active_tasks, DB::Queries::ComparisonOp::IN},
+  };
+  if (pilot_info.tags.empty()) {
+    matches.emplace_back("tags", "array", DB::Queries::ComparisonOp::TYPE);
+    matches.emplace_back("tags", std::vector<std::string>(), DB::Queries::ComparisonOp::EQ);
+  } else {
+    matches.emplace_back("tags", pilot_info.tags, DB::Queries::ComparisonOp::ALL);
   }
 
-  // NOTE(vformato): wait until job is marked as claimed
-  while (!m_claimedJobs[pilotUuidStr].claimed) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  // NOTE(vformato): only keep fields that the pilot will actually need... This alleviates load on the DB
+  json projection_opt = R"({"_id":0, "dataset":0, "jobName":0, "status":0, "tags":0, "user":0})"_json;
+  DB::Queries::Updates update_action{
+      {"status", magic_enum::enum_name(JobStatus::Claimed)},
+      {"pilotUuid", pilotUuid},
+      {"retries", 1, DB::Queries::UpdateOp::INC},
+      {"lastUpdate", Utils::CurrentTimeToMillisSinceEpoch()},
+  };
+
+  auto maybe_query_result = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                                          DB::Queries::FindOneAndUpdate{
+                                                              .collection = "jobs",
+                                                              .match = matches,
+                                                              .update = update_action,
+                                                              .filter = projection_opt,
+                                                          }) |
+                                      stdexec::continues_on(scheduler));
+
+  if (!maybe_query_result) {
+    m_logger->error("{} Failed to query frontend DB for jobs: {}", logPrefix, maybe_query_result.error().Message());
+    co_return R"({"sleep": true})"_json;
   }
 
-  // NOTE(vformato): mark the job as sent for cleanup
-  auto job = m_claimedJobs[pilotUuidStr].job;
-  m_claimedJobs[pilotUuidStr].sent = true;
+  if (maybe_query_result.value().empty()) {
+    m_logger->trace("{} no matching job found for pilot {}", logPrefix, pilot_info.uuid);
+    co_return R"({"sleep": true})"_json;
+  }
 
-  co_return job;
-}
-
-void Director::RunClaimQueries() {
-  static constexpr std::string_view logPrefix = "RunClaimQueries: ";
-  static constexpr auto coolDown = std::chrono::seconds(1);
-
-  std::unordered_map<std::string, std::deque<json>> queried_job_pool;
-
-  do {
-
-    // NOTE(vformato): remove all jobs that have been sent to pilots
-    auto erased = std::erase_if(m_claimedJobs, [](const auto &p_it) { return p_it.second.sent; });
-    if (erased > 0 || !m_claimedJobs.empty()) {
-      m_logger->trace("{} Erased {} jobs already sent. {} remaining", logPrefix, erased, m_claimedJobs.size());
-    }
-
-    auto pilot_infos = m_claimRequests.consume_all();
-    size_t query_limit = pilot_infos.size();
-
-    auto get_active_task =
-        [&queried_job_pool](std::vector<std::string_view> activeTasks) -> std::optional<std::string> {
-      std::string selected_task;
-      return std::ranges::any_of(queried_job_pool,
-                                 [&](auto p_it) {
-                                   const auto &[task, jobs] = p_it;
-                                   if (std::ranges::find(activeTasks, task) != end(activeTasks) && !jobs.empty()) {
-                                     selected_task = task;
-                                     return true;
-                                   } else {
-                                     return false;
-                                   }
-                                 })
-                 ? std::optional{selected_task}
-                 : std::nullopt;
-    };
-
-    for (const auto &pilot_info : pilot_infos) {
-      // NOTE(vformato): check which tasks are currently active for this pilot
-      std::vector<std::string_view> activeTasks;
-      std::copy_if(begin(pilot_info.tasks), end(pilot_info.tasks), std::back_inserter(activeTasks),
-                   [this](const auto &taskName) { return m_tasks[taskName].IsActive(); });
-
-      // if there are no active tasks, send this pilot back to sleep
-      if (activeTasks.empty()) {
-        m_claimedJobs[pilot_info.uuid] = ClaimedJob{
-            .claimed = true,
-            .job = R"({"sleep": true})"_json,
-        };
-        continue;
-      }
-
-      // NOTE(vformato): check if we already have jobs queried for these tasks
-      if (auto maybe_active_task = get_active_task(activeTasks); maybe_active_task) {
-        const auto &selected_task = maybe_active_task.value();
-
-        // take job from the queue for this pilot
-        const auto job = queried_job_pool[selected_task].front();
-        queried_job_pool[selected_task].pop_front();
-
-        m_logger->trace("{} Pilot {} has jobs available in active task {}: selected job {}", logPrefix, pilot_info.uuid,
-                        selected_task, to_string_view(job["hash"]));
-
-        m_claimedJobs[pilot_info.uuid] = ClaimedJob{.job = job};
-
-        --query_limit;
-        continue;
-      }
-
-      // NOTE(vformato): we have no jobs available for this pilot. We have to query the DB
-      DB::Queries::Matches matches{
-          {"status",
-           std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Pending),
-                                         magic_enum::enum_name(JobStatus::Error),
-                                         magic_enum::enum_name(JobStatus::OutboundTransferError),
-                                         magic_enum::enum_name(JobStatus::InboundTransferError)},
-           DB::Queries::ComparisonOp::IN},
-          {"task", activeTasks, DB::Queries::ComparisonOp::IN},
-      };
-      if (pilot_info.tags.empty()) {
-        matches.emplace_back("tags", "array", DB::Queries::ComparisonOp::TYPE);
-        matches.emplace_back("tags", std::vector<std::string>(), DB::Queries::ComparisonOp::EQ);
-      } else {
-        matches.emplace_back("tags", pilot_info.tags, DB::Queries::ComparisonOp::ALL);
-      }
-
-      // NOTE(vformato): only keep fields that the pilot will actually need... This alleviates load on the DB
-      json projectionOpt = R"({"_id":0, "dataset":0, "jobName":0, "status":0, "tags":0, "user":0})"_json;
-
-      m_logger->trace("{} Pilot {} has no jobs available in cache. Querying DB...", logPrefix, pilot_info.uuid);
-
-      auto maybe_query_result = m_frontDB->RunQuery(DB::Queries::Find{
-          .collection = "jobs",
-          .options = {.limit = static_cast<unsigned int>(query_limit)},
-          .match = matches,
-          .filter = projectionOpt,
-      });
-
-      if (!maybe_query_result) {
-        m_logger->error("{} Failed to query frontend DB for jobs: {}", logPrefix, maybe_query_result.error().Message());
-        m_claimedJobs[pilot_info.uuid] = ClaimedJob{
-            .claimed = true,
-            .job = R"({"sleep": true})"_json,
-        };
-        continue;
-      }
-
-      const auto &query_result = maybe_query_result.value();
-      if (query_result.empty()) {
-        m_logger->trace("{} Putting pilot {} to sleep", logPrefix, pilot_info.uuid);
-        m_claimedJobs[pilot_info.uuid] = ClaimedJob{
-            .claimed = true,
-            .job = R"({"sleep": true})"_json,
-        };
-        continue;
-      }
-
-      std::ranges::for_each(query_result, [&](const auto &job) {
-        if (!std::ranges::any_of(m_claimedJobs,
-                                 [&job](const auto &p_it) { return p_it.second.job["hash"] == job["hash"]; })) {
-          queried_job_pool[to_string(job["task"])].push_back(job);
-        }
-      });
-
-      if (auto maybe_active_task = get_active_task(activeTasks); maybe_active_task) {
-        const auto &selected_task = maybe_active_task.value();
-        // take job from the queue for this pilot
-        const auto job = queried_job_pool[selected_task].front();
-        queried_job_pool[selected_task].pop_front();
-
-        m_logger->trace("{} Pilot {} has jobs available in active task {}: selected job {}", logPrefix, pilot_info.uuid,
-                        selected_task, to_string_view(job["hash"]));
-
-        m_claimedJobs[pilot_info.uuid] = ClaimedJob{.job = job};
-        --query_limit;
-      }
-    }
-
-    if (m_claimedJobs.empty()) {
-      continue;
-    }
-
-    // NOTE(vformato): Now we set all the jobs that we assigned to the pilots as Claimed
-    std::vector<DB::Queries::Query> writeOps;
-    auto wops_view = std::views::transform(
-        m_claimedJobs | std::views::filter([](const auto &p_it) { return p_it.second.job.contains("hash"); }),
-        [](auto p_it) {
-          const auto &[pilotUuid, cjob] = p_it;
-          DB::Queries::Updates update_action{
-              {"status", magic_enum::enum_name(JobStatus::Claimed)},
-              {"pilotUuid", pilotUuid},
-              {"retries", 1, DB::Queries::UpdateOp::INC},
-              {"lastUpdate", Utils::CurrentTimeToMillisSinceEpoch()},
-          };
-          return DB::Queries::Update{
-              .collection = "jobs",
-              .match = {{"hash", cjob.job["hash"]}},
-              .update = update_action,
-          };
-        });
-    std::ranges::copy(wops_view, std::back_inserter(writeOps));
-
-    if (writeOps.empty()) {
-      continue;
-    }
-
-    m_logger->trace("Updating {} jobs to Claimed status", writeOps.size());
-
-    auto maybe_update_result = m_frontDB->BulkWrite("jobs", writeOps);
-    while (!maybe_update_result) {
-      m_logger->error("Failed to update jobs to claimed: {}", maybe_update_result.error().Message());
-
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-      m_logger->debug("Retrying claimed jobs update...");
-      maybe_update_result = m_frontDB->BulkWrite("jobs", writeOps);
-    }
-
-    std::ranges::for_each(m_claimedJobs, [](auto &cjob) { cjob.second.claimed = true; });
-
-  } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
+  co_return maybe_query_result.value();
 }
 
 Async<ErrorOr<void>> Director::UpdateJobStatus(std::string_view pilotUuid, std::string_view hash, std::string_view task,

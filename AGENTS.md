@@ -77,5 +77,6 @@ The `src/common/` directory holds shared headers only (no library target): `Asyn
 - **[x]** Separate compute and I/O thread pools
 - **[ ]** JSON migration: nlohmann → glaze (not started)
 - **[x]** Modernize XRootDTransfer (clang-tidy fixes done)
-- **[x]** Test coverage expansion (Steps 1-5 done, Step 6 sender chains pending)
+- **[x]** Test coverage expansion (Steps 1-6 complete; claim and sender-chain coverage present)
 - **[x]** Pilot networking refactor: Connection hardening + async transport (Phase 1-5 done; SyncSend delegates to SenderSend via stdexec::sync_wait — SenderSend is the single canonical implementation; SyncSend retained as canonical blocking adapter for inherently sequential call sites (Register, claim job, SendJobUpdates); on_message calls TryCompleteSuccess directly (not dispatched through thread pool); test hang fixed with m_has_real_connection guard and thread pool size reduced to 2; Worker/HeartBeat migrated to std::stop_token; HeartBeat::updateHB converted to coroutine with AsyncSend; HeartBeat uses std::thread (not std::jthread); latch-based thread startup sync; SenderSend timeout is stop_token-aware (5s polling); heartbeat liveness now tracks real AsyncSend outcomes (not hardcoded false); RegisterNewPilot initializes lastHeartBeat to avoid stale pilot entries that bypass dead-pilot cleanup; p_updateHeartBeat now successfully sent and received by orchestrator)
+- **[x]** Atomic asynchronous job claims (RC8 implementation and unit coverage complete; MongoDB concurrency test is opt-in)

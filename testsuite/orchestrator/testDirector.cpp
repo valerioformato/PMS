@@ -10,7 +10,10 @@
 // our headers
 #include "db/backends/Backend.h"
 #include "db/harness/Harness.h"
+
+#define private public
 #include "orchestrator/Director.h"
+#undef private
 
 using namespace PMS;
 using namespace PMS::Orchestrator;
@@ -60,6 +63,33 @@ struct Fixture {
                     std::make_unique<DB::Harness>(std::move(backOwned))};
   }
 };
+
+static void prime_claim_state(Director &director, std::string pilot_uuid, std::vector<std::string> tags = {}) {
+  auto &task = director.m_tasks["task-1"];
+  task.name = "task-1";
+  task.totJobs = 1;
+  task.jobs[JobStatus::Pending] = 1;
+  task.readyForScheduling = true;
+
+  director.m_activePilots.emplace(
+      pilot_uuid, Director::PilotInfo{.uuid = pilot_uuid, .tasks = {"task-1"}, .tags = std::move(tags)});
+}
+
+static const DB::Queries::Match &find_match(const DB::Queries::FindOneAndUpdate &query, std::string_view key,
+                                            DB::Queries::ComparisonOp op) {
+  const auto match = std::ranges::find_if(
+      query.match, [key, op](const auto &candidate) { return candidate.key == key && candidate.op == op; });
+  REQUIRE(match != query.match.end());
+  return *match;
+}
+
+static const DB::Queries::UpdateAction &find_update(const DB::Queries::FindOneAndUpdate &query, std::string_view key,
+                                                    DB::Queries::UpdateOp op) {
+  const auto update = std::ranges::find_if(
+      query.update, [key, op](const auto &candidate) { return candidate.key == key && candidate.op == op; });
+  REQUIRE(update != query.update.end());
+  return *update;
+}
 
 // ---------------------------------------------------------------------------
 // ValidateTaskToken
@@ -359,6 +389,91 @@ SCENARIO("Director: RegisterNewPilot", "[Director]") {
       REQUIRE_FALSE(r.has_value());
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// PilotClaimJob
+// ---------------------------------------------------------------------------
+
+SCENARIO("Director: PilotClaimJob uses one atomic database operation", "[Director][PilotClaimJob]") {
+  Fixture f;
+  auto director = f.make_director();
+  prime_claim_state(director, "pilot-1", {"gpu", "site-a"});
+
+  DB::Queries::Query captured_query;
+  const json job = {
+      {"hash", "job-1"},
+      {"task", "task-1"},
+      {"executable", "/bin/true"},
+  };
+
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<DB::Queries::FindOneAndUpdate>(_1))
+      .LR_SIDE_EFFECT(captured_query = _1)
+      .RETURN(job);
+
+  const auto result = run_async(director.PilotClaimJob("pilot-1"));
+
+  REQUIRE(result.has_value());
+  const auto &[claim_result] = result.value();
+  REQUIRE(claim_result.has_value());
+  REQUIRE(claim_result.value() == job);
+
+  const auto &query = std::get<DB::Queries::FindOneAndUpdate>(captured_query);
+  REQUIRE(query.collection == "jobs");
+  REQUIRE(query.filter == R"({"_id":0, "dataset":0, "jobName":0, "status":0, "tags":0, "user":0})"_json);
+
+  const auto &statuses = find_match(query, "status", DB::Queries::ComparisonOp::IN).value;
+  REQUIRE(statuses == json::array({magic_enum::enum_name(JobStatus::Pending), magic_enum::enum_name(JobStatus::Error),
+                                   magic_enum::enum_name(JobStatus::OutboundTransferError),
+                                   magic_enum::enum_name(JobStatus::InboundTransferError)}));
+  REQUIRE(find_match(query, "task", DB::Queries::ComparisonOp::IN).value == json::array({"task-1"}));
+  REQUIRE(find_match(query, "tags", DB::Queries::ComparisonOp::ALL).value == json::array({"gpu", "site-a"}));
+
+  REQUIRE(find_update(query, "status", DB::Queries::UpdateOp::SET).value == magic_enum::enum_name(JobStatus::Claimed));
+  REQUIRE(find_update(query, "pilotUuid", DB::Queries::UpdateOp::SET).value == "pilot-1");
+  REQUIRE(find_update(query, "retries", DB::Queries::UpdateOp::INC).value == 1);
+  REQUIRE(find_update(query, "lastUpdate", DB::Queries::UpdateOp::SET).value.is_number_integer());
+}
+
+SCENARIO("Director: PilotClaimJob preserves empty-tag matching", "[Director][PilotClaimJob]") {
+  Fixture f;
+  auto director = f.make_director();
+  prime_claim_state(director, "pilot-1");
+
+  DB::Queries::Query captured_query;
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<DB::Queries::FindOneAndUpdate>(_1))
+      .LR_SIDE_EFFECT(captured_query = _1)
+      .RETURN(json{});
+
+  const auto result = run_async(director.PilotClaimJob("pilot-1"));
+
+  REQUIRE(result.has_value());
+  const auto &[claim_result] = result.value();
+  REQUIRE(claim_result.has_value());
+  REQUIRE(claim_result.value() == R"({"sleep": true})"_json);
+
+  const auto &query = std::get<DB::Queries::FindOneAndUpdate>(captured_query);
+  REQUIRE(find_match(query, "tags", DB::Queries::ComparisonOp::TYPE).value == "array");
+  REQUIRE(find_match(query, "tags", DB::Queries::ComparisonOp::EQ).value == json::array());
+}
+
+SCENARIO("Director: PilotClaimJob converts database failures to sleep", "[Director][PilotClaimJob]") {
+  Fixture f;
+  auto director = f.make_director();
+  prime_claim_state(director, "pilot-1");
+
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<DB::Queries::FindOneAndUpdate>(_1))
+      .RETURN(make_error(std::errc::io_error, "DB error"));
+
+  const auto result = run_async(director.PilotClaimJob("pilot-1"));
+
+  REQUIRE(result.has_value());
+  const auto &[claim_result] = result.value();
+  REQUIRE(claim_result.has_value());
+  REQUIRE(claim_result.value() == R"({"sleep": true})"_json);
 }
 
 // ---------------------------------------------------------------------------

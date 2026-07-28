@@ -4,7 +4,6 @@
 // c++ headers
 #include <future>
 #include <mutex>
-#include <queue>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -97,15 +96,6 @@ private:
   };
   Async<ErrorOr<PilotInfo>> GetPilotInfo(std::string_view uuid);
   std::unordered_map<std::string, PilotInfo> m_activePilots;
-
-  void RunClaimQueries();
-  ts_queue<PilotInfo> m_claimRequests;
-  struct ClaimedJob {
-    bool sent = false;
-    bool claimed = false;
-    json job;
-  };
-  std::unordered_map<std::string, ClaimedJob> m_claimedJobs;
 
   std::shared_ptr<spdlog::logger> m_logger;
 
