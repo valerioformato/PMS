@@ -36,7 +36,7 @@ if(GFAL2_FOUND)
 endif()
 
 add_executable(PMSPilot main.cpp)
-target_link_libraries(PMSPilot PRIVATE docopt PMSPilotLib)
+target_link_libraries(PMSPilot PRIVATE cxxopts::cxxopts PMSPilotLib)
 target_compile_definitions(PMSPilot PRIVATE FMT_HEADER_ONLY)
 
 install(TARGETS PMSPilot DESTINATION bin)

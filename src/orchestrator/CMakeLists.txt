@@ -16,6 +16,6 @@ if (DEBUG_WEBSOCKETS)
 endif()
 
 add_executable(PMSOrchestrator main.cpp)
-target_link_libraries(PMSOrchestrator PRIVATE PMSOrchestratorLib docopt PMSVersion)
+target_link_libraries(PMSOrchestrator PRIVATE PMSOrchestratorLib cxxopts::cxxopts PMSVersion)
 
 install(TARGETS PMSOrchestrator DESTINATION bin)

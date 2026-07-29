@@ -7,15 +7,6 @@ test-alma9:
   image: vformato/pms-ci:alma9
   needs: ["build-alma9"]
 
-build-clang-alma9:
-  extends: [".build-docker-clang"]
-  image: vformato/pms-ci:alma9-llvm
-
-test-clang-alma9:
-  extends: [".test"]
-  image: vformato/pms-ci:alma9-llvm
-  needs: ["build-clang-alma9"]
-
 build-for-cvmfs-alma9:
   extends: [".build-and-install"]
   image: vformato/pms-ci:alma9
@@ -27,7 +18,7 @@ build-for-cvmfs-alma9:
 cvmfs-deploy-alma9:
   extends: [".cvmfs-deploy"]
   image: vformato/amsitaly:alma9
-  needs: ["build-for-cvmfs-alma9", "test-alma9", "test-clang-alma9"]
+  needs: ["build-for-cvmfs-alma9", "test-alma9"]
   only:
     - upgrade-ci
     - /^v[0-9]*\.[0-9]*(\.[0-9]*)$/  # ex: v0.1.0

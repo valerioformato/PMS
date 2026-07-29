@@ -1,10 +1,11 @@
 // c++ headers
 #include <chrono>
 #include <csignal>
+#include <cstdio>
 #include <functional>
 
 // external dependencies
-#include <docopt.h>
+#include <cxxopts.hpp>
 #include <spdlog/spdlog.h>
 
 // our headers
@@ -13,18 +14,6 @@
 #include "orchestrator/Director.h"
 #include "orchestrator/OrchestratorConfig.h"
 #include "orchestrator/Server.h"
-
-static constexpr auto USAGE =
-    R"(PMS job orchestrator executable.
-
-    Usage:
-          PMSOrchestrator <configfile> [ -v | -vv ]
-          PMSOrchestrator --version
- Options:
-          -v...         Enable debug output (verbose, trace)
-          -h --help     Show this screen.
-          --version     Show version.
-)";
 
 using namespace PMS;
 
@@ -46,12 +35,41 @@ void signal_watcher(Orchestrator::Server &server) {
 }
 
 int main(int argc, const char **argv) {
-  std::map<std::string, docopt::value> args =
-      docopt::docopt(USAGE, {std::next(argv), std::next(argv, argc)},
-                     true, // show help if requested
-                     fmt::format("PMS {} ({})", PMS::Version::AsString(), PMS::Version::git_sha)); // version string
+  cxxopts::Options options{"PMSOrchestrator", "PMS job orchestrator executable."};
+  options.positional_help("<configfile> [options]");
+  options.add_options()("configfile", "Configuration file", cxxopts::value<std::string>())(
+      "v,verbose", "Enable debug output (repeat for trace)")("h,help", "Show this screen")("version", "Show version");
+  options.parse_positional({"configfile"});
 
-  switch (args["-v"].asLong()) {
+  cxxopts::ParseResult args;
+  try {
+    args = options.parse(argc, argv);
+  } catch (const cxxopts::exceptions::exception &error) {
+    fmt::print(stderr, "Error parsing options: {}\n\n{}\n", error.what(), options.help());
+    return 1;
+  }
+
+  if (args.count("help") != 0) {
+    fmt::print("{}\n", options.help());
+    return 0;
+  }
+
+  if (args.count("version") != 0) {
+    fmt::print("PMS {} ({})\n", PMS::Version::AsString(), PMS::Version::git_sha);
+    return 0;
+  }
+
+  if (!args.unmatched().empty()) {
+    fmt::print(stderr, "Unexpected argument: {}\n\n{}\n", args.unmatched().front(), options.help());
+    return 1;
+  }
+
+  if (args.count("configfile") == 0) {
+    fmt::print(stderr, "Missing required argument: <configfile>\n\n{}\n", options.help());
+    return 1;
+  }
+
+  switch (args.count("verbose")) {
   case 1:
     spdlog::set_level(spdlog::level::debug);
     break;
@@ -70,7 +88,7 @@ int main(int argc, const char **argv) {
   std::signal(SIGTERM, signal_handler);
 
   // read the configuration from input file
-  std::string configFileName = args["<configfile>"].asString();
+  std::string configFileName = args["configfile"].as<std::string>();
   const Orchestrator::Config config{configFileName};
 
   auto director = std::make_shared<Orchestrator::Director>(config.n_IO_threads);

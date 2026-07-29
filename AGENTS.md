@@ -18,13 +18,14 @@ cmake -S . -B build/debug -GNinja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPIL
 cmake --build build/debug
 ```
 
-Tests: add `-DENABLE_PMS_TESTS=ON`, then `build/debug/testsuite/run_tests`.
+Tests: add `-DENABLE_PMS_TESTS=ON -DBUILD_TESTING=ON`, then run
+`ctest --test-dir build/debug --output-on-failure`.
 
 ## Dependencies
 
 - **Required**: Boost (system, thread, regex), MongoDB C + CXX drivers (pass `bsoncxx_DIR`/`mongocxx_DIR` if not in PATH)
 - **Optional**: XRootD (`-DXROOTD_ROOT=...`), gfal2 (auto-detected via CMake modules in `cmake/Modules/`)
-- **Fetched by CPM** (in `cmake/FetchDependencies.cmake`): spdlog, nlohmann/json, magic_enum, docopt.cpp, websocketpp, stdexec, mongo-cxx-driver
+- **Fetched by CPM** (in `cmake/FetchDependencies.cmake`): spdlog, nlohmann/json, magic_enum, cxxopts, websocketpp, stdexec, mongo-cxx-driver
 - All CMake projects use C++23 (`CMAKE_CXX_STANDARD 23`)
 
 ## Sanitizers
@@ -81,3 +82,5 @@ The `src/common/` directory holds shared headers only (no library target): `Asyn
 - **[x]** Pilot networking refactor: Connection hardening + async transport (Phase 1-5 done; SyncSend delegates to SenderSend via stdexec::sync_wait — SenderSend is the single canonical implementation; SyncSend retained as canonical blocking adapter for inherently sequential call sites (Register, claim job, SendJobUpdates); on_message calls TryCompleteSuccess directly (not dispatched through thread pool); test hang fixed with m_has_real_connection guard and thread pool size reduced to 2; Worker/HeartBeat migrated to std::stop_token; HeartBeat::updateHB converted to coroutine with AsyncSend; HeartBeat uses std::thread (not std::jthread); latch-based thread startup sync; SenderSend timeout is stop_token-aware (5s polling); heartbeat liveness now tracks real AsyncSend outcomes (not hardcoded false); RegisterNewPilot initializes lastHeartBeat to avoid stale pilot entries that bypass dead-pilot cleanup; p_updateHeartBeat now successfully sent and received by orchestrator)
 - **[x]** Atomic asynchronous job claims (RC8 implementation and unit coverage complete; MongoDB concurrency test is opt-in)
 - **[x]** Native HTTP health endpoint: websocketpp serves `/healthz` with HTTP 200 on the existing orchestrator endpoints; Kubernetes manifests use HTTP liveness/readiness probes instead of TCP handshakes
+- **[x]** CLI parser migration: both executables use cxxopts instead of docopt.cpp, preserving positional config files, verbosity, help/version, and pilot limits
+- **[x]** CTest CI integration: CI runs all Catch2-discovered cases and executable smoke tests; opt-in Catch2 skips use exit code 4

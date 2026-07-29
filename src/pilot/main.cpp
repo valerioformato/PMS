@@ -1,11 +1,12 @@
 // c++ headers
+#include <cstdio>
 #include <fstream>
 #include <functional>
 #include <signal.h>
 
 // external dependencies
 #include <boost/asio/ip/address.hpp>
-#include <docopt.h>
+#include <cxxopts.hpp>
 #include <spdlog/spdlog.h>
 
 // our headers
@@ -15,21 +16,6 @@
 #include "pilot/PilotInfo.h"
 #include "pilot/Worker.h"
 #include "pilot/client/Client.h"
-
-static constexpr auto USAGE =
-    R"(PMS Pilot fish executable.
-
-    Usage:
-          PMSPilot <configfile> [-v | -vv] [-m MAXJOBS] [-t MAXTIME]
-          PMSPilot --version
-
-    Options:
-          -v...                           Enable debug output (verbose, trace)
-          -h --help                       Show this screen.
-          -m MAXJOBS, --maxJobs=MAXJOBS   Number of jobs to run before shutdown
-          -t MAXTIME, --maxTime=MAXTIME   Time limit ("2d", "1h30m", "40s", ...)
-          --version                       Show version.
-)";
 
 using namespace PMS;
 
@@ -104,12 +90,44 @@ void Report(const Pilot::Info &info) {
 }
 
 int main(int argc, const char **argv) {
-  std::map<std::string, docopt::value> args =
-      docopt::docopt(USAGE, {std::next(argv), std::next(argv, argc)},
-                     true, // show help if requested
-                     fmt::format("PMS {} ({})", PMS::Version::AsString(), PMS::Version::git_sha)); // version string
+  cxxopts::Options options{"PMSPilot", "PMS Pilot fish executable."};
+  options.positional_help("<configfile> [options]");
+  options.add_options()("configfile", "Configuration file",
+                        cxxopts::value<std::string>())("v,verbose", "Enable debug output (repeat for trace)")(
+      "m,maxJobs", "Number of jobs to run before shutdown", cxxopts::value<unsigned int>(),
+      "MAXJOBS")("t,maxTime", R"(Time limit ("2d", "1h30m", "40s", ...))", cxxopts::value<std::string>(),
+                 "MAXTIME")("h,help", "Show this screen")("version", "Show version");
+  options.parse_positional({"configfile"});
 
-  switch (args["-v"].asLong()) {
+  cxxopts::ParseResult args;
+  try {
+    args = options.parse(argc, argv);
+  } catch (const cxxopts::exceptions::exception &error) {
+    fmt::print(stderr, "Error parsing options: {}\n\n{}\n", error.what(), options.help());
+    return 1;
+  }
+
+  if (args.count("help") != 0) {
+    fmt::print("{}\n", options.help());
+    return 0;
+  }
+
+  if (args.count("version") != 0) {
+    fmt::print("PMS {} ({})\n", PMS::Version::AsString(), PMS::Version::git_sha);
+    return 0;
+  }
+
+  if (!args.unmatched().empty()) {
+    fmt::print(stderr, "Unexpected argument: {}\n\n{}\n", args.unmatched().front(), options.help());
+    return 1;
+  }
+
+  if (args.count("configfile") == 0) {
+    fmt::print(stderr, "Missing required argument: <configfile>\n\n{}\n", options.help());
+    return 1;
+  }
+
+  switch (args.count("verbose")) {
   case 1:
     spdlog::set_level(spdlog::level::debug);
     break;
@@ -128,7 +146,7 @@ int main(int argc, const char **argv) {
   spdlog::info("Starting pilot job");
 
   // read the configuration from input file
-  std::string configFileName = args["<configfile>"].asString();
+  std::string configFileName = args["configfile"].as<std::string>();
   const Pilot::Config config{configFileName};
 
   std::string serverUri = fmt::format("ws://{}", config.server);
@@ -140,11 +158,11 @@ int main(int argc, const char **argv) {
     return 0;
   }
 
-  if (args["--maxJobs"])
-    worker.SetMaxJobs(args["--maxJobs"].asLong());
+  if (args.count("maxJobs") != 0)
+    worker.SetMaxJobs(args["maxJobs"].as<unsigned int>());
 
-  if (args["--maxTime"])
-    worker.SetMaxTime(Utils::ParseTimeString(args["--maxTime"].asString()));
+  if (args.count("maxTime") != 0)
+    worker.SetMaxTime(Utils::ParseTimeString(args["maxTime"].as<std::string>()));
 
   // Run everything!
   std::thread watchThread{signal_watcher, std::ref(worker)};

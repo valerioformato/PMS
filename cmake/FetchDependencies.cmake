@@ -14,11 +14,7 @@ CPMAddPackage(
   OPTIONS "JSON_ImplicitConversions OFF" 
 )
 CPMAddPackage(
-  NAME docopt.cpp
-  GITHUB_REPOSITORY docopt/docopt.cpp
-  GIT_TAG v0.6.3
-  EXCLUDE_FROM_ALL NO
-  SYSTEM YES
+  URI "gh:jarro2783/cxxopts#v3.3.1"
 )
 CPMAddPackage("gh:valerioformato/websocketpp#boost")
 CPMAddPackage(

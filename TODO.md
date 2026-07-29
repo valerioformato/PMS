@@ -1,5 +1,19 @@
 # TODO
 
+## CLI parser migration: docopt.cpp → cxxopts
+
+**Goal**: replace the unmaintained docopt.cpp parser with the header-only cxxopts library in both executables while
+preserving their command-line interfaces.
+
+- [x] Replace the CPM dependency with cxxopts v3.3.1 and link both executable targets against `cxxopts::cxxopts`.
+- [x] Migrate `PMSOrchestrator` parsing for the positional config file, repeatable verbosity, help, and version.
+- [x] Migrate `PMSPilot` parsing for the shared options plus `--maxJobs` and `--maxTime`.
+- [x] Reject parser errors, missing config files, and surplus positional arguments with a nonzero exit status.
+- [x] Add CTest smoke coverage for help and version handling in both executables.
+- [x] Run tests through CTest in CI, including Catch2 discovery and correct handling of opt-in skipped tests.
+
+---
+
 ## Async refactor: full sender/coroutine pipeline
 
 **Goal**: make the entire request → processing → DB → response flow async using stdexec senders and `exec::task` coroutines.
