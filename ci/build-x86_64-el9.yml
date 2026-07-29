@@ -2,7 +2,7 @@ build-alma9:
   extends: [".build-docker"]
   image: vformato/pms-ci:alma9
   variables:
-    XROOTD_PREFIX_PATH: "/PMS/software/install/xrootd"
+    XROOTD_PREFIX_PATH: "/PMS/software/install/xrootd-gcc"
 
 test-alma9:
   extends: [".test"]
