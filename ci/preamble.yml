@@ -23,7 +23,7 @@ stages:
 .build-clang:
   stage: build
   script:
-    - cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+    - cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_FLAGS="-stdlib=libc++" -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++abi" -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -lc++abi"
     - cmake --build build
   needs: []
   artifacts:
