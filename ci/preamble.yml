@@ -20,6 +20,21 @@ stages:
   tags:
     - docker
 
+.build-clang:
+  stage: build
+  script:
+    - cmake -S . -B build -GNinja -DCMAKE_PREFIX_PATH="/PMS/software/install/xrootd" -DENABLE_PMS_TESTS=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+    - cmake --build build
+  needs: []
+  artifacts:
+    paths:
+      - build
+
+.build-docker-clang:
+  extends: [".build-clang"]
+  tags:
+    - docker
+
 .build-and-install:
   stage: cvmfs-deploy
   script:
@@ -63,7 +78,7 @@ stages:
   image: docker:19.03.12
   services:
     - docker:19.03.12-dind
-  needs: ["test-ubuntu24.04"]
+  needs: ["test-ubuntu24.04", "test-clang-ubuntu24.04"]
   tags:
     - docker
   variables:
