@@ -17,6 +17,28 @@ CPMAddPackage(
   URI "gh:jarro2783/cxxopts#v3.3.1"
   OPTIONS "CXXOPTS_BUILD_PYTHON OFF"
 )
+# === Catch2 (before stdexec to avoid CPM case-insensitive collision) ===
+if(ENABLE_PMS_TESTS)
+FetchContent_Declare(catch2
+GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG v3.6.0
+  EXCLUDE_FROM_ALL)
+FetchContent_GetProperties(catch2)
+if(NOT catch2_POPULATED)
+  FetchContent_MakeAvailable(catch2)
+  list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+endif()
+
+FetchContent_Declare(trompeloeil
+GIT_REPOSITORY https://github.com/rollbear/trompeloeil.git
+  GIT_TAG v49
+  EXCLUDE_FROM_ALL)
+FetchContent_GetProperties(trompeloeil)
+if(NOT trompeloeil_POPULATED)
+  FetchContent_MakeAvailable(trompeloeil)
+endif()
+endif()
+
 CPMAddPackage("gh:valerioformato/websocketpp#boost")
 CPMAddPackage(
   NAME mongo-cxx-driver
@@ -73,27 +95,4 @@ if(GFAL2_FOUND)
   pkg_check_modules(gfal2_deps REQUIRED IMPORTED_TARGET glib-2.0)
 
   target_link_libraries(PMSgfal2 INTERFACE PkgConfig::gfal2_deps ${GFAL2_LIBRARIES})
-endif()
-
-
-# === Catch2 ===
-if(ENABLE_PMS_TESTS)
-FetchContent_Declare(catch2
-GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG v3.6.0
-  EXCLUDE_FROM_ALL)
-FetchContent_GetProperties(catch2)
-if(NOT catch2_POPULATED)
-  FetchContent_MakeAvailable(catch2)
-  list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
-endif()
-
-FetchContent_Declare(trompeloeil
-GIT_REPOSITORY https://github.com/rollbear/trompeloeil.git
-  GIT_TAG v49
-  EXCLUDE_FROM_ALL)
-FetchContent_GetProperties(trompeloeil)
-if(NOT trompeloeil_POPULATED)
-  FetchContent_MakeAvailable(trompeloeil)
-endif()
 endif()
