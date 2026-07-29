@@ -15,6 +15,7 @@ CPMAddPackage(
 )
 CPMAddPackage(
   URI "gh:jarro2783/cxxopts#v3.3.1"
+  OPTIONS "CXXOPTS_BUILD_PYTHON OFF"
 )
 CPMAddPackage("gh:valerioformato/websocketpp#boost")
 CPMAddPackage(

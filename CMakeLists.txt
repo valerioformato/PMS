@@ -36,6 +36,7 @@ option(ASAN "Enable Address sanitizer" OFF)
 option(TSAN "Enable Thread sanitizer" OFF)
 option(DEBUG_WEBSOCKETS "Enable debug output for websocketpp" OFF)
 option(ENABLE_PMS_TESTS "Enable unit test compilation" OFF)
+option(SKIP_PRECOMMIT_INSTALL "Don't install precommit hooks" OFF)
 
 if (ASAN)
     message(STATUS "Enabling Address sanitizer")
