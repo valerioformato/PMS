@@ -49,7 +49,7 @@ CPMAddPackage(
 )
 CPMAddPackage(
 	URI "gh:nvidia/stdexec#gtc-2026"
-	OPTIONS "STDEXEC_BUILD_EXAMPLES OFF"
+	OPTIONS "STDEXEC_BUILD_EXAMPLES OFF" "STDEXEC_BUILD_TESTS OFF"
 )
 # === boost ===
 set(BOOST_COMPONENTS filesystem thread regex)
