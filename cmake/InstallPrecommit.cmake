@@ -1,5 +1,5 @@
 find_program(PRECOMMIT pre-commit)
-if (SKIP_PRECOMMIT_INSTALL)
+if (NOT SKIP_PRECOMMIT_INSTALL)
 if (NOT PRECOMMIT)
     find_program(PIP NAMES pip pip3)
     if (PIP)
