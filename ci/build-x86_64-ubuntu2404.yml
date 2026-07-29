@@ -1,6 +1,8 @@
 build-ubuntu24.04:
   extends: [".build-docker"]
   image: vformato/pms-ci:ubuntu24.04
+  variables:
+    XROOTD_PREFIX_PATH: "/PMS/software/install/xrootd-gcc"
 
 test-ubuntu24.04:
   extends: [".test"]
@@ -10,6 +12,8 @@ test-ubuntu24.04:
 build-clang-ubuntu24.04:
   extends: [".build-docker-clang"]
   image: vformato/pms-ci:ubuntu24.04
+  variables:
+    XROOTD_PREFIX_PATH: "/PMS/software/install/xrootd-clang"
 
 test-clang-ubuntu24.04:
   extends: [".test"]
