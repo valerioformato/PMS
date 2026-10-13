@@ -82,6 +82,9 @@ private:
   void UpdateTasks();
   void UpdateDeadPilots();
   void WriteJobUpdates();
+  ErrorOr<std::size_t> DrainJobUpdates();
+  ErrorOr<void> RetirePilot(std::string_view pilotUuid);
+  void ReconcileOrphanJobs();
   void WriteHeartBeatUpdates();
   void DBSync();
 
@@ -115,6 +118,7 @@ private:
   ts_queue<PilotHeartBeat> m_heartbeatUpdates;
 
   std::mutex m_jobUpdateRequests_mx;
+  std::mutex m_jobWriter_mx;
   std::vector<DB::Queries::Query> m_jobUpdateRequests;
 
   std::unordered_map<std::string, Task> m_tasks;

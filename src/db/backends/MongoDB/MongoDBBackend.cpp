@@ -70,6 +70,12 @@ ErrorOr<void> MongoDBBackend::SetupIfNeeded() {
       return make_error(e.code(), e.what());
     }
   }
+  try {
+    db["jobs"].create_index(make_document(kvp("pilotUuid", 1), kvp("status", 1)));
+    db["jobs"].create_index(make_document(kvp("status", 1), kvp("lastUpdate", 1)));
+  } catch (const mongocxx::exception &e) {
+    return make_error(e.code(), e.what());
+  }
   if (!db.has_collection("tasks")) {
     spdlog::debug("Creating indexes for the \"tasks\" collection");
     mongocxx::options::index index_options{};

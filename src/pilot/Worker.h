@@ -40,6 +40,7 @@ using namespace std::string_view_literals;
 namespace PMS::Pilot {
 
 struct Info;
+class HeartBeat;
 
 class Worker {
 public:
@@ -81,7 +82,7 @@ private:
   bp::child m_jobProcess;
   boost::uuids::uuid m_uuid{};
 
-  void MainLoop(std::stop_token stoken);
+  void MainLoop(std::stop_token stoken, HeartBeat &heartbeat);
 
   enum class EnvInfoType { NONE, Script, List };
   std::map<EnvInfoType, std::string_view> m_envInfoNames = {{EnvInfoType::Script, "script"sv},

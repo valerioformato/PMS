@@ -483,6 +483,9 @@ SCENARIO("Director: PilotClaimJob converts database failures to sleep", "[Direct
 SCENARIO("Director: DeleteHeartBeat", "[Director]") {
   Fixture f;
   auto director = f.make_director();
+  ALLOW_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<PMS::DB::Queries::Find>(_1))
+      .RETURN(json::array());
 
   GIVEN("the pilot is not known in the active cache") {
     WHEN("the front-DB delete succeeds") {
@@ -513,6 +516,128 @@ SCENARIO("Director: DeleteHeartBeat", "[Director]") {
       }
     }
   }
+}
+
+SCENARIO("Director: deleting a pilot with a running job resolves the job first", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+  std::vector<Queries::Query> queries;
+  ALLOW_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .LR_SIDE_EFFECT(queries.push_back(_1))
+      .LR_RETURN(std::holds_alternative<Queries::Find>(_1)
+                     ? json::array({{{"hash", "job-hash"}, {"task", "task-1"}, {"status", "Running"}}})
+                     : json{{"matched_count", 1}, {"modified_count", 1}, {"deleted_count", 1}});
+
+  auto result = run_async(director.DeleteHeartBeat("pilot-1"));
+  REQUIRE(result.has_value());
+  REQUIRE(std::get<0>(result.value()).has_value());
+
+  auto find_job = std::ranges::find_if(queries, [](const auto &query) {
+    return std::holds_alternative<Queries::Find>(query) && std::get<Queries::Find>(query).collection == "jobs";
+  });
+  REQUIRE(find_job != queries.end());
+
+  auto update_job = std::ranges::find_if(find_job, queries.end(), [](const auto &query) {
+    return std::holds_alternative<Queries::Update>(query) && std::get<Queries::Update>(query).collection == "jobs" &&
+           std::ranges::any_of(std::get<Queries::Update>(query).update,
+                               [](const auto &action) { return action.key == "status" && action.value == "Error"; });
+  });
+  REQUIRE(update_job != queries.end());
+  REQUIRE(std::get<Queries::Update>(*update_job).options.limit == 0);
+  REQUIRE(std::ranges::any_of(std::get<Queries::Update>(*update_job).update,
+                              [](const auto &action) { return action.key == "lastUpdate"; }));
+
+  auto delete_pilot = std::ranges::find_if(update_job, queries.end(), [](const auto &query) {
+    return std::holds_alternative<Queries::Delete>(query) && std::get<Queries::Delete>(query).collection == "pilots";
+  });
+  REQUIRE(delete_pilot != queries.end());
+}
+
+SCENARIO("Director: pilot deletion leaves its record when the active-job update fails", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<Queries::Find>(_1) && std::get<Queries::Find>(_1).collection == "jobs")
+      .RETURN(json::array({{{"hash", "job-1"}}, {{"hash", "job-2"}}}));
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<Queries::Update>(_1) && std::get<Queries::Update>(_1).collection == "jobs" &&
+            std::get<Queries::Update>(_1).options.limit == 0)
+      .RETURN(make_error(std::errc::io_error, "job update failed"));
+  FORBID_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<Queries::Delete>(_1) && std::get<Queries::Delete>(_1).collection == "pilots");
+
+  auto result = run_async(director.DeleteHeartBeat("pilot-1"));
+  REQUIRE(result.has_value());
+  REQUIRE_FALSE(std::get<0>(result.value()).has_value());
+}
+
+SCENARIO("Director: orphan reconciliation resolves only jobs without a pilot", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<Queries::Find>(_1) && std::get<Queries::Find>(_1).collection == "jobs")
+      .RETURN(json::array(
+          {{{"hash", "orphan-job"}, {"task", "task-1"}, {"pilotUuid", "missing-pilot"}, {"status", "Running"}},
+           {{"hash", "live-job"}, {"task", "task-1"}, {"pilotUuid", "live-pilot"}, {"status", "Running"}}}));
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<Queries::Find>(_1) && std::get<Queries::Find>(_1).collection == "pilots")
+      .RETURN(json::array({{{"uuid", "live-pilot"}}}));
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<Queries::Update>(_1) && std::get<Queries::Update>(_1).collection == "jobs" &&
+            std::ranges::any_of(std::get<Queries::Update>(_1).match,
+                                [](const auto &match) { return match.key == "hash" && match.value == "orphan-job"; }))
+      .RETURN(json{{"modified_count", 1}});
+
+  director.ReconcileOrphanJobs();
+}
+
+SCENARIO("Director: pilot deletion persists queued job updates before retiring the pilot", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+  director.m_jobUpdateRequests.push_back(Queries::Update{
+      .collection = "jobs",
+      .match = {{"hash", "job-1"}},
+      .update = {{"status", "Done"}},
+  });
+
+  std::vector<std::string> operations;
+  REQUIRE_CALL(*f.frontMock, BulkWrite("jobs", trompeloeil::_))
+      .LR_SIDE_EFFECT(operations.emplace_back("flush"))
+      .RETURN(json{{"modified_count", 1}});
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<Queries::Find>(_1) && std::get<Queries::Find>(_1).collection == "jobs")
+      .LR_SIDE_EFFECT(operations.emplace_back("find"))
+      .RETURN(json::array());
+  REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<Queries::Delete>(_1) && std::get<Queries::Delete>(_1).collection == "pilots")
+      .LR_SIDE_EFFECT(operations.emplace_back("delete"))
+      .RETURN(json{{"deleted_count", 1}});
+
+  auto result = run_async(director.DeleteHeartBeat("pilot-1"));
+  REQUIRE(result.has_value());
+  REQUIRE(std::get<0>(result.value()).has_value());
+  REQUIRE(operations == std::vector<std::string>{"flush", "find", "delete"});
+}
+
+SCENARIO("Director: queued nonterminal status cannot revive a retired job", "[Director]") {
+  Fixture f;
+  auto director = f.make_director();
+  director.m_activePilots.emplace("pilot-1", Director::PilotInfo{.uuid = "pilot-1", .tasks = {"task-1"}, .tags = {}});
+
+  auto result = run_async(director.UpdateJobStatus("pilot-1", "job-1", "task-1", JobStatus::Running));
+  REQUIRE(result.has_value());
+  REQUIRE(std::get<0>(result.value()).has_value());
+  REQUIRE(director.m_jobUpdateRequests.size() == 1);
+
+  const auto &update = std::get<Queries::Update>(director.m_jobUpdateRequests.front());
+  REQUIRE(std::ranges::any_of(update.match,
+                              [](const auto &match) { return match.key == "pilotUuid" && match.value == "pilot-1"; }));
+  REQUIRE(std::ranges::any_of(update.match, [](const auto &match) {
+    return match.key == "status" && match.op == Queries::ComparisonOp::IN &&
+           match.value == json::array({"Claimed", "Running", "InboundTransfer", "OutboundTransfer"});
+  }));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,8 @@
 // c++ headers
 #include <algorithm>
+#include <iterator>
 #include <ranges>
+#include <unordered_set>
 
 // external headers
 #include <boost/uuid/random_generator.hpp>
@@ -22,6 +24,12 @@ using json = nlohmann::json;
 using namespace PMS::JsonUtils;
 
 namespace PMS::Orchestrator {
+namespace {
+std::vector<std::string_view> ActiveJobStatuses() {
+  return {magic_enum::enum_name(JobStatus::Claimed), magic_enum::enum_name(JobStatus::Running),
+          magic_enum::enum_name(JobStatus::InboundTransfer), magic_enum::enum_name(JobStatus::OutboundTransfer)};
+}
+} // namespace
 
 void Director::Start() {
   auto tmpresult = m_backDB->Connect();
@@ -155,7 +163,17 @@ Async<ErrorOr<void>> Director::UpdateJobStatus(std::string_view pilotUuid, std::
   DB::Queries::Matches matches{
       {"task", task},
       {"hash", hash},
+      {"pilotUuid", pilotUuid},
   };
+
+  if (status == JobStatus::Running || status == JobStatus::InboundTransfer || status == JobStatus::OutboundTransfer) {
+    matches.emplace_back("status",
+                         std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Claimed),
+                                                       magic_enum::enum_name(JobStatus::Running),
+                                                       magic_enum::enum_name(JobStatus::InboundTransfer),
+                                                       magic_enum::enum_name(JobStatus::OutboundTransfer)},
+                         DB::Queries::ComparisonOp::IN);
+  }
 
   auto update_time = Utils::CurrentTimeToMillisSinceEpoch();
 
@@ -186,55 +204,66 @@ Async<ErrorOr<void>> Director::UpdateJobStatus(std::string_view pilotUuid, std::
   co_return {};
 }
 
+ErrorOr<std::size_t> Director::DrainJobUpdates() {
+  std::vector<DB::Queries::Query> requests;
+  {
+    std::lock_guard lock{m_jobUpdateRequests_mx};
+    std::swap(m_jobUpdateRequests, requests);
+  }
+  if (requests.empty())
+    return 0;
+
+  for (auto &query : requests) {
+    auto &updates = std::get<DB::Queries::Update>(query).update;
+    auto lastUpdate = std::ranges::find_if(updates, [](const auto &action) { return action.key == "lastUpdate"; });
+    if (lastUpdate == updates.end())
+      updates.emplace_back("lastUpdate", Utils::CurrentTimeToMillisSinceEpoch());
+    else
+      lastUpdate->value = Utils::CurrentTimeToMillisSinceEpoch();
+  }
+
+  auto write_result = m_frontDB->BulkWrite("jobs", requests);
+  if (!write_result) {
+    std::lock_guard lock{m_jobUpdateRequests_mx};
+    m_jobUpdateRequests.insert(m_jobUpdateRequests.begin(), std::make_move_iterator(requests.begin()),
+                               std::make_move_iterator(requests.end()));
+    return std::unexpected(write_result.error());
+  }
+  return requests.size();
+}
+
 void Director::WriteJobUpdates() {
   static constexpr auto coolDown = std::chrono::seconds(1);
 
   do {
-    if (!m_jobUpdateRequests.empty()) {
-      std::vector<DB::Queries::Query> job_update_requests{};
-
-      {
-        std::lock_guard lock{m_jobUpdateRequests_mx};
-        std::swap(m_jobUpdateRequests, job_update_requests);
-      }
-
-      std::ranges::for_each(job_update_requests, [this](DB::Queries::Query &query) {
-        std::get<DB::Queries::Update>(query).update.emplace_back("lastUpdate", Utils::CurrentTimeToMillisSinceEpoch());
-      });
-
-      auto write_result = m_frontDB->BulkWrite("jobs", job_update_requests);
-      if (!write_result) {
-        m_logger->error("Failed to write job updates: {}", write_result.error().Message());
-        m_logger->error("Will retry...");
-
-        std::lock_guard lock{m_jobUpdateRequests_mx};
-        m_jobUpdateRequests.reserve(m_jobUpdateRequests.size() + job_update_requests.size());
-        m_jobUpdateRequests.insert(end(m_jobUpdateRequests), begin(job_update_requests), end(job_update_requests));
-        continue;
-      }
-
-      DB::Queries::Matches matches{
-          {"status",
-           std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Error),
-                                         magic_enum::enum_name(JobStatus::InboundTransferError),
-                                         magic_enum::enum_name(JobStatus::OutboundTransferError)},
-           DB::Queries::ComparisonOp::IN},
-          {"retries", m_maxRetries, DB::Queries::ComparisonOp::GTE}};
-
-      DB::Queries::Updates update_action{
-          {"status", magic_enum::enum_name(JobStatus::Failed)},
-      };
-
-      auto result = m_frontDB->RunQuery(DB::Queries::Update{
-          .collection = "jobs",
-          .match = matches,
-          .update = update_action,
-      });
-
-      if (!result) {
-        spdlog::error("Failed to update failed jobs");
-      }
+    std::lock_guard writeLock{m_jobWriter_mx};
+    auto write_result = DrainJobUpdates();
+    if (!write_result) {
+      m_logger->error("Failed to write job updates: {}. Will retry...", write_result.error().Message());
+      continue;
     }
+    if (write_result.value() == 0)
+      continue;
+
+    DB::Queries::Matches matches{
+        {"status",
+         std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Error),
+                                       magic_enum::enum_name(JobStatus::InboundTransferError),
+                                       magic_enum::enum_name(JobStatus::OutboundTransferError)},
+         DB::Queries::ComparisonOp::IN},
+        {"retries", m_maxRetries, DB::Queries::ComparisonOp::GTE}};
+
+    DB::Queries::Updates update_action{{"status", magic_enum::enum_name(JobStatus::Failed)},
+                                       {"lastUpdate", Utils::CurrentTimeToMillisSinceEpoch()}};
+
+    auto result = m_frontDB->RunQuery(DB::Queries::Update{
+        .collection = "jobs",
+        .match = matches,
+        .update = update_action,
+    });
+
+    if (!result)
+      spdlog::error("Failed to update failed jobs");
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
 }
 
@@ -332,23 +361,47 @@ void Director::WriteHeartBeatUpdates() {
 
 Async<ErrorOr<void>> Director::DeleteHeartBeat(std::string_view pilotUuid) {
   auto scheduler = co_await stdexec::read_env(stdexec::get_scheduler);
-
-  if (auto pilotIt = m_activePilots.find(std::string{pilotUuid}); pilotIt != end(m_activePilots))
-    m_activePilots.erase(pilotIt);
-
-  DB::Queries::Matches matches{{"uuid", pilotUuid}};
-
-  auto qr = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
-                                          DB::Queries::Delete{
-                                              .collection = "pilots",
-                                              .options = {.limit = 1},
-                                              .match = matches,
-                                          }) |
-                      stdexec::continues_on(scheduler));
-
-  auto query_result = CO_TRY(qr);
-
+  auto result =
+      co_await (stdexec::on(m_io_thread_pool.get_scheduler(),
+                            stdexec::just(std::string{pilotUuid}) |
+                                stdexec::then([this](const std::string &uuid) { return RetirePilot(uuid); })) |
+                stdexec::continues_on(scheduler));
+  CO_TRY(result);
   co_return {};
+}
+
+ErrorOr<void> Director::RetirePilot(std::string_view pilotUuid) {
+  std::lock_guard writeLock{m_jobWriter_mx};
+  TRY(DrainJobUpdates());
+
+  DB::Queries::Matches job_match{{"pilotUuid", pilotUuid},
+                                 {"status", ActiveJobStatuses(), DB::Queries::ComparisonOp::IN}};
+  auto active_jobs = TRY(m_frontDB->RunQuery(DB::Queries::Find{
+      .collection = "jobs",
+      .match = job_match,
+      .filter = R"({"_id":0,"hash":1})"_json,
+  }));
+
+  if (!active_jobs.empty()) {
+    auto now = Utils::CurrentTimeToMillisSinceEpoch();
+    DB::Queries::Updates job_update{
+        {"status", magic_enum::enum_name(JobStatus::Error)}, {"endTime", now}, {"lastUpdate", now}};
+    auto update_result = TRY(m_frontDB->RunQuery(DB::Queries::Update{
+        .collection = "jobs",
+        .match = job_match,
+        .update = job_update,
+    }));
+    m_logger->info("Resolved {} active jobs before deleting pilot {}", update_result.value("modified_count", 0u),
+                   pilotUuid);
+  }
+
+  TRY(m_frontDB->RunQuery(DB::Queries::Delete{
+      .collection = "pilots",
+      .options = {.limit = 1},
+      .match = {{"uuid", pilotUuid}},
+  }));
+  m_activePilots.erase(std::string{pilotUuid});
+  return {};
 }
 
 Async<ErrorOr<void>> Director::AddTaskDependency(const std::string &task, const std::string &dependsOn) {
@@ -701,83 +754,89 @@ void Director::UpdateDeadPilots() {
     });
 
     if (!pilot_query_result) {
-      m_logger->error("Failed to query frontend DB for dead pilots");
+      m_logger->error("Failed to query frontend DB for dead pilots: {}", pilot_query_result.error().Message());
+      ReconcileOrphanJobs();
       continue;
     }
 
-    auto queryResult = pilot_query_result.value();
-
-    std::vector<DB::Queries::Query> requests;
-
-    for (const auto &pilot : queryResult) {
-      m_logger->debug("Removing dead pilot {}", to_string_view(pilot["uuid"]));
-
-      json deleteQuery;
-      deleteQuery["uuid"] = pilot["uuid"];
-
-      DB::Queries::Matches delete_query_match{{"uuid", pilot["uuid"]}};
-
-      DB::Queries::Matches job_query_match{
-          {"pilotUuid", pilot["uuid"]},
-          {"status",
-           std::vector<std::string_view>{magic_enum::enum_name(JobStatus::Running),
-                                         magic_enum::enum_name(JobStatus::InboundTransfer),
-                                         magic_enum::enum_name(JobStatus::OutboundTransfer)},
-           DB::Queries::ComparisonOp::IN},
-      };
-
-      json projectionOpt = R"({"_id":1, "hash":1, "task":1})"_json;
-
-      auto job_query_result = m_frontDB->RunQuery(DB::Queries::Find{
-          .collection = "jobs",
-          .options = {.limit = 1},
-          .match = job_query_match,
-          .filter = projectionOpt,
-      });
-
-      if (!job_query_result) {
-        m_logger->error("Failed to query frontend DB for running jobs of dead pilot {}", to_string_view(pilot["uuid"]));
-        continue;
-      }
-
-      if (!job_query_result.value().empty()) {
-        json job = std::move(job_query_result.value().front());
-        m_logger->debug("Dead pilot {} had a running job ({}), setting to Error...", to_string_view(pilot["uuid"]),
-                        to_string_view(job["hash"]));
-
-        {
-          DB::Queries::Matches job_match{{"task", job["task"]}, {"hash", job["hash"]}};
-          DB::Queries::Updates job_update{
-              {"status", magic_enum::enum_name(JobStatus::Error)},
-              {"endTime", Utils::CurrentTimeToMillisSinceEpoch()},
-          };
-          std::lock_guard lock{m_jobUpdateRequests_mx};
-          m_jobUpdateRequests.push_back(DB::Queries::Update{
-              .collection = "jobs",
-              .options = {.limit = 1},
-              .match = job_match,
-              .update = job_update,
-          });
-        }
-      }
-
-      requests.push_back(DB::Queries::Delete{
-          .collection = "pilots",
-          .match = delete_query_match,
-      });
-
-      if (auto pilotIt = m_activePilots.find(to_string(pilot["uuid"])); pilotIt != end(m_activePilots))
-        m_activePilots.erase(pilotIt);
+    for (const auto &pilot : pilot_query_result.value()) {
+      const auto uuid = to_string(pilot["uuid"]);
+      if (auto result = RetirePilot(uuid); !result)
+        m_logger->error("Failed to retire dead pilot {}: {}", uuid, result.error().Message());
     }
 
-    if (!requests.empty()) {
-      m_logger->debug("Deleting {} pilots from front DB", requests.size());
-      auto delete_query_result = m_frontDB->BulkWrite("pilots", requests);
-      if (!delete_query_result) {
-        m_logger->error("Failed to delete dead pilots from the front DB");
-      }
-    }
+    ReconcileOrphanJobs();
   } while (m_exitSignalFuture.wait_for(coolDown) == std::future_status::timeout);
+}
+
+void Director::ReconcileOrphanJobs() {
+  std::lock_guard writeLock{m_jobWriter_mx};
+  if (auto result = DrainJobUpdates(); !result) {
+    m_logger->error("Cannot reconcile orphan jobs before pending updates are written: {}", result.error().Message());
+    return;
+  }
+
+  const auto cutoff = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          (std::chrono::system_clock::now() - std::chrono::hours{1}).time_since_epoch())
+                          .count();
+  auto active_jobs = m_frontDB->RunQuery(DB::Queries::Find{
+      .collection = "jobs",
+      .match = {{"status", ActiveJobStatuses(), DB::Queries::ComparisonOp::IN},
+                {"lastUpdate", cutoff, DB::Queries::ComparisonOp::LT}},
+      .filter = R"({"_id":0,"hash":1,"task":1,"pilotUuid":1,"status":1,"lastUpdate":1})"_json,
+  });
+  if (!active_jobs) {
+    m_logger->error("Failed to query old active jobs: {}", active_jobs.error().Message());
+    return;
+  }
+
+  std::vector<std::string> uuids;
+  for (const auto &job : active_jobs.value()) {
+    if (job.contains("pilotUuid") && job["pilotUuid"].is_string())
+      uuids.push_back(to_string(job["pilotUuid"]));
+  }
+  if (uuids.empty())
+    return;
+
+  auto pilots = m_frontDB->RunQuery(DB::Queries::Find{
+      .collection = "pilots",
+      .match = {{"uuid", uuids, DB::Queries::ComparisonOp::IN}},
+      .filter = R"({"_id":0,"uuid":1})"_json,
+  });
+  if (!pilots) {
+    m_logger->error("Failed to query pilots for orphan reconciliation: {}", pilots.error().Message());
+    return;
+  }
+
+  std::unordered_set<std::string> known_uuids;
+  for (const auto &pilot : pilots.value())
+    known_uuids.insert(to_string(pilot["uuid"]));
+
+  std::size_t resolved = 0;
+  for (const auto &job : active_jobs.value()) {
+    if (!job.contains("pilotUuid") || !job["pilotUuid"].is_string() ||
+        known_uuids.contains(to_string(job["pilotUuid"])))
+      continue;
+
+    auto now = Utils::CurrentTimeToMillisSinceEpoch();
+    auto result = m_frontDB->RunQuery(DB::Queries::Update{
+        .collection = "jobs",
+        .options = {.limit = 1},
+        .match = {{"hash", job["hash"]},
+                  {"task", job["task"]},
+                  {"pilotUuid", job["pilotUuid"]},
+                  {"status", ActiveJobStatuses(), DB::Queries::ComparisonOp::IN},
+                  {"lastUpdate", cutoff, DB::Queries::ComparisonOp::LT}},
+        .update = {{"status", magic_enum::enum_name(JobStatus::Error)}, {"endTime", now}, {"lastUpdate", now}},
+    });
+    if (!result) {
+      m_logger->error("Failed to resolve orphan job {}: {}", to_string_view(job["hash"]), result.error().Message());
+      continue;
+    }
+    resolved += result.value().value("modified_count", 0u);
+  }
+  if (resolved > 0)
+    m_logger->warn("Resolved {} active jobs whose pilot records were missing", resolved);
 }
 
 void Director::DBSync() {

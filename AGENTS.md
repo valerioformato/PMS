@@ -84,3 +84,4 @@ The `src/common/` directory holds shared headers only (no library target): `Asyn
 - **[x]** Native HTTP health endpoint: websocketpp serves `/healthz` with HTTP 200 on the existing orchestrator endpoints; Kubernetes manifests use HTTP liveness/readiness probes instead of TCP handshakes
 - **[x]** CLI parser migration: both executables use cxxopts instead of docopt.cpp, preserving positional config files, verbosity, help/version, and pilot limits
 - **[x]** CTest CI integration: CI runs all Catch2-discovered cases and executable smoke tests; opt-in Catch2 skips use exit code 4
+- **[x]** RC10 dead-pilot cleanup: keep the pilot heartbeat alive until job updates drain; retire pilots by marking all active jobs Error before deleting the heartbeat; reconcile orphaned active jobs periodically; guard status writes against late updates and add MongoDB cleanup indexes and regression tests

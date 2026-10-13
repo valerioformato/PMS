@@ -1,5 +1,17 @@
 # TODO
 
+## RC10 dead-pilot job cleanup
+
+**Goal**: prevent dead pilots from leaving jobs indefinitely in active states, including when a pilot record has already disappeared.
+
+- [x] Keep the pilot heartbeat alive until the worker and job-update threads finish.
+- [x] On heartbeat deletion or stale-pilot retirement, flush pending updates, mark all active jobs Error, then delete the pilot record.
+- [x] Periodically reconcile active jobs whose pilot record is absent, with guarded status writes to prevent late updates from reviving them.
+- [x] Add indexes for pilot/status and status/last-update cleanup queries and regression tests for the retirement and reconciliation paths.
+- [ ] Build and deploy the `v1.1_RC10` image to Kubernetes; verify stale and orphaned jobs remain at zero.
+
+---
+
 ## CLI parser migration: docopt.cpp → cxxopts
 
 **Goal**: replace the unmaintained docopt.cpp parser with the header-only cxxopts library in both executables while
