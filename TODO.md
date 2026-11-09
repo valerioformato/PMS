@@ -1,5 +1,14 @@
 # TODO
 
+## Summary dependency visibility
+
+- [x] Discover task names from backend jobs, retaining the user filter and existing cached status counters.
+- [x] Cover tasks waiting for dependencies before frontend ingestion, released tasks, and waiting tasks with frontend records.
+- [x] Preserve empty-result and database-error handling coverage.
+- [x] Address MR !11 review: express the dependency regression in BDD style while preserving all assertions.
+
+---
+
 ## RC10 dead-pilot job cleanup
 
 **Goal**: prevent dead pilots from leaving jobs indefinitely in active states, including when a pilot record has already disappeared.

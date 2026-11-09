@@ -56,6 +56,7 @@ The `src/common/` directory holds shared headers only (no library target): `Asyn
 ## Testing
 
 - Tests use **Catch2** (v3.6.0) + **trompeloeil** (v49) for mocking
+- Use BDD-style `SCENARIO` / `GIVEN` / `WHEN` / `THEN` for tests, including Summary dependency coverage.
 - Test source: `testsuite/`, linked against `DBUtils`, `PMSOrchestratorLib`, `Catch2::Catch2WithMain`, `trompeloeil`
 - Mock pattern: virtual interfaces (`Backend`, `IDirector`) + `trompeloeil::mock_interface<T>`
 - Run: `cd build && ./testsuite/run_tests`
@@ -74,6 +75,7 @@ The `src/common/` directory holds shared headers only (no library target): `Asyn
 
 ## Active TODO items (in `TODO.md`)
 
+- **[x]** Summary dependency visibility: discover user-owned task names from backend jobs so tasks waiting on dependencies appear before frontend ingestion; keep existing cached counters and regression coverage for waiting and released tasks
 - **[x]** Async refactor: stdexec sender/coroutine pipeline (partially done)
 - **[x]** Separate compute and I/O thread pools
 - **[ ]** JSON migration: nlohmann → glaze (not started)
