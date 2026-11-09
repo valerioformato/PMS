@@ -946,12 +946,12 @@ Async<ErrorOr<std::string>> Director::Summary(const std::string &user) {
 
   DB::Queries::Matches matches{{"user", user}};
   auto scheduler = co_await stdexec::read_env(stdexec::get_scheduler);
-  auto r = co_await (m_frontDB->RunQuery(m_io_thread_pool.get_scheduler(),
-                                         DB::Queries::Distinct{
-                                             .collection = "jobs",
-                                             .field = "task",
-                                             .match = matches,
-                                         }) |
+  auto r = co_await (m_backDB->RunQuery(m_io_thread_pool.get_scheduler(),
+                                        DB::Queries::Distinct{
+                                            .collection = "jobs",
+                                            .field = "task",
+                                            .match = matches,
+                                        }) |
                      stdexec::continues_on(scheduler));
   auto tasksQueryResult = CO_TRY(r);
 

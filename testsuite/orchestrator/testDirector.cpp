@@ -737,6 +737,75 @@ SCENARIO("Director: UpdateHeartBeat", "[Director]") {
 // Summary
 // ---------------------------------------------------------------------------
 
+TEST_CASE("Director: Summary includes tasks waiting for dependencies", "[Director][Summary][dependencies]") {
+  Fixture f;
+  auto director = f.make_director();
+
+  auto &upstream = director.m_tasks["upstream"];
+  upstream.name = "upstream";
+  upstream.totJobs = 1;
+  upstream.jobs[JobStatus::Running] = 1;
+  upstream.readyForScheduling = true;
+
+  auto &dependent = director.m_tasks["dependent"];
+  dependent.name = "dependent";
+  dependent.totJobs = 2;
+  dependent.jobs[JobStatus::Pending] = 2;
+
+  REQUIRE_CALL(*f.backMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<DB::Queries::Update>(_1))
+      .RETURN(json{{"matched_count", 1}, {"modified_count", 1}});
+  auto dependency_result = run_async(director.AddTaskDependency("dependent", "upstream"));
+  REQUIRE(dependency_result.has_value());
+  REQUIRE(std::get<0>(*dependency_result).has_value());
+  REQUIRE(dependent.dependencies == std::vector<std::string>{"upstream"});
+
+  json frontend_tasks;
+  SECTION("waiting task jobs exist only in the backend") {
+    // JobTransfer skips tasks that are not readyForScheduling. Their backend
+    // Pending jobs therefore do not contribute to the frontend Distinct query.
+    REQUIRE_FALSE(dependent.readyForScheduling);
+    frontend_tasks = json::array({"upstream"});
+  }
+  SECTION("released task jobs have reached the frontend") {
+    upstream.jobs[JobStatus::Running] = 0;
+    upstream.jobs[JobStatus::Done] = 1;
+    REQUIRE(upstream.IsFinished());
+    dependent.readyForScheduling = true;
+    frontend_tasks = json::array({"upstream", "dependent"});
+  }
+  SECTION("waiting task already has frontend job records") {
+    REQUIRE_FALSE(dependent.readyForScheduling);
+    frontend_tasks = json::array({"upstream", "dependent"});
+  }
+
+  ALLOW_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<DB::Queries::Distinct>(_1))
+      .RETURN(frontend_tasks);
+
+  // All jobs remain in the backend, including jobs waiting on dependencies.
+  // Keep the frontend response distinct so querying it reproduces the omission.
+  REQUIRE_CALL(*f.backMock, RunQuery(trompeloeil::_))
+      .WITH(std::holds_alternative<DB::Queries::Distinct>(_1))
+      .WITH(std::get<DB::Queries::Distinct>(_1).collection == "jobs")
+      .WITH(std::get<DB::Queries::Distinct>(_1).field == "task")
+      .WITH(std::get<DB::Queries::Distinct>(_1).match == DB::Queries::Matches{{"user", "alice"}})
+      .RETURN(json::array({"upstream", "dependent"}));
+
+  auto result = run_async(director.Summary("alice"));
+  REQUIRE(result.has_value());
+  auto [summary] = *result;
+  REQUIRE(summary.has_value());
+  const auto parsed = json::parse(summary.value());
+  REQUIRE(parsed.is_array());
+  CHECK(parsed.size() == 2);
+  const auto dependent_summary =
+      std::ranges::find_if(parsed, [](const auto &entry) { return entry.at("taskname") == "dependent"; });
+  REQUIRE(dependent_summary != parsed.end());
+  CHECK(dependent_summary->at("Pending") == 2);
+  CHECK(dependent_summary->at("Running") == 0);
+}
+
 SCENARIO("Director: Summary", "[Director]") {
   Fixture f;
   auto director = f.make_director();
@@ -747,9 +816,9 @@ SCENARIO("Director: Summary", "[Director]") {
       .RETURN(json{});
   run_async(director.CreateTask("myTask"));
 
-  GIVEN("the front DB Distinct returns the task name") {
+  GIVEN("the backend DB Distinct returns the task name") {
     WHEN("Summary is called") {
-      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      REQUIRE_CALL(*f.backMock, RunQuery(trompeloeil::_))
           .WITH(std::holds_alternative<PMS::DB::Queries::Distinct>(_1))
           .RETURN(json::array({"myTask"}));
 
@@ -767,9 +836,9 @@ SCENARIO("Director: Summary", "[Director]") {
     }
   }
 
-  GIVEN("the front DB Distinct returns an empty array") {
+  GIVEN("the backend DB Distinct returns an empty array") {
     WHEN("Summary is called") {
-      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      REQUIRE_CALL(*f.backMock, RunQuery(trompeloeil::_))
           .WITH(std::holds_alternative<PMS::DB::Queries::Distinct>(_1))
           .RETURN(json::array());
 
@@ -784,9 +853,9 @@ SCENARIO("Director: Summary", "[Director]") {
     }
   }
 
-  GIVEN("the front DB Distinct returns an error") {
+  GIVEN("the backend DB Distinct returns an error") {
     WHEN("Summary is called") {
-      REQUIRE_CALL(*f.frontMock, RunQuery(trompeloeil::_))
+      REQUIRE_CALL(*f.backMock, RunQuery(trompeloeil::_))
           .WITH(std::holds_alternative<PMS::DB::Queries::Distinct>(_1))
           .RETURN(make_error(std::errc::io_error, "DB error"));
 

@@ -74,6 +74,7 @@ The `src/common/` directory holds shared headers only (no library target): `Asyn
 
 ## Active TODO items (in `TODO.md`)
 
+- **[x]** Summary dependency visibility: discover user-owned task names from backend jobs so tasks waiting on dependencies appear before frontend ingestion; keep existing cached counters and regression coverage for waiting and released tasks
 - **[x]** Async refactor: stdexec sender/coroutine pipeline (partially done)
 - **[x]** Separate compute and I/O thread pools
 - **[ ]** JSON migration: nlohmann → glaze (not started)
