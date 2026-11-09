@@ -5,6 +5,7 @@
 - [x] Discover task names from backend jobs, retaining the user filter and existing cached status counters.
 - [x] Cover tasks waiting for dependencies before frontend ingestion, released tasks, and waiting tasks with frontend records.
 - [x] Preserve empty-result and database-error handling coverage.
+- [x] Address MR !11 review: express the dependency regression in BDD style while preserving all assertions.
 
 ---
 
